@@ -1,0 +1,14 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+export const config = {
+  port: parseInt(process.env.PORT || '4001', 10),
+  nodeEnv: process.env.NODE_ENV || 'development',
+  mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27018/crypto_db',
+  jwtSecret: process.env.JWT_SECRET || 'super_secret_key_change_later',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  cmcApiKey: process.env.CMC_API_KEY || '7c5caaa1d15946799fdc96a8a12ad759',
+  cmcBaseUrl: process.env.CMC_BASE_URL || 'https://pro-api.coinmarketcap.com',
+};
+
