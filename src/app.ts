@@ -16,13 +16,23 @@ import userRoutes from './modules/user/routes';
 
 const app: Application = express();
 
+// CORS Configuration
+const corsOptions = {
+  origin: config.frontendUrl || 'http://localhost:8083',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+console.log('CORS Options:', corsOptions);
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
