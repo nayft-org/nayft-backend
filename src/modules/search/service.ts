@@ -43,6 +43,7 @@ export const searchService = {
         url: item.url,
         image: item.image,
         publishedAt: item.publishedAt,
+        relatedCoins: item.relatedCoins || [],
       })),
     };
   },
