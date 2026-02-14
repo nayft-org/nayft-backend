@@ -1,11 +1,21 @@
 import { Request, Response } from 'express';
 import { newsService } from './service';
+import { coinService } from '../coin/service';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 
 export const newsController = {
   getAllNews: async (req: Request, res: Response): Promise<void> => {
     try {
+      const filterby = (req.query.filterby as string)?.toLowerCase();
+      const coinid = req.query.coinid as string | undefined;
+
+      if (filterby === 'coin' && coinid?.trim()) {
+        const news = await coinService.getCoinNews(coinid.trim());
+        sendSuccess(res, { news });
+        return;
+      }
+
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const categoriesParam = (req.query.categories || req.query.category) as string | undefined;

@@ -12,6 +12,13 @@ export const config = {
   cmcBaseUrl: process.env.CMC_BASE_URL || 'https://pro-api.coinmarketcap.com',
   coindeskApiKey: process.env.COIN_DESK_API_KEY || '',
   coindeskBaseUrl: process.env.COIN_DESK_BASE_URL || 'https://data-api.coindesk.com',
+  coinGeckoApiKey: process.env.COIN_GECKO_API_KEY || '',
+  coinGeckoApiType: (process.env.COIN_GECKO_API_TYPE || 'demo').toLowerCase() as 'demo' | 'pro',
+  coinGeckoBaseUrl:
+    process.env.COIN_GECKO_BASE_URL ||
+    (process.env.COIN_GECKO_API_TYPE?.toLowerCase() === 'pro'
+      ? 'https://pro-api.coingecko.com/api/v3'
+      : 'https://api.coingecko.com/api/v3'),
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:8083',
 };
 

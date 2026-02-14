@@ -1,158 +1,185 @@
+import { coingeckoApi } from '../../utils/coingecko';
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { coinRepository } from './repository';
 import { marketRepository } from '../market/repository';
-import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
+import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
+
+function looksLikeCoinGeckoId(id: string): boolean {
+  if (!id || id.length < 2) return false;
+  const trimmed = id.trim().toLowerCase();
+  if (/^\d+$/.test(trimmed)) return false;
+  return /^[a-z0-9-]+$/.test(trimmed);
+}
+
+async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
+  const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+  const numericId = actualCoinId.replace(/[^0-9]/g, '');
+  const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
+
+  if (looksLikeCoinGeckoId(actualCoinId)) {
+    try {
+      await coingeckoApi.getCoinById(actualCoinId);
+      return actualCoinId;
+    } catch {
+      return null;
+    }
+  }
+
+  const list = await coingeckoApi.getCoinsList();
+  const upperSymbol = actualCoinId.toUpperCase();
+
+  if (isNumericId) {
+    let symbol: string | null = null;
+    const dbCoin = await coinRepository.findById(numericId);
+    if (dbCoin?.symbol) {
+      symbol = dbCoin.symbol;
+    } else {
+      try {
+        const cmcResponse = await coinmarketcapApi.getQuotesLatestById(numericId);
+        const data = (cmcResponse as any)?.data;
+        const coinData = data ? Object.values(data)[0] : null;
+        if (coinData && typeof coinData === 'object' && 'symbol' in coinData) {
+          symbol = (coinData as any).symbol;
+        }
+      } catch {
+        // CMC fallback failed
+      }
+    }
+    if (symbol) {
+      const match = list.find((c) => c.symbol.toUpperCase() === symbol!.toUpperCase());
+      if (match) return match.id;
+    }
+  }
+
+  const match = list.find((c) => c.symbol.toUpperCase() === upperSymbol);
+  if (match) return match.id;
+
+  const byId = list.find((c) => c.id.toLowerCase() === actualCoinId.toLowerCase());
+  if (byId) return byId.id;
+
+  return null;
+}
+
+async function resolveToSymbol(coinId: string): Promise<string | null> {
+  const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+  const numericId = actualCoinId.replace(/[^0-9]/g, '');
+  const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
+
+  if (isNumericId) {
+    const dbCoin = await coinRepository.findById(numericId);
+    if (dbCoin?.symbol) return dbCoin.symbol;
+    try {
+      const cmcResponse = await coinmarketcapApi.getQuotesLatestById(numericId);
+      const data = (cmcResponse as any)?.data;
+      const coinData = data ? Object.values(data)[0] : null;
+      if (coinData && typeof coinData === 'object' && 'symbol' in coinData) {
+        return (coinData as any).symbol;
+      }
+    } catch {
+      // CMC fallback failed
+    }
+  }
+
+  const dbCoin = await coinRepository.findBySymbol(actualCoinId);
+  if (dbCoin?.symbol) return dbCoin.symbol;
+
+  try {
+    const coinGeckoId = await resolveToCoinGeckoId(coinId);
+    if (coinGeckoId) {
+      const coin = await coingeckoApi.getCoinById(coinGeckoId);
+      return coin.symbol?.toUpperCase() || null;
+    }
+  } catch {
+    // ignore
+  }
+
+  return actualCoinId.toUpperCase();
+}
+
+function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>) {
+  const price = coin.market_data?.current_price?.usd ?? 0;
+  const percentChange24h = coin.market_data?.price_change_percentage_24h ?? 0;
+  const marketCap = coin.market_data?.market_cap?.usd ?? 0;
+  const volume24h = coin.market_data?.total_volume?.usd ?? 0;
+  const image =
+    coin.image?.large || coin.image?.small || coin.image?.thumb || undefined;
+  return {
+    coinId: coin.id,
+    symbol: (coin.symbol || '').toUpperCase(),
+    name: coin.name || '',
+    rank: coin.market_cap_rank ?? 0,
+    price,
+    percentChange24h,
+    marketCap,
+    volume24h,
+    image,
+  };
+}
 
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
-    // Extract actual ID if it's in format "coinId=825" or similar
-    let actualCoinId = coinId;
-    if (coinId.includes('=')) {
-      actualCoinId = coinId.split('=')[1];
-    }
-    
-    // Remove any non-numeric characters if it's supposed to be a numeric ID
-    const numericId = actualCoinId.replace(/[^0-9]/g, '');
-    const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
-    
-    try {
-      // Try to get from CoinMarketCap API
-      let cmcResponse;
-      
+    console.log("coinService.getCoinProfile", coinId);
+    const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+    let coinGeckoId: string | null = null;
+
+    if (looksLikeCoinGeckoId(actualCoinId)) {
       try {
-        if (isNumericId) {
-          // For numeric IDs, use the quotes endpoint with id parameter
-          cmcResponse = await coinmarketcapApi.getQuotesLatestById(numericId);
-        } else {
-          // Try as symbol (uppercase for CoinMarketCap)
-          cmcResponse = await coinmarketcapApi.getQuotesLatest(actualCoinId.toUpperCase());
-        }
-      } catch (error: any) {
-        // If numeric ID lookup fails, try getting info first to get symbol
-        if (isNumericId) {
-          try {
-            const infoResponse = await coinmarketcapApi.getCryptocurrencyInfo(numericId);
-            if (infoResponse.data && Object.keys(infoResponse.data).length > 0) {
-              const coinInfo = Object.values(infoResponse.data)[0] as any;
-              cmcResponse = await coinmarketcapApi.getQuotesLatest(coinInfo.symbol);
-            } else {
-              throw new Error('Coin info not found');
-            }
-          } catch (infoError) {
-            throw error;
-          }
-        } else {
-          // If symbol lookup fails, try to find in database first
-          const dbCoin = await coinRepository.findBySymbol(actualCoinId);
-          if (dbCoin) {
-            // Try with the symbol from database
-            cmcResponse = await coinmarketcapApi.getQuotesLatest(dbCoin.symbol);
-          } else {
-            throw error;
-          }
-        }
-      }
-      
-      if (cmcResponse && cmcResponse.data) {
-        // Handle both array and object formats from CoinMarketCap API
-        let coinData: any;
-        if (Array.isArray(cmcResponse.data)) {
-          coinData = cmcResponse.data[0];
-        } else if (typeof cmcResponse.data === 'object' && Object.keys(cmcResponse.data).length > 0) {
-          coinData = Object.values(cmcResponse.data)[0];
-        } else {
-          throw new Error('Invalid response format from CoinMarketCap API');
-        }
-        
-        if (!coinData) {
-          throw new Error('Coin data not found in API response');
-        }
-        
-        const coin = {
-          coinId: coinData.id?.toString() || (isNumericId ? numericId : actualCoinId),
-          symbol: coinData.symbol || '',
-          name: coinData.name || '',
-          rank: coinData.cmc_rank || 0,
-          price: coinData.quote?.USD?.price || 0,
-          percentChange24h: coinData.quote?.USD?.percent_change_24h || 0,
-          marketCap: coinData.quote?.USD?.market_cap || 0,
-          volume24h: coinData.quote?.USD?.volume_24h || 0,
-          circulatingSupply: coinData.circulating_supply || 0,
-          totalSupply: coinData.total_supply || 0,
-          maxSupply: coinData.max_supply || null,
-          description: coinData.description || '',
-          website: coinData.urls?.website?.[0] || '',
-          explorer: coinData.urls?.explorer?.[0] || '',
-        };
-
-        // Update database
+        const coin = await coingeckoApi.getCoinById(actualCoinId);
+        const coinDto = mapCoinGeckoToDto(coin);
         await marketRepository.upsertCoin({
-          coinId: coin.coinId,
-          symbol: coin.symbol,
-          name: coin.name,
-          rank: coin.rank,
-          price: coin.price,
-          percentChange24h: coin.percentChange24h,
+          coinId: coinDto.coinId,
+          symbol: coinDto.symbol,
+          name: coinDto.name,
+          rank: coinDto.rank,
+          price: coinDto.price,
+          percentChange24h: coinDto.percentChange24h,
         });
-
-        return coin;
+        return coinDto;
+      } catch {
+        coinGeckoId = null;
       }
-    } catch (error: any) {
-      console.log(error);
-      console.error('CoinMarketCap API error:', error.message);
     }
 
-    // Fallback to database - try by ID first, then by symbol
-    let dbCoin = await coinRepository.findById(isNumericId ? numericId : actualCoinId);
-    if (!dbCoin) {
-      dbCoin = await coinRepository.findBySymbol(actualCoinId);
+    if (!coinGeckoId) {
+      coinGeckoId = await resolveToCoinGeckoId(coinId);
     }
-    
-    if (!dbCoin) {
+
+    if (!coinGeckoId) {
+      const dbCoin =
+        (await coinRepository.findById(actualCoinId)) ||
+        (await coinRepository.findBySymbol(actualCoinId));
+      if (dbCoin) {
+        return {
+          coinId: dbCoin.coinId,
+          symbol: dbCoin.symbol,
+          name: dbCoin.name,
+          rank: dbCoin.rank,
+          price: dbCoin.price,
+          percentChange24h: dbCoin.percentChange24h,
+          image: undefined,
+        };
+      }
       throw new Error('Coin not found');
     }
 
-    return {
-      coinId: dbCoin.coinId,
-      symbol: dbCoin.symbol,
-      name: dbCoin.name,
-      rank: dbCoin.rank,
-      price: dbCoin.price,
-      percentChange24h: dbCoin.percentChange24h,
-    };
+    const coin = await coingeckoApi.getCoinById(coinGeckoId);
+    const coinDto = mapCoinGeckoToDto(coin);
+
+    await marketRepository.upsertCoin({
+      coinId: coinDto.coinId,
+      symbol: coinDto.symbol,
+      name: coinDto.name,
+      rank: coinDto.rank,
+      price: coinDto.price,
+      percentChange24h: coinDto.percentChange24h,
+    });
+
+    return coinDto;
   },
 
   getCoinNews: async (coinId: string) => {
-    // Extract actual ID if it's in format "coinId=825" or similar
-    let actualCoinId = coinId;
-    if (coinId.includes('=')) {
-      actualCoinId = coinId.split('=')[1];
-    }
-    
-    // Remove any non-numeric characters if it's supposed to be a numeric ID
-    const numericId = actualCoinId.replace(/[^0-9]/g, '');
-    const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
-    
-    // Resolve symbol for this coin
-    let symbol: string | null = null;
-
-    if (isNumericId) {
-      const dbCoin = await coinRepository.findById(numericId);
-      if (dbCoin?.symbol) {
-        symbol = dbCoin.symbol;
-      }
-    } else {
-      const dbCoin = await coinRepository.findBySymbol(actualCoinId);
-      if (dbCoin?.symbol) {
-        symbol = dbCoin.symbol;
-      } else {
-        symbol = actualCoinId.toUpperCase();
-      }
-    }
-
-    if (!symbol) {
-      return [];
-    }
+    const symbol = await resolveToSymbol(coinId);
+    if (!symbol) return [];
 
     const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
 
@@ -165,6 +192,7 @@ export const coinService = {
         source: article.source || 'CoinDesk',
         url: article.url,
         image: article.imageUrl,
+        relatedCoins: [coinId],
         publishedAt: new Date(article.publishedAt),
       };
     });

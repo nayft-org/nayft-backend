@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 
 export const coinController = {
   getCoinProfile: async (req: Request, res: Response): Promise<void> => {
+    console.log("coinController.getCoinProfile", req.params);
     try {
       const { coinId } = req.params;
       const coin = await coinService.getCoinProfile(coinId);
