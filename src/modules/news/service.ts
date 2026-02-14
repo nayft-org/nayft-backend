@@ -1,69 +1,89 @@
-import { newsRepository } from './repository';
 import { authRepository } from '../auth/repository';
-import { seedGeneralNews } from '../../utils/seedGeneralNews';
+import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
+import { coinRepository } from '../coin/repository';
+
+const ALLOWED_NEWS_CATEGORIES = new Set([
+  'BTC',
+  'ETH',
+  'FIAT',
+  'MARKET',
+  'CRYPTOCURRENCY',
+]);
+
+const filterByCategories = (articles: any[], categories: string[]): any[] => {
+  if (!categories.length) return articles;
+  const allowed = new Set(
+    categories
+      .map((c) => c.toUpperCase())
+      .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
+  );
+  if (!allowed.size) return articles;
+
+  return articles.filter((raw) => {
+    const article = normalizeArticle(raw);
+    if (!article.categories || !article.categories.length) return false;
+    return article.categories.some((cat) => allowed.has(cat.toUpperCase()));
+  });
+};
 
 export const newsService = {
-  getAllNews: async (page: number = 1, limit: number = 50) => {
-    // Seed general news if database is empty
-    const existingNews = await newsRepository.findAll(1, 0);
-    if (existingNews.length === 0) {
-      await seedGeneralNews();
-    }
-    
-    const skip = (page - 1) * limit;
-    const news = await newsRepository.findAll(limit, skip);
-    return news.map((item) => ({
-      id: item._id.toString(),
-      title: item.title,
-      summary: item.summary,
-      source: item.source,
-      url: item.url,
-      image: item.image,
-      relatedCoins: item.relatedCoins,
-      publishedAt: item.publishedAt,
-    }));
+  getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = []) => {
+    const articles = await coindeskApi.getLatestNews(page, limit * 2); // fetch extra, then filter
+    const filtered = filterByCategories(articles, categories);
+    return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
-  getFollowingNews: async (userId: string, page: number = 1, limit: number = 50) => {
+  getFollowingNews: async (
+    userId: string,
+    page: number = 1,
+    limit: number = 50,
+    categories: string[] = []
+  ) => {
     const user = await authRepository.findById(userId);
     if (!user || !user.followingCoins || user.followingCoins.length === 0) {
       return [];
     }
 
-    // Note: findFollowing doesn't support skip, so pagination is limited
-    // For now, we'll just use limit. Can be enhanced later.
-    const news = await newsRepository.findFollowing(user.followingCoins, limit * page);
-    // Apply manual pagination
-    const skip = (page - 1) * limit;
-    const paginatedNews = news.slice(skip, skip + limit);
-    return paginatedNews.map((item) => ({
-      id: item._id.toString(),
-      title: item.title,
-      summary: item.summary,
-      source: item.source,
-      url: item.url,
-      image: item.image,
-      relatedCoins: item.relatedCoins,
-      publishedAt: item.publishedAt,
-    }));
+    // Map following coin IDs to symbols
+    const symbols: string[] = [];
+    for (const coinId of user.followingCoins) {
+      const coin = await coinRepository.findById(coinId);
+      if (coin?.symbol) {
+        symbols.push(coin.symbol);
+      }
+    }
+
+    if (symbols.length === 0) {
+      return [];
+    }
+
+    const articles = await coindeskApi.getNewsByTickers(symbols, page, limit * 2);
+    const filtered = filterByCategories(articles, categories);
+    return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
   getNewsDetail: async (newsId: string) => {
-    const news = await newsRepository.findById(newsId);
-    if (!news) {
+    const article = await coindeskApi.getArticleById(newsId);
+    if (!article) {
       throw new Error('News not found');
     }
 
-    return {
-      id: news._id.toString(),
-      title: news.title,
-      summary: news.summary,
-      source: news.source,
-      url: news.url,
-      image: news.image,
-      relatedCoins: news.relatedCoins,
-      publishedAt: news.publishedAt,
-    };
+    return mapCoindeskToDto(article);
   },
 };
 
+const mapCoindeskToDto = (articleRaw: any) => {
+  const article = normalizeArticle(articleRaw);
+  const relatedCoins = extractTickers(article).map((t) => t.toUpperCase());
+
+  return {
+    id: article.id,
+    title: article.title || article.headline || 'Untitled',
+    summary: article.summary || article.description || '',
+    source: article.source || 'CoinDesk',
+    url: article.url,
+    image: article.imageUrl,
+    relatedCoins,
+    publishedAt: new Date(article.publishedAt),
+  };
+};

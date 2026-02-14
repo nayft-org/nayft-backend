@@ -1,7 +1,7 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { coinRepository } from './repository';
 import { marketRepository } from '../market/repository';
-import { seedSampleNews } from '../../utils/seedNews';
+import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
 
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
@@ -133,38 +133,40 @@ export const coinService = {
     const numericId = actualCoinId.replace(/[^0-9]/g, '');
     const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
     
-    // Use the extracted ID for database lookup
-    const searchId = isNumericId ? numericId : actualCoinId;
-    
-    // Try to find news in database
-    let news = await coinRepository.findNewsByCoinId(searchId, 20);
-    
-    // If no news found, try with the original coinId as well (for symbol-based lookups)
-    if (news.length === 0 && !isNumericId) {
-      // Try to find coin by symbol to get its ID
-      const coin = await coinRepository.findBySymbol(actualCoinId);
-      if (coin) {
-        news = await coinRepository.findNewsByCoinId(coin.coinId, 20);
-        // If still no news, seed sample news for this coin
-        if (news.length === 0) {
-          await seedSampleNews(coin.coinId);
-          news = await coinRepository.findNewsByCoinId(coin.coinId, 20);
-        }
+    // Resolve symbol for this coin
+    let symbol: string | null = null;
+
+    if (isNumericId) {
+      const dbCoin = await coinRepository.findById(numericId);
+      if (dbCoin?.symbol) {
+        symbol = dbCoin.symbol;
       }
-    } else if (news.length === 0 && isNumericId) {
-      // If no news found for numeric ID, seed sample news
-      await seedSampleNews(numericId);
-      news = await coinRepository.findNewsByCoinId(numericId, 20);
+    } else {
+      const dbCoin = await coinRepository.findBySymbol(actualCoinId);
+      if (dbCoin?.symbol) {
+        symbol = dbCoin.symbol;
+      } else {
+        symbol = actualCoinId.toUpperCase();
+      }
     }
-    
-    return news.map((item) => ({
-      id: item._id.toString(),
-      title: item.title,
-      summary: item.summary,
-      source: item.source,
-      url: item.url,
-      image: item.image,
-      publishedAt: item.publishedAt,
-    }));
+
+    if (!symbol) {
+      return [];
+    }
+
+    const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
+
+    return articles.map((raw) => {
+      const article = normalizeArticle(raw);
+      return {
+        id: article.id,
+        title: article.title || article.headline || 'Untitled',
+        summary: article.summary || article.description || '',
+        source: article.source || 'CoinDesk',
+        url: article.url,
+        image: article.imageUrl,
+        publishedAt: new Date(article.publishedAt),
+      };
+    });
   },
 };

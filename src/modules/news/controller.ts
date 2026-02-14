@@ -8,7 +8,14 @@ export const newsController = {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
-      const news = await newsService.getAllNews(page, limit);
+      const categoriesParam = (req.query.categories || req.query.category) as string | undefined;
+      const categories = categoriesParam
+        ? categoriesParam
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : [];
+      const news = await newsService.getAllNews(page, limit, categories);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -20,7 +27,14 @@ export const newsController = {
       console.log("getFollowingNews is fired");
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
-      const news = await newsService.getFollowingNews(req.userId!, page, limit);
+      const categoriesParam = (req.query.categories || req.query.category) as string | undefined;
+      const categories = categoriesParam
+        ? categoriesParam
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : [];
+      const news = await newsService.getFollowingNews(req.userId!, page, limit, categories);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
