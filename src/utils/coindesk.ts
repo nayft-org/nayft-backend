@@ -16,6 +16,7 @@ export interface CoindeskNewsArticle {
   source?: string;
   tickers?: string[];
   assets?: { symbol?: string }[];
+  categories?: string[]; // Normalized from CATEGORY_DATA
 }
 
 export interface CoindeskNewsResponse {
@@ -125,6 +126,13 @@ export const extractTickers = (article: CoindeskNewsArticle): string[] => {
 };
 
 export const normalizeArticle = (raw: any): CoindeskNewsArticle => {
+  // Normalise CATEGORY_DATA into string categories (e.g. BTC, ETH, MARKET, CRYPTOCURRENCY)
+  const categories: string[] = Array.isArray(raw.CATEGORY_DATA)
+    ? raw.CATEGORY_DATA.map((c: any) => (c?.CATEGORY || c?.NAME || '').toString().toUpperCase()).filter(
+        (c: string) => !!c
+      )
+    : [];
+
   return {
     // ID / GUID
     id: String(raw.id ?? raw.ID ?? raw.article_id ?? raw.uuid ?? raw.GUID ?? raw.url ?? raw.URL),
@@ -148,6 +156,7 @@ export const normalizeArticle = (raw: any): CoindeskNewsArticle => {
     source: raw.source ?? raw.SOURCE_ID ?? 'CoinDesk',
     tickers: raw.tickers ?? raw.symbols ?? [],
     assets: raw.assets,
+    categories,
   };
 };
 

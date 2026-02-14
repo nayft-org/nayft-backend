@@ -2,13 +2,43 @@ import { authRepository } from '../auth/repository';
 import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
 import { coinRepository } from '../coin/repository';
 
+const ALLOWED_NEWS_CATEGORIES = new Set([
+  'BTC',
+  'ETH',
+  'FIAT',
+  'MARKET',
+  'CRYPTOCURRENCY',
+]);
+
+const filterByCategories = (articles: any[], categories: string[]): any[] => {
+  if (!categories.length) return articles;
+  const allowed = new Set(
+    categories
+      .map((c) => c.toUpperCase())
+      .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
+  );
+  if (!allowed.size) return articles;
+
+  return articles.filter((raw) => {
+    const article = normalizeArticle(raw);
+    if (!article.categories || !article.categories.length) return false;
+    return article.categories.some((cat) => allowed.has(cat.toUpperCase()));
+  });
+};
+
 export const newsService = {
-  getAllNews: async (page: number = 1, limit: number = 50) => {
-    const articles = await coindeskApi.getLatestNews(page, limit);
-    return articles.map(mapCoindeskToDto);
+  getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = []) => {
+    const articles = await coindeskApi.getLatestNews(page, limit * 2); // fetch extra, then filter
+    const filtered = filterByCategories(articles, categories);
+    return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
-  getFollowingNews: async (userId: string, page: number = 1, limit: number = 50) => {
+  getFollowingNews: async (
+    userId: string,
+    page: number = 1,
+    limit: number = 50,
+    categories: string[] = []
+  ) => {
     const user = await authRepository.findById(userId);
     if (!user || !user.followingCoins || user.followingCoins.length === 0) {
       return [];
@@ -27,8 +57,9 @@ export const newsService = {
       return [];
     }
 
-    const articles = await coindeskApi.getNewsByTickers(symbols, page, limit);
-    return articles.map(mapCoindeskToDto);
+    const articles = await coindeskApi.getNewsByTickers(symbols, page, limit * 2);
+    const filtered = filterByCategories(articles, categories);
+    return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
   getNewsDetail: async (newsId: string) => {

@@ -65,3 +65,13 @@ export interface CoinMarketCapResponse {
   data: any;
 }
 
+export interface CoindeskNewsDto {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  url: string;
+  image?: string;
+  relatedCoins: string[];
+  publishedAt: Date;
+}
