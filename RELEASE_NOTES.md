@@ -1,4 +1,28 @@
-# Release Notes - v1.0.0
+# Release Notes
+
+---
+
+## v1.1.0
+
+**Release Date:** February 21, 2026
+
+### What's New
+
+#### Reactions
+- **Toggle/Switch** – `PUT /api/news/:newsId/reactions` – Add or change reaction (body: `{ type: "bullish" }`)
+- **Remove** – `DELETE /api/news/:newsId/reactions` – Remove user's reaction
+- **Get Counts** – `GET /api/news/:newsId/reactions` – Aggregated counts + user reaction (optional auth)
+- **Reaction Types** – Appreciate, Insightful, Bullish, Risk, Deep Dive, Debatable
+- **Reward Points** – Reacting earns points via RewardsActivity
+- **News API** – Article responses now include `reactions` and `userReaction` when authenticated
+
+### Breaking Changes
+
+None. Fully backward compatible with v1.0.0.
+
+---
+
+## v1.0.0
 
 **Release Date:** February 14, 2026
 
