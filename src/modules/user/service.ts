@@ -15,5 +15,13 @@ export const userService = {
       following: !isFollowing,
     };
   },
+
+  searchUsers: async (query: string, limit: number = 5) => {
+    if (!query || query.trim().length === 0) {
+      throw new Error('Search query is required');
+    }
+    const users = await userRepository.searchByUsername(query.trim(), limit);
+    return users.map((u: any) => ({ id: u._id, username: u.username }));
+  },
 };
 
