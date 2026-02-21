@@ -28,6 +28,7 @@ export interface INewsArticleMetrics {
   views: number;
   likes: number;
   saves: number;
+  comments: number;
 }
 
 export interface INewsArticle {
@@ -90,6 +91,7 @@ const metricsSchema = new Schema<INewsArticleMetrics>(
     views: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
     saves: { type: Number, default: 0 },
+    comments: { type: Number, default: 0 },
   },
   { _id: false }
 );
@@ -109,7 +111,7 @@ const newsArticleSchema = new Schema<INewsArticle>(
     coins: { type: [coinSchema], default: [] },
     sentiment: { type: String, default: 'neutral' },
     status: { type: String, default: 'active' },
-    metrics: { type: metricsSchema, default: () => ({ views: 0, likes: 0, saves: 0 }) },
+    metrics: { type: metricsSchema, default: () => ({ views: 0, likes: 0, saves: 0, comments: 0 }) },
   },
   { timestamps: true }
 );
