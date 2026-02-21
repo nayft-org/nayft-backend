@@ -43,6 +43,7 @@ const mapNewsArticleToDto = (article: INewsArticle) => {
     relatedCoins,
     categories,
     publishedAt: article.publishedAt,
+    saveCount: article.metrics?.saves ?? 0,
   };
 };
 
