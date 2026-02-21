@@ -24,11 +24,22 @@ export interface INewsArticleCoin {
   name: string;
 }
 
+export interface INewsArticleReactions {
+  appreciate: number;
+  insightful: number;
+  bullish: number;
+  risk: number;
+  deepDive: number;
+  debatable: number;
+  total: number;
+}
+
 export interface INewsArticleMetrics {
   views: number;
   likes: number;
   saves: number;
   comments: number;
+  reactions: INewsArticleReactions;
 }
 
 export interface INewsArticle {
@@ -86,12 +97,37 @@ const coinSchema = new Schema<INewsArticleCoin>(
   { _id: false }
 );
 
+const reactionsSchema = new Schema<INewsArticleReactions>(
+  {
+    appreciate: { type: Number, default: 0 },
+    insightful: { type: Number, default: 0 },
+    bullish: { type: Number, default: 0 },
+    risk: { type: Number, default: 0 },
+    deepDive: { type: Number, default: 0 },
+    debatable: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const metricsSchema = new Schema<INewsArticleMetrics>(
   {
     views: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
     saves: { type: Number, default: 0 },
     comments: { type: Number, default: 0 },
+    reactions: {
+      type: reactionsSchema,
+      default: () => ({
+        appreciate: 0,
+        insightful: 0,
+        bullish: 0,
+        risk: 0,
+        deepDive: 0,
+        debatable: 0,
+        total: 0,
+      }),
+    },
   },
   { _id: false }
 );
@@ -111,7 +147,24 @@ const newsArticleSchema = new Schema<INewsArticle>(
     coins: { type: [coinSchema], default: [] },
     sentiment: { type: String, default: 'neutral' },
     status: { type: String, default: 'active' },
-    metrics: { type: metricsSchema, default: () => ({ views: 0, likes: 0, saves: 0, comments: 0 }) },
+    metrics: {
+      type: metricsSchema,
+      default: () => ({
+        views: 0,
+        likes: 0,
+        saves: 0,
+        comments: 0,
+        reactions: {
+          appreciate: 0,
+          insightful: 0,
+          bullish: 0,
+          risk: 0,
+          deepDive: 0,
+          debatable: 0,
+          total: 0,
+        },
+      }),
+    },
   },
   { timestamps: true }
 );

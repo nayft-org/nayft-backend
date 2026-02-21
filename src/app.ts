@@ -15,6 +15,7 @@ import rewardsRoutes from './modules/rewards/routes';
 import userRoutes from './modules/user/routes';
 import newsBoardRoutes from './modules/newsboard/routes';
 import commentRoutes from './modules/comment/routes';
+import reactionRoutes from './modules/reaction/routes';
 
 const app: Application = express();
 
@@ -51,6 +52,7 @@ app.use('/api/rewards', rewardsRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/newsboards', newsBoardRoutes);
 app.use('/api/news', commentRoutes);
+app.use('/api/news', reactionRoutes);
 
 // Error handling
 app.use(notFound);

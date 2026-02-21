@@ -3,6 +3,8 @@ import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coind
 import { coinRepository } from '../coin/repository';
 import { NewsArticle } from './models';
 import type { INewsArticle } from './models/NewsArticle';
+import { reactionService } from '../reaction/service';
+import type { ReactionType } from '../reaction/model';
 
 const ALLOWED_NEWS_CATEGORIES = new Set([
   'BTC',
@@ -28,9 +30,22 @@ const filterByCategories = (articles: any[], categories: string[]): any[] => {
   });
 };
 
-const mapNewsArticleToDto = (article: INewsArticle) => {
+const mapNewsArticleToDto = (
+  article: INewsArticle,
+  userReaction?: ReactionType | null
+) => {
   const relatedCoins = (article.coins || []).map((c) => c.symbol.toUpperCase());
   const categories = (article.categories || []).map((c) => ({ key: c.key, name: c.name }));
+  const r = (article.metrics as any)?.reactions;
+  const reactions = {
+    appreciate: r?.appreciate ?? 0,
+    insightful: r?.insightful ?? 0,
+    bullish: r?.bullish ?? 0,
+    risk: r?.risk ?? 0,
+    deepDive: r?.deepDive ?? 0,
+    debatable: r?.debatable ?? 0,
+    total: r?.total ?? 0,
+  };
   return {
     id: article.externalId,
     title: article.title || 'Untitled',
@@ -45,14 +60,14 @@ const mapNewsArticleToDto = (article: INewsArticle) => {
     publishedAt: article.publishedAt,
     saveCount: article.metrics?.saves ?? 0,
     comments: article.metrics?.comments ?? 0,
+    reactions,
+    userReaction: userReaction ?? null,
   };
 };
 
 export const newsService = {
-  getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = []) => {
+  getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = [], userId?: string) => {
     const skip = (page - 1) * limit;
-    // Keys are stored lowercase in DB (ingestion maps cat.toLowerCase())
-    // Validate against the allowed set (uppercase), then store as lowercase for the query
     const allowedCategoryKeys =
       categories.length > 0
         ? categories
@@ -72,7 +87,13 @@ export const newsService = {
       .limit(limit)
       .lean<INewsArticle[]>();
 
-    return articles.map(mapNewsArticleToDto);
+    let userReactionsMap: Record<string, ReactionType> = {};
+    if (userId && articles.length > 0) {
+      const newsIds = articles.map((a) => a.externalId);
+      userReactionsMap = await reactionService.getUserReactionsForArticles(userId, newsIds);
+    }
+
+    return articles.map((a) => mapNewsArticleToDto(a, userReactionsMap[a.externalId]));
   },
 
   getFollowingNews: async (
@@ -104,7 +125,17 @@ export const newsService = {
     return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
-  getNewsDetail: async (newsId: string) => {
+  getNewsDetail: async (newsId: string, userId?: string) => {
+    const dbArticle = await NewsArticle.findOne({ externalId: newsId }).lean<INewsArticle>();
+    if (dbArticle) {
+      let userReaction: ReactionType | null = null;
+      if (userId) {
+        const map = await reactionService.getUserReactionsForArticles(userId, [newsId]);
+        userReaction = map[newsId] ?? null;
+      }
+      return mapNewsArticleToDto(dbArticle, userReaction);
+    }
+
     const article = await coindeskApi.getArticleById(newsId);
     if (!article) {
       throw new Error('News not found');
