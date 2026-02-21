@@ -1,6 +1,7 @@
 import { commentRepository } from './repository';
 import { NewsArticle } from '../news/models/NewsArticle';
 import { User } from '../user/model';
+import { IMention } from './model';
 
 const mapComment = (c: any) => ({
   id: c._id,
@@ -9,9 +10,32 @@ const mapComment = (c: any) => ({
   username: c.username,
   parentId: c.parentId,
   body: c.body,
+  mentions: c.mentions || [],
   replyCount: c.replyCount,
   createdAt: c.createdAt,
 });
+
+function extractMentions(body: string, resolvedUsers: Map<string, string>): IMention[] {
+  const mentions: IMention[] = [];
+  const regex = /@(\w+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(body)) !== null) {
+    const username = match[1];
+    const lowerUsername = username.toLowerCase();
+    const userId = resolvedUsers.get(lowerUsername);
+    if (userId) {
+      mentions.push({
+        userId,
+        username,
+        offset: match.index,
+        length: match[0].length,
+      });
+    }
+  }
+
+  return mentions;
+}
 
 export const commentService = {
   getComments: async (newsId: string, page: number = 1, limit: number = 20) => {
@@ -49,12 +73,39 @@ export const commentService = {
       }
     }
 
+    const trimmedBody = body.trim();
+
+    // Extract and resolve @mentions in a single batch query
+    const mentionRegex = /@(\w+)/g;
+    const mentionedUsernames: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = mentionRegex.exec(trimmedBody)) !== null) {
+      mentionedUsernames.push(m[1]);
+    }
+
+    let mentions: IMention[] = [];
+    if (mentionedUsernames.length > 0) {
+      const unique = [...new Set(mentionedUsernames.map((u) => u.toLowerCase()))];
+      const foundUsers = await User.find({
+        username: { $in: unique.map((u) => new RegExp(`^${u}$`, 'i')) },
+      })
+        .select('_id username')
+        .lean();
+
+      const resolvedMap = new Map<string, string>();
+      for (const fu of foundUsers) {
+        resolvedMap.set((fu as any).username.toLowerCase(), (fu as any)._id.toString());
+      }
+      mentions = extractMentions(trimmedBody, resolvedMap);
+    }
+
     const comment = await commentRepository.create({
       newsId,
       userId,
       username: user.username,
       parentId: parentId || null,
-      body: body.trim(),
+      body: trimmedBody,
+      mentions,
     });
 
     await NewsArticle.updateOne(

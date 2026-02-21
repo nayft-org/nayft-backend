@@ -1,4 +1,4 @@
-import { Comment, IComment } from './model';
+import { Comment, IComment, IMention } from './model';
 
 export const commentRepository = {
   create: async (data: {
@@ -7,6 +7,7 @@ export const commentRepository = {
     username: string;
     parentId?: string | null;
     body: string;
+    mentions?: IMention[];
   }): Promise<IComment> => {
     const comment = new Comment({
       newsId: data.newsId,
@@ -14,6 +15,7 @@ export const commentRepository = {
       username: data.username,
       parentId: data.parentId || null,
       body: data.body,
+      mentions: data.mentions || [],
     });
     return comment.save();
   },
@@ -53,7 +55,7 @@ export const commentRepository = {
   },
 
   softDelete: async (commentId: string): Promise<void> => {
-    await Comment.findByIdAndUpdate(commentId, { body: '[deleted]' });
+    await Comment.findByIdAndUpdate(commentId, { body: '[deleted]', mentions: [] });
   },
 
   incrementReplyCount: async (commentId: string, amount: number = 1): Promise<void> => {
