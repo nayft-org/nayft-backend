@@ -4,6 +4,7 @@ import { authenticate } from '../../middlewares/auth';
 
 const router = Router();
 
+router.post('/store-news', newsController.storeNews);
 router.get('/', newsController.getAllNews);
 router.get('/following', authenticate, newsController.getFollowingNews);
 router.get('/:newsId', newsController.getNewsDetail);

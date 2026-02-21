@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { newsService } from './service';
 import { coinService } from '../coin/service';
+import { ingestionService } from './ingestion/service';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 
@@ -58,6 +59,22 @@ export const newsController = {
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 404);
+    }
+  },
+
+  storeNews: async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await ingestionService.storeNews();
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.response?.data?.errmsg ||
+        error.message ||
+        'Failed to store news';
+      const status = error.response?.status || 500;
+      sendError(res, message, status);
     }
   },
 };
