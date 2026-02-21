@@ -17,8 +17,10 @@ import userRoutes from './modules/user/routes';
 const app: Application = express();
 
 // CORS Configuration
+const isWildcard = config.frontendUrls.length === 1 && config.frontendUrls[0] === '*';
+
 const corsOptions = {
-  origin: config.frontendUrl || 'http://localhost:8083',
+  origin: isWildcard ? true : config.frontendUrls,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
