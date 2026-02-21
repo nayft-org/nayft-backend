@@ -19,6 +19,8 @@ export const config = {
     (process.env.COIN_GECKO_API_TYPE?.toLowerCase() === 'pro'
       ? 'https://pro-api.coingecko.com/api/v3'
       : 'https://api.coingecko.com/api/v3'),
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:8083',
+  frontendUrls: (process.env.FRONTEND_URL || 'http://localhost:8083')
+    .split(',')
+    .map((u) => u.trim()),
 };
 
