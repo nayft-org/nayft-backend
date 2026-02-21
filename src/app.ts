@@ -13,6 +13,7 @@ import searchRoutes from './modules/search/routes';
 import wishlistRoutes from './modules/wishlist/routes';
 import rewardsRoutes from './modules/rewards/routes';
 import userRoutes from './modules/user/routes';
+import newsBoardRoutes from './modules/newsboard/routes';
 
 const app: Application = express();
 
@@ -47,6 +48,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/rewards', rewardsRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/newsboards', newsBoardRoutes);
 
 // Error handling
 app.use(notFound);
