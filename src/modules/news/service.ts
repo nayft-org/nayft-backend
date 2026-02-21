@@ -49,11 +49,14 @@ const mapNewsArticleToDto = (article: INewsArticle) => {
 export const newsService = {
   getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = []) => {
     const skip = (page - 1) * limit;
+    // Keys are stored lowercase in DB (ingestion maps cat.toLowerCase())
+    // Validate against the allowed set (uppercase), then store as lowercase for the query
     const allowedCategoryKeys =
       categories.length > 0
         ? categories
             .map((c) => c.toUpperCase())
             .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
+            .map((c) => c.toLowerCase())
         : [];
 
     const query: Record<string, unknown> = { status: 'active' };
