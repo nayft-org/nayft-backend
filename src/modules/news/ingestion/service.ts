@@ -119,7 +119,21 @@ function coindeskToNewsArticle(
     coins,
     sentiment: 'neutral',
     status: 'active',
-    metrics: { views: 0, likes: 0, saves: 0, comments: 0 },
+    metrics: {
+      views: 0,
+      likes: 0,
+      saves: 0,
+      comments: 0,
+      reactions: {
+        appreciate: 0,
+        insightful: 0,
+        bullish: 0,
+        risk: 0,
+        deepDive: 0,
+        debatable: 0,
+        total: 0,
+      },
+    },
   };
 }
 

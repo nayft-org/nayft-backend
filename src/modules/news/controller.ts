@@ -6,7 +6,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 
 export const newsController = {
-  getAllNews: async (req: Request, res: Response): Promise<void> => {
+  getAllNews: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const filterby = (req.query.filterby as string)?.toLowerCase();
       const coinid = req.query.coinid as string | undefined;
@@ -26,7 +26,7 @@ export const newsController = {
             .map((c) => c.trim())
             .filter(Boolean)
         : [];
-      const news = await newsService.getAllNews(page, limit, categories);
+      const news = await newsService.getAllNews(page, limit, categories, req.userId);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -52,10 +52,10 @@ export const newsController = {
     }
   },
 
-  getNewsDetail: async (req: Request, res: Response): Promise<void> => {
+  getNewsDetail: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { newsId } = req.params;
-      const news = await newsService.getNewsDetail(newsId);
+      const news = await newsService.getNewsDetail(newsId, req.userId);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 404);
