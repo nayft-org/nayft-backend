@@ -30,14 +30,18 @@ const filterByCategories = (articles: any[], categories: string[]): any[] => {
 
 const mapNewsArticleToDto = (article: INewsArticle) => {
   const relatedCoins = (article.coins || []).map((c) => c.symbol.toUpperCase());
+  const categories = (article.categories || []).map((c) => ({ key: c.key, name: c.name }));
   return {
     id: article.externalId,
     title: article.title || 'Untitled',
     summary: article.subtitle || '',
+    subtitle: article.subtitle || '',
     source: article.source?.name || 'Unknown',
+    sourceUrl: article.sourceUrl,
     url: article.sourceUrl,
     image: article.imageUrl,
     relatedCoins,
+    categories,
     publishedAt: article.publishedAt,
   };
 };
