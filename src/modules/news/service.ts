@@ -1,6 +1,8 @@
 import { authRepository } from '../auth/repository';
 import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
 import { coinRepository } from '../coin/repository';
+import { NewsArticle } from './models';
+import type { INewsArticle } from './models/NewsArticle';
 
 const ALLOWED_NEWS_CATEGORIES = new Set([
   'BTC',
@@ -26,11 +28,42 @@ const filterByCategories = (articles: any[], categories: string[]): any[] => {
   });
 };
 
+const mapNewsArticleToDto = (article: INewsArticle) => {
+  const relatedCoins = (article.coins || []).map((c) => c.symbol.toUpperCase());
+  return {
+    id: article.externalId,
+    title: article.title || 'Untitled',
+    summary: article.subtitle || '',
+    source: article.source?.name || 'Unknown',
+    url: article.sourceUrl,
+    image: article.imageUrl,
+    relatedCoins,
+    publishedAt: article.publishedAt,
+  };
+};
+
 export const newsService = {
   getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = []) => {
-    const articles = await coindeskApi.getLatestNews(page, limit * 2); // fetch extra, then filter
-    const filtered = filterByCategories(articles, categories);
-    return filtered.slice(0, limit).map(mapCoindeskToDto);
+    const skip = (page - 1) * limit;
+    const allowedCategoryKeys =
+      categories.length > 0
+        ? categories
+            .map((c) => c.toUpperCase())
+            .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
+        : [];
+
+    const query: Record<string, unknown> = { status: 'active' };
+    if (allowedCategoryKeys.length > 0) {
+      query['categories.key'] = { $in: allowedCategoryKeys };
+    }
+
+    const articles = await NewsArticle.find(query)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean<INewsArticle[]>();
+
+    return articles.map(mapNewsArticleToDto);
   },
 
   getFollowingNews: async (
