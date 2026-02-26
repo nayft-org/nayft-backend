@@ -10,6 +10,7 @@ export const coinController = {
       sendSuccess(res, {
         success: result.success,
         providers: result.providers,
+        filtered_coins_count: result.filtered_coins_count,
         errors: result.errors.length > 0 ? result.errors : undefined,
       });
     } catch (error: any) {

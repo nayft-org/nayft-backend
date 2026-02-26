@@ -5,6 +5,7 @@ import type { ProviderType } from '../models/CoinRawData';
 export interface IngestResult {
   success: boolean;
   providers: Record<ProviderType, number>;
+  filtered_coins_count: number;
   errors: { provider: string; error: string }[];
 }
 
@@ -39,9 +40,12 @@ export const ingestionService = {
     }
 
     const hasSuccess = Object.values(counts).some((c) => c > 0);
+    const filteredCount = hasSuccess ? await ingestionRepository.populateFilteredCoins() : 0;
+
     return {
       success: hasSuccess,
       providers: counts,
+      filtered_coins_count: filteredCount,
       errors,
     };
   },

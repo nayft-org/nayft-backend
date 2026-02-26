@@ -1,4 +1,5 @@
 import { CoinRawData, ProviderType } from '../models/CoinRawData';
+import { FilteredCoin } from '../models/FilteredCoin';
 
 export interface RawDataDocument {
   provider: ProviderType;
@@ -115,5 +116,32 @@ export const ingestionRepository = {
 
   async createCollectionsIfNotExist(): Promise<void> {
     await CoinRawData.init();
+    await FilteredCoin.init();
+  },
+
+  async populateFilteredCoins(): Promise<number> {
+    const pipeline = [
+      { $match: { base_asset: { $exists: true, $ne: '' }, provider: { $exists: true, $ne: '' } } },
+      { $sort: { fetched_at: -1 as const } },
+      {
+        $group: {
+          _id: { base_asset: '$base_asset', provider: '$provider' },
+          doc: { $first: '$$ROOT' },
+        },
+      },
+      { $replaceRoot: { newRoot: '$doc' } },
+      { $project: { __v: 0 } },
+      {
+        $merge: {
+          into: 'filtered_coins',
+          on: ['base_asset', 'provider'],
+          whenMatched: 'replace',
+          whenNotMatched: 'insert',
+        },
+      },
+    ];
+
+    await CoinRawData.aggregate(pipeline as any[]).exec();
+    return await FilteredCoin.countDocuments();
   },
 };
