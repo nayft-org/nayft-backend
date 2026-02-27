@@ -1,7 +1,8 @@
 import { coingeckoApi } from '../../utils/coingecko';
-import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { coinRepository } from './repository';
+import { filteredCoinRepository } from './filteredCoinRepository';
 import { marketRepository } from '../market/repository';
+import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
 
 function looksLikeCoinGeckoId(id: string): boolean {
@@ -29,24 +30,10 @@ async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
   const upperSymbol = actualCoinId.toUpperCase();
 
   if (isNumericId) {
-    let symbol: string | null = null;
     const dbCoin = await coinRepository.findById(numericId);
     if (dbCoin?.symbol) {
-      symbol = dbCoin.symbol;
-    } else {
-      try {
-        const cmcResponse = await coinmarketcapApi.getQuotesLatestById(numericId);
-        const data = (cmcResponse as any)?.data;
-        const coinData = data ? Object.values(data)[0] : null;
-        if (coinData && typeof coinData === 'object' && 'symbol' in coinData) {
-          symbol = (coinData as any).symbol;
-        }
-      } catch {
-        // CMC fallback failed
-      }
-    }
-    if (symbol) {
-      const match = list.find((c) => c.symbol.toUpperCase() === symbol!.toUpperCase());
+      const symbol = dbCoin.symbol;
+      const match = list.find((c) => c.symbol.toUpperCase() === symbol.toUpperCase());
       if (match) return match.id;
     }
   }
@@ -68,17 +55,10 @@ async function resolveToSymbol(coinId: string): Promise<string | null> {
   if (isNumericId) {
     const dbCoin = await coinRepository.findById(numericId);
     if (dbCoin?.symbol) return dbCoin.symbol;
-    try {
-      const cmcResponse = await coinmarketcapApi.getQuotesLatestById(numericId);
-      const data = (cmcResponse as any)?.data;
-      const coinData = data ? Object.values(data)[0] : null;
-      if (coinData && typeof coinData === 'object' && 'symbol' in coinData) {
-        return (coinData as any).symbol;
-      }
-    } catch {
-      // CMC fallback failed
-    }
   }
+
+  const filteredCoin = await filteredCoinRepository.findByBaseAsset(actualCoinId);
+  if (filteredCoin?.base_asset) return filteredCoin.base_asset;
 
   const dbCoin = await coinRepository.findBySymbol(actualCoinId);
   if (dbCoin?.symbol) return dbCoin.symbol;
@@ -94,6 +74,21 @@ async function resolveToSymbol(coinId: string): Promise<string | null> {
   }
 
   return actualCoinId.toUpperCase();
+}
+
+function mapFilteredCoinToDto(filtered: { base_asset: string; symbol: string; provider: string }) {
+  const symbol = filtered.base_asset.toUpperCase();
+  return {
+    coinId: symbol,
+    symbol,
+    name: symbol,
+    rank: 0,
+    price: 0,
+    percentChange24h: 0,
+    marketCap: undefined,
+    volume24h: undefined,
+    image: undefined,
+  };
 }
 
 function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>) {
@@ -118,10 +113,14 @@ function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinB
 
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
-    console.log("coinService.getCoinProfile", coinId);
     const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
-    let coinGeckoId: string | null = null;
 
+    const filteredCoin = await filteredCoinRepository.findByBaseAsset(actualCoinId);
+    if (filteredCoin) {
+      return mapFilteredCoinToDto(filteredCoin);
+    }
+
+    let coinGeckoId: string | null = null;
     if (looksLikeCoinGeckoId(actualCoinId)) {
       try {
         const coin = await coingeckoApi.getCoinById(actualCoinId);
@@ -181,8 +180,12 @@ export const coinService = {
     const symbol = await resolveToSymbol(coinId);
     if (!symbol) return [];
 
-    const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
+    const fromNewsArticles = await newsService.getNewsByCoinSymbol(symbol, 20);
+    if (fromNewsArticles.length > 0) {
+      return fromNewsArticles;
+    }
 
+    const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
     return articles.map((raw) => {
       const article = normalizeArticle(raw);
       return {
@@ -190,6 +193,7 @@ export const coinService = {
         title: article.title || article.headline || 'Untitled',
         summary: article.summary || article.description || '',
         source: article.source || 'CoinDesk',
+        sourceUrl: article.url,
         url: article.url,
         image: article.imageUrl,
         relatedCoins: [coinId],

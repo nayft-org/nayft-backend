@@ -125,6 +125,22 @@ export const newsService = {
     return filtered.slice(0, limit).map(mapCoindeskToDto);
   },
 
+  getNewsByCoinSymbol: async (coinSymbol: string, limit: number = 20) => {
+    const symbolUpper = coinSymbol.trim().toUpperCase();
+    if (!symbolUpper) return [];
+
+    const escaped = symbolUpper.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const articles = await NewsArticle.find({
+      status: 'active',
+      'coins.symbol': { $regex: new RegExp(`^${escaped}$`, 'i') },
+    })
+      .sort({ publishedAt: -1 })
+      .limit(limit)
+      .lean<INewsArticle[]>();
+
+    return articles.map((a) => mapNewsArticleToDto(a, undefined));
+  },
+
   getNewsDetail: async (newsId: string, userId?: string) => {
     const dbArticle = await NewsArticle.findOne({ externalId: newsId }).lean<INewsArticle>();
     if (dbArticle) {
