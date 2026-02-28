@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "lint": "eslint src --ext .ts",
     "test": "jest",
-    "script:compare-duplicates": "ts-node --transpile-only scripts/compare-coin-duplicates.ts"
+    "script:compare-duplicates": "ts-node --transpile-only scripts/compare-coin-duplicates.ts",
+    "script:fix-ohlcv": "ts-node --transpile-only scripts/fix-ohlcv-collection.ts"
   },
   "keywords": [
     "crypto",
