@@ -208,7 +208,7 @@ export const coinService = {
       const fullCoin = await coingeckoApi.getCoinById(doc.id);
       const platform = (fullCoin as any).platform;
       if (platform && typeof platform === 'object') {
-        const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v);
+        const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v !== '');
         contract_address = addrs[0] ?? null;
       }
     } catch {
