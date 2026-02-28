@@ -3,6 +3,10 @@ import { FilteredCoin } from './models/FilteredCoin';
 import { LabeledActiveCoin } from './models/LabeledActiveCoin';
 import type { ProviderType } from './models/CoinRawData';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function buildSymbolToRelatedIdsMap(
   filteredCoins: { base_asset: string; provider: ProviderType; provider_coin_id: string }[]
 ): Map<string, Partial<Record<ProviderType, string>>> {
@@ -52,6 +56,47 @@ function mapMarketEntryToDocument(
 }
 
 export const labeledActiveCoinRepository = {
+  async findByCoinId(coinId: string): Promise<{
+    id: string;
+    image?: string;
+    current_price?: number;
+    market_cap?: number;
+    market_cap_rank?: number;
+    fully_diluted_valuation?: number;
+    total_volume?: number;
+    high_24h?: number;
+    low_24h?: number;
+    circulating_supply?: number;
+    total_supply?: number | null;
+    max_supply?: number | null;
+    ath?: number;
+    ath_date?: string;
+    atl?: number;
+    atl_date?: string;
+  } | null> {
+    const fields =
+      'id image current_price market_cap market_cap_rank fully_diluted_valuation total_volume high_24h low_24h circulating_supply total_supply max_supply ath ath_date atl atl_date';
+    const actualId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+    const byId = await LabeledActiveCoin.findOne({ id: actualId })
+      .select(fields)
+      .lean()
+      .exec();
+    if (byId) return byId as any;
+
+    const symbolKey = actualId.trim().toUpperCase();
+    if (!symbolKey) return null;
+    const escaped = escapeRegex(symbolKey);
+    const bySymbol = await LabeledActiveCoin.find({
+      symbol: { $regex: new RegExp(`^${escaped}$`, 'i') },
+    })
+      .select(fields)
+      .sort({ market_cap_rank: 1 })
+      .limit(1)
+      .lean()
+      .exec();
+    return bySymbol[0] ?? null;
+  },
+
   async populateFromCoinGeckoMarketsPage(
     page: number
   ): Promise<{ count: number; success: boolean; page: number }> {

@@ -65,6 +65,20 @@ export const coinController = {
     }
   },
 
+  getCoinStats: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { coinId } = req.params;
+      const stats = await coinService.getCoinStats(coinId);
+      if (!stats) {
+        sendError(res, 'Stats not found for this coin', 404);
+        return;
+      }
+      sendSuccess(res, { stats });
+    } catch (error: any) {
+      sendError(res, error.message ?? 'Failed to fetch coin stats', 500);
+    }
+  },
+
   getCoinProfile: async (req: Request, res: Response): Promise<void> => {
     console.log("coinController.getCoinProfile", req.params);
     try {

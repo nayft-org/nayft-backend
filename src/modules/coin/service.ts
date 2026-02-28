@@ -197,6 +197,44 @@ export const coinService = {
     return cmcLabeledCoinRepository.populateFromCmcPage(start);
   },
 
+  getCoinStats: async (coinId: string) => {
+    const coinGeckoId = await resolveToCoinGeckoId(coinId);
+    const lookupId = coinGeckoId ?? (coinId.includes('=') ? coinId.split('=')[1] : coinId);
+    const doc = await labeledActiveCoinRepository.findByCoinId(lookupId);
+    if (!doc) return null;
+
+    let contract_address: string | null = null;
+    try {
+      const fullCoin = await coingeckoApi.getCoinById(doc.id);
+      const platform = (fullCoin as any).platform;
+      if (platform && typeof platform === 'object') {
+        const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v);
+        contract_address = addrs[0] ?? null;
+      }
+    } catch {
+      // ignore
+    }
+
+    return {
+      image: doc.image,
+      current_price: doc.current_price,
+      market_cap: doc.market_cap,
+      market_cap_rank: doc.market_cap_rank,
+      fully_diluted_valuation: doc.fully_diluted_valuation,
+      total_volume: doc.total_volume,
+      high_24h: doc.high_24h,
+      low_24h: doc.low_24h,
+      circulating_supply: doc.circulating_supply,
+      total_supply: doc.total_supply,
+      max_supply: doc.max_supply,
+      ath: doc.ath,
+      ath_date: doc.ath_date,
+      atl: doc.atl,
+      atl_date: doc.atl_date,
+      contract_address,
+    };
+  },
+
   getCoinNews: async (coinId: string) => {
     const symbol = await resolveToSymbol(coinId);
     if (!symbol) return [];
