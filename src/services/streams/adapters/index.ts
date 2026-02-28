@@ -1,0 +1,1 @@
+export { BinanceKlineAdapter } from './binanceAdapter';
