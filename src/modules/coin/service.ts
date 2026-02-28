@@ -1,6 +1,8 @@
 import { coingeckoApi } from '../../utils/coingecko';
 import { coinRepository } from './repository';
 import { filteredCoinRepository } from './filteredCoinRepository';
+import { labeledCoinRepository } from './labeledCoinRepository';
+import { labeledActiveCoinRepository } from './labeledActiveCoinRepository';
 import { marketRepository } from '../market/repository';
 import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
@@ -174,6 +176,17 @@ export const coinService = {
     });
 
     return coinDto;
+  },
+
+  populateLabeledCoins: async () => {
+    return labeledCoinRepository.populateFromCoinGeckoAndFilteredCoins();
+  },
+
+  populateLabeledActiveCoins: async (page: number) => {
+    if (page < 1 || page > 35) {
+      throw new Error('Page must be between 1 and 35');
+    }
+    return labeledActiveCoinRepository.populateFromCoinGeckoMarketsPage(page);
   },
 
   getCoinNews: async (coinId: string) => {
