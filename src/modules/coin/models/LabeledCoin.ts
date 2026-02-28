@@ -1,0 +1,28 @@
+import mongoose, { Schema, Document } from 'mongoose';
+import type { ProviderType } from './CoinRawData';
+
+export interface ILabeledCoin extends Document {
+  id: string;
+  symbol: string;
+  name: string;
+  coinIds: Partial<Record<ProviderType, string>>;
+}
+
+const labeledCoinSchema = new Schema<ILabeledCoin>(
+  {
+    id: { type: String, required: true, unique: true },
+    symbol: { type: String, required: true },
+    name: { type: String, required: true },
+    coinIds: { type: Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: true }
+);
+
+labeledCoinSchema.index({ id: 1 }, { unique: true });
+labeledCoinSchema.index({ symbol: 1 });
+
+export const LabeledCoin = mongoose.model<ILabeledCoin>(
+  'LabeledCoin',
+  labeledCoinSchema,
+  'labeled_coins'
+);
