@@ -46,6 +46,25 @@ export const coinController = {
     }
   },
 
+  populateCmcLabeledCoins: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const startParam = req.query.start;
+      if (startParam === undefined || startParam === '') {
+        sendError(res, 'Query param "start" is required (1-8701)', 400);
+        return;
+      }
+      const start = parseInt(String(startParam), 10);
+      if (isNaN(start) || start < 1 || start > 8701) {
+        sendError(res, 'Start must be a number between 1 and 8701', 400);
+        return;
+      }
+      const result = await coinService.populateCmcLabeledCoins(start);
+      sendSuccess(res, { count: result.count, success: result.success, start: result.start });
+    } catch (error: any) {
+      sendError(res, error.message ?? 'Populate CMC labeled coins failed', 500);
+    }
+  },
+
   getCoinProfile: async (req: Request, res: Response): Promise<void> => {
     console.log("coinController.getCoinProfile", req.params);
     try {

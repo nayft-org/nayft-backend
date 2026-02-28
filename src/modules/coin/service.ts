@@ -3,6 +3,7 @@ import { coinRepository } from './repository';
 import { filteredCoinRepository } from './filteredCoinRepository';
 import { labeledCoinRepository } from './labeledCoinRepository';
 import { labeledActiveCoinRepository } from './labeledActiveCoinRepository';
+import { cmcLabeledCoinRepository } from './cmcLabeledCoinRepository';
 import { marketRepository } from '../market/repository';
 import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
@@ -187,6 +188,13 @@ export const coinService = {
       throw new Error('Page must be between 1 and 35');
     }
     return labeledActiveCoinRepository.populateFromCoinGeckoMarketsPage(page);
+  },
+
+  populateCmcLabeledCoins: async (start: number) => {
+    if (start < 1 || start > 8701) {
+      throw new Error('Start must be between 1 and 8701');
+    }
+    return cmcLabeledCoinRepository.populateFromCmcPage(start);
   },
 
   getCoinNews: async (coinId: string) => {
