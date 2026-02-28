@@ -1,5 +1,6 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { marketRepository } from './repository';
+import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
 
 const mapCoinMarketCapData = (cmcData: any): any[] => {
   if (!cmcData?.data) return [];
@@ -142,6 +143,28 @@ export const marketService = {
         percentChange24h: coin.percentChange24h,
       }));
     }
+  },
+
+  getActiveCoinsPage: async (cursor?: number, limit: number = 20) => {
+    const clampedLimit = Math.min(Math.max(limit, 1), 50);
+    const { coins, nextCursor } = await labeledActiveCoinRepository.findPage({
+      limit: clampedLimit,
+      cursor,
+    });
+    return {
+      coins: coins.map((c) => ({
+        coinId: c.id,
+        symbol: c.symbol,
+        name: c.name,
+        rank: c.market_cap_rank ?? 0,
+        price: c.current_price ?? 0,
+        percentChange24h: c.price_change_percentage_24h ?? 0,
+        marketCap: c.market_cap,
+        volume24h: c.total_volume,
+        image: c.image,
+      })),
+      nextCursor,
+    };
   },
 };
 

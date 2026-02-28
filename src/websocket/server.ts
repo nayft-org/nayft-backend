@@ -14,6 +14,18 @@ export interface SnapshotMessage {
   prices: Record<string, { price: number; percentChange24h: number }>;
 }
 
+/** Per-client symbol subscription for viewport-aware price updates */
+const clientSymbols = new WeakMap<WebSocket, Set<string>>();
+
+function getClientSymbols(ws: WebSocket): Set<string> {
+  let set = clientSymbols.get(ws);
+  if (!set) {
+    set = new Set();
+    clientSymbols.set(ws, set);
+  }
+  return set;
+}
+
 export function attachWebSocketServer(httpServer: HttpServer): void {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -29,11 +41,14 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   });
 
   binanceWebSocket.subscribe((updates) => {
-    const msg: PriceUpdateMessage = { type: 'price', updates };
-    const payload = JSON.stringify(msg);
     wss.clients.forEach((client: WebSocket) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
+      if (client.readyState !== WebSocket.OPEN) return;
+      const symbols = getClientSymbols(client);
+      const filtered =
+        symbols.size > 0 ? updates.filter((u) => symbols.has(u.symbol)) : updates;
+      if (filtered.length > 0) {
+        const msg: PriceUpdateMessage = { type: 'price', updates: filtered };
+        client.send(JSON.stringify(msg));
       }
     });
   });
@@ -45,5 +60,24 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       prices: Object.fromEntries(cache),
     };
     ws.send(JSON.stringify(snapshot));
+
+    ws.on('message', (raw: Buffer | string) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'subscribe' && Array.isArray(msg.symbols)) {
+          const set = getClientSymbols(ws);
+          set.clear();
+          for (const s of msg.symbols) {
+            if (typeof s === 'string' && s) set.add(s.toUpperCase());
+          }
+        }
+      } catch {
+        // ignore invalid messages
+      }
+    });
+
+    ws.on('close', () => {
+      clientSymbols.delete(ws);
+    });
   });
 }
