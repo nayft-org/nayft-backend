@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { chartService } from './service';
 import type { KlineInterval } from './model';
 
-const VALID_INTERVALS: KlineInterval[] = ['1m', '5m', '1h', '1d'];
+const VALID_INTERVALS: KlineInterval[] = ['1m', '5m', '1h', '1d', '1w'];
 
 export const chartController = {
   getKlines: async (req: Request, res: Response) => {

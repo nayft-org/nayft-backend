@@ -60,16 +60,17 @@ export const chartRepository = {
     to: Date;
     limit?: number;
     dataType?: 'trade' | 'aggTrade';
+    sortAsc?: boolean;
   }): Promise<TradeRecord[]> {
-    const { exchange, symbol, from, to, limit = 1000, dataType = 'aggTrade' } = params;
+    const { exchange, symbol, from, to, limit = 1000, dataType = 'aggTrade', sortAsc = false } = params;
     const docs = await MarketTrade.find({
       'meta.exchange': exchange,
       'meta.symbol': symbol.toUpperCase(),
       'meta.dataType': dataType,
       time: { $gte: from, $lte: to },
     })
-      .sort({ time: -1 })
-      .limit(limit)
+      .sort({ time: sortAsc ? 1 : -1 })
+      .limit(Math.min(limit, 50000))
       .lean();
 
     return docs.map((d) => ({
