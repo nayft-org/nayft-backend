@@ -6,6 +6,7 @@ const router = Router();
 router.get('/trending', marketController.getTrending);
 router.get('/top-gainers', marketController.getTopGainers);
 router.get('/top-losers', marketController.getTopLosers);
+router.get('/active-coins', marketController.getActiveCoins);
 
 export default router;
 

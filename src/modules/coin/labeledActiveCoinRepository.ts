@@ -55,7 +55,51 @@ function mapMarketEntryToDocument(
   };
 }
 
+const LIST_PAGE_FIELDS =
+  'id symbol name image current_price market_cap_rank price_change_percentage_24h market_cap total_volume';
+
+export interface LabeledActiveCoinListEntry {
+  id: string;
+  symbol: string;
+  name: string;
+  image?: string;
+  current_price?: number;
+  market_cap_rank?: number;
+  price_change_percentage_24h?: number;
+  market_cap?: number;
+  total_volume?: number;
+}
+
 export const labeledActiveCoinRepository = {
+  async findPage(params: {
+    limit: number;
+    cursor?: number;
+  }): Promise<{
+    coins: LabeledActiveCoinListEntry[];
+    nextCursor: number | null;
+  }> {
+    const { limit, cursor } = params;
+    const filter = cursor != null ? { market_cap_rank: { $gt: cursor } } : {};
+    const results = await LabeledActiveCoin.find(filter)
+      .select(LIST_PAGE_FIELDS)
+      .sort({ market_cap_rank: 1 })
+      .limit(limit + 1)
+      .lean()
+      .exec();
+
+    const hasMore = results.length > limit;
+    const coins = hasMore ? results.slice(0, limit) : results;
+    const nextCursor =
+      hasMore && coins.length > 0
+        ? (coins[coins.length - 1] as { market_cap_rank?: number }).market_cap_rank ?? null
+        : null;
+
+    return {
+      coins: coins as LabeledActiveCoinListEntry[],
+      nextCursor,
+    };
+  },
+
   async findByCoinId(coinId: string): Promise<{
     id: string;
     image?: string;
