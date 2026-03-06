@@ -1,0 +1,164 @@
+
+================================================================================
+COIN DUPLICACY REPORT: cmc_labeled_coins vs labeled_active_coins
+================================================================================
+
+MATCHING: Case-insensitive symbol (e.g. BTC = btc)
+
+--------------------------------------------------------------------------------
+SUMMARY
+--------------------------------------------------------------------------------
+  cmc_labeled_coins total:     8705
+  labeled_active_coins total:  8744
+  Unique symbols (combined):  10164
+  OVERLAP (all pairs):       9118
+  PRIMARY overlap (unique):   4603 (best-ranked per symbol)
+  CMC only:                   2845
+  labeled_active only:       2974
+  Symbol collisions:          1343 symbols map to multiple coins
+
+--------------------------------------------------------------------------------
+SYMBOL COLLISIONS (symbol maps to multiple coins in either collection)
+--------------------------------------------------------------------------------
+  Total: 1343. Top 15 by collision size:
+    PEPE: CMC=19 coins, Active=14 coins
+    CAT: CMC=17 coins, Active=10 coins
+    ANDY: CMC=8 coins, Active=10 coins
+    X: CMC=12 coins, Active=6 coins
+    WOLF: CMC=8 coins, Active=9 coins
+    DOGE: CMC=12 coins, Active=4 coins
+    TRUMP: CMC=13 coins, Active=2 coins
+    MEOW: CMC=4 coins, Active=11 coins
+    BTC: CMC=9 coins, Active=5 coins
+    BOB: CMC=7 coins, Active=7 coins
+    BROCCOLI: CMC=9 coins, Active=4 coins
+    AI: CMC=7 coins, Active=5 coins
+    EGG: CMC=6 coins, Active=6 coins
+    GM: CMC=7 coins, Active=5 coins
+    ALPHA: CMC=4 coins, Active=7 coins
+
+--------------------------------------------------------------------------------
+PRIMARY OVERLAP ANALYSIS (best-ranked per symbol)
+--------------------------------------------------------------------------------
+  Price diff (CMC vs CoinGecko, excluding outliers): avg 0.28%, max abs 49.43%
+  Provider coverage: CMC has more in 0, active has more in 0, same in 4603
+
+SAMPLE PRIMARY DUPLICATES (first 15 by symbol):
+
+  [BTC]
+    CMC:     id=1 rank=1 price=$63,810.95 providers=4
+    Active:  id=bitcoin rank=1 price=$63,463 providers=4
+    Price diff: 0.55%
+
+  [ETH]
+    CMC:     id=1027 rank=2 price=$1,858.458 providers=4
+    Active:  id=ethereum rank=2 price=$1,851.42 providers=4
+    Price diff: 0.38%
+
+  [USDT]
+    CMC:     id=825 rank=3 price=$1 providers=4
+    Active:  id=tether rank=3 price=$1 providers=4
+    Price diff: -0.00%
+
+  [BNB]
+    CMC:     id=1839 rank=4 price=$593.273 providers=4
+    Active:  id=binancecoin rank=4 price=$591.19 providers=4
+    Price diff: 0.35%
+
+  [XRP]
+    CMC:     id=52 rank=5 price=$1.283 providers=4
+    Active:  id=ripple rank=5 price=$1.29 providers=4
+    Price diff: -0.55%
+
+  [USDC]
+    CMC:     id=3408 rank=6 price=$1 providers=4
+    Active:  id=usd-coin rank=6 price=$1 providers=4
+    Price diff: 0.01%
+
+  [SOL]
+    CMC:     id=5426 rank=7 price=$78.538 providers=4
+    Active:  id=solana rank=7 price=$77.97 providers=4
+    Price diff: 0.73%
+
+  [TRX]
+    CMC:     id=1958 rank=8 price=$0.28 providers=3
+    Active:  id=tron rank=8 price=$0.279 providers=3
+    Price diff: 0.29%
+
+  [DOGE]
+    CMC:     id=74 rank=9 price=$0.089 providers=4
+    Active:  id=dogecoin rank=10 price=$0.089 providers=4
+    Price diff: 0.46%
+
+  [ADA]
+    CMC:     id=2010 rank=10 price=$0.262 providers=4
+    Active:  id=cardano rank=13 price=$0.261 providers=4
+    Price diff: 0.23%
+
+  [BCH]
+    CMC:     id=1831 rank=11 price=$445.057 providers=4
+    Active:  id=bitcoin-cash rank=14 price=$444.22 providers=4
+    Price diff: 0.19%
+
+  [LEO]
+    CMC:     id=3957 rank=12 price=$8.825 providers=1
+    Active:  id=leo-token rank=15 price=$8.83 providers=1
+    Price diff: -0.06%
+
+  [HYPE]
+    CMC:     id=32196 rank=13 price=$27.117 providers=3
+    Active:  id=hyperliquid rank=16 price=$26.82 providers=3
+    Price diff: 1.11%
+
+  [XMR]
+    CMC:     id=328 rank=14 price=$337.889 providers=1
+    Active:  id=monero rank=17 price=$335.56 providers=1
+    Price diff: 0.69%
+
+  [CC]
+    CMC:     id=37263 rank=15 price=$0.163 providers=2
+    Active:  id=canton-network rank=18 price=$0.161 providers=2
+    Price diff: 0.87%
+
+--------------------------------------------------------------------------------
+CMC ONLY (not in labeled_active_coins)
+--------------------------------------------------------------------------------
+  Total: 2845. Top 10 by CMC rank:
+    FTT (rank 184) - FTX Token
+    JLP (rank 203) - Jupiter Perps LP
+    ZBU (rank 221) - Zeebu
+    ALE (rank 232) - Ailey
+    DHN (rank 237) - Dohrnii
+    SMILEK (rank 248) - Smilek to the Bank
+    vBUSD (rank 316) - Venus BUSD
+    VAM (rank 324) - Vitalum
+    VNDC (rank 353) - VNDC
+    RTX (rank 377) - RateX
+
+--------------------------------------------------------------------------------
+LABELED_ACTIVE ONLY (not in cmc_labeled_coins)
+--------------------------------------------------------------------------------
+  Total: 2974. Top 10 by market_cap_rank:
+    buidl (rank 41) - BlackRock USD Institutional Digital Liquidity Fund
+    usyc (rank 42) - Circle USYC
+    ustb (rank 60) - Superstate Short Duration U.S. Government Securities Fund (USTB)
+    eutbl (rank 73) - Spiko EU T-Bills Money Market Fund
+    ousg (rank 77) - OUSG
+    jaaa (rank 81) - Janus Henderson Anemoy AAA CLO Fund
+    jtrsy (rank 91) - Janus Henderson Anemoy Treasury Fund
+    ylds (rank 157) - YLDS
+    ustbl (rank 166) - Spiko US T-Bills Money Market Fund
+    bcap (rank 170) - Blockchain Capital
+
+--------------------------------------------------------------------------------
+RECOMMENDATIONS
+--------------------------------------------------------------------------------
+  - cmc_labeled_coins: CMC API, numeric id, 8728 coins, quote.USD data
+  - labeled_active_coins: CoinGecko API, string id, ~8750 coins (35 pages x 250), image URL
+
+  Overlap: Most top coins appear in both. Price/market_cap may differ slightly
+  Keep both if: You need CMC and CoinGecko as separate sources, or different ID schemes.
+  Keep cmc_labeled_coins only if: CMC is primary, need numeric IDs, larger catalog (8728).
+  Keep labeled_active_coins only if: CoinGecko is primary, need image URLs, smaller active set.
+
+================================================================================
