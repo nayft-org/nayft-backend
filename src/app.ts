@@ -17,6 +17,7 @@ import newsBoardRoutes from './modules/newsboard/routes';
 import commentRoutes from './modules/comment/routes';
 import reactionRoutes from './modules/reaction/routes';
 import chartRoutes from './modules/chart/routes';
+import portfolioRoutes from './modules/portfolio/routes';
 
 const app: Application = express();
 
@@ -55,6 +56,7 @@ app.use('/api/newsboards', newsBoardRoutes);
 app.use('/api/news', commentRoutes);
 app.use('/api/news', reactionRoutes);
 app.use('/api/charts', chartRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 // Error handling
 app.use(notFound);
