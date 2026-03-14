@@ -15,6 +15,7 @@ import { config } from '../config/env';
 import { alchemyApi } from '../utils/alchemy';
 import { zerionApi } from '../utils/zerion';
 import { getExplorerTxUrl } from '../utils/explorerUrls';
+import { getTransactionCount, buildEventSummaries } from '../utils/eventSummaryBuilder';
 import { portfolioRepository } from '../modules/portfolio/repository';
 import {
   IWalletEvent,
@@ -156,14 +157,19 @@ async function flushBuffer(key: string): Promise<void> {
       if (explorerUrl) primaryActivity.explorerUrl = explorerUrl;
     }
 
+    const transactionCount = getTransactionCount(events);
+    const eventSummaries = buildEventSummaries(events, address);
+
     const saved = await portfolioRepository.createEvent({
       userId,
       address,
       chain,
-      type:          eventType,
-      rawEventCount: events.length,
+      type:              eventType,
+      rawEventCount:     events.length,
+      transactionCount,
+      eventSummaries,
       enrichedData,
-      activity:      primaryActivity,
+      activity:          primaryActivity,
     });
 
     // Set cooldown for this address

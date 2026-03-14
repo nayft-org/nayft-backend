@@ -17,14 +17,16 @@ function walletToDto(w: IWalletAddress) {
 
 function eventToDto(e: IWalletEvent) {
   return {
-    id:            (e._id as { toString(): string }).toString(),
-    address:       e.address,
-    chain:         e.chain,
-    type:          e.type,
-    rawEventCount: e.rawEventCount,
-    enrichedData:  e.enrichedData,
-    aggregatedAt:  e.aggregatedAt,
-    activity:      e.activity,
+    id:               (e._id as { toString(): string }).toString(),
+    address:          e.address,
+    chain:            e.chain,
+    type:             e.type,
+    rawEventCount:    e.rawEventCount,
+    transactionCount: e.transactionCount,
+    eventSummaries:   e.eventSummaries,
+    enrichedData:     e.enrichedData,
+    aggregatedAt:     e.aggregatedAt,
+    activity:         e.activity,
   };
 }
 

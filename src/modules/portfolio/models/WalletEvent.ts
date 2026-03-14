@@ -31,6 +31,10 @@ export interface IWalletEvent extends Document {
   chain:          string;
   type:           WalletEventType;
   rawEventCount:  number;
+  /** Unique tx hashes in the batch */
+  transactionCount?: number;
+  /** Human-readable event descriptions, e.g. ["swap USDC -> POL", "transfer 100 USDC"] */
+  eventSummaries?:  string[];
   enrichedData:   Record<string, unknown> | null;
   aggregatedAt:   Date;
   /** Core activity data from webhook (txHash, asset, value, etc.) — optional for legacy docs */
@@ -65,8 +69,10 @@ const walletEventSchema = new Schema<IWalletEvent>(
       enum:    ['token_transfer', 'native_transfer', 'contract_interaction', 'multi_chain_activity'],
       default: 'token_transfer',
     },
-    rawEventCount: { type: Number, default: 1 },
-    enrichedData:  { type: Schema.Types.Mixed, default: null },
+    rawEventCount:     { type: Number, default: 1 },
+    transactionCount:  { type: Number },
+    eventSummaries:    { type: [String], default: [] },
+    enrichedData:      { type: Schema.Types.Mixed, default: null },
     aggregatedAt:  { type: Date, default: Date.now },
     activity:      { type: activitySchema },
   },

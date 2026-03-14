@@ -55,13 +55,15 @@ export const portfolioRepository = {
   // ── WalletEvent ──────────────────────────────────────────────────
 
   createEvent: async (data: {
-    userId:        string;
-    address:       string;
-    chain:         string;
-    type:          IWalletEvent['type'];
-    rawEventCount: number;
-    enrichedData:  Record<string, unknown> | null;
-    activity?:     WalletEventActivityFields;
+    userId:            string;
+    address:           string;
+    chain:             string;
+    type:              IWalletEvent['type'];
+    rawEventCount:     number;
+    transactionCount?: number;
+    eventSummaries?:   string[];
+    enrichedData:      Record<string, unknown> | null;
+    activity?:         WalletEventActivityFields;
   }): Promise<IWalletEvent> => {
     const event = new WalletEvent({ ...data, aggregatedAt: new Date() });
     return event.save();
