@@ -1,5 +1,6 @@
 import { WalletAddress, IWalletAddress } from './models/WalletAddress';
 import { WalletEvent, IWalletEvent, WalletEventActivityFields } from './models/WalletEvent';
+import { Holding, IHolding, HoldingPositionFields } from './models/Holding';
 
 export const portfolioRepository = {
   // ── WalletAddress ────────────────────────────────────────────────
@@ -118,5 +119,39 @@ export const portfolioRepository = {
       .sort({ aggregatedAt: -1 })
       .limit(limit)
       .lean() as unknown as IWalletEvent[];
+  },
+
+  // ── Holding ──────────────────────────────────────────────────────
+
+  findHoldingsByUser: async (userId: string): Promise<IHolding | null> => {
+    return Holding.findOne({ userId }).lean() as unknown as IHolding | null;
+  },
+
+  upsertHoldings: async (
+    userId: string,
+    data: {
+      totalValue:        number;
+      absoluteChange24h: number;
+      relativeChange24h: number;
+      positions:         HoldingPositionFields[];
+    }
+  ): Promise<IHolding> => {
+    const now = new Date();
+    const result = await Holding.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          ...data,
+          syncedAt: now,
+        },
+      },
+      { upsert: true, new: true }
+    );
+    return result as IHolding;
+  },
+
+  deleteHoldingsByUser: async (userId: string): Promise<boolean> => {
+    const result = await Holding.deleteOne({ userId });
+    return result.deletedCount > 0;
   },
 };

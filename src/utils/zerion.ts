@@ -43,7 +43,7 @@ export const zerionApi = {
           positions_distribution_by_type: Record<string, number>;
         };
       };
-    }>(`/wallets/${address}/portfolio`);
+    }>(`/wallets/${address}/portfolio`, { params: { currency: 'usd' } });
 
     const attrs = response.data?.data?.attributes;
     return {
@@ -56,28 +56,34 @@ export const zerionApi = {
 
   /**
    * Fetches individual token positions for a wallet across all supported chains.
+   * Zerion returns chain_id in relationships.chain.data.id; name/symbol in attributes.fungible_info.
    */
   getWalletPositions: async (address: string): Promise<ZerionPosition[]> => {
     const response = await client.get<{
       data: Array<{
         attributes: {
-          name:      string;
-          symbol:    string;
-          quantity:  { float: number };
-          value:     number;
-          chain_id:  string;
+          quantity?: { float: number };
+          value: number;
+          fungible_info?: { name?: string; symbol?: string };
         };
+        relationships?: { chain?: { data?: { id: string } } };
       }>;
-    }>(`/wallets/${address}/positions`, {
+    }>(`/wallets/${address}/positions/`, {
       params: { sort: 'value', currency: 'usd' },
     });
 
-    return (response.data?.data ?? []).map((item) => ({
-      name:     item.attributes.name,
-      symbol:   item.attributes.symbol,
-      quantity: item.attributes.quantity?.float ?? 0,
-      value:    item.attributes.value ?? 0,
-      chain:    item.attributes.chain_id ?? '',
-    }));
+    const items = response.data?.data ?? [];
+    return items.map((item) => {
+      const attrs = item.attributes ?? {};
+      const fungible = attrs.fungible_info;
+      const chainId = item.relationships?.chain?.data?.id ?? '';
+      return {
+        name:     (fungible?.name ?? '') as string,
+        symbol:   (fungible?.symbol ?? '') as string,
+        quantity: attrs.quantity?.float ?? 0,
+        value:    attrs.value ?? 0,
+        chain:    chainId,
+      };
+    });
   },
 };
