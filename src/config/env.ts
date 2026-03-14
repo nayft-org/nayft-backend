@@ -22,5 +22,23 @@ export const config = {
   frontendUrls: (process.env.FRONTEND_URL || 'http://localhost:8083')
     .split(',')
     .map((u) => u.trim()),
+  // Wallet monitoring – RPC
+  alchemyBaseUrl:           process.env.ALCHEMY_BASE_URL || '',
+  alchemyApiKey:            process.env.ALCHEMY_API_KEY  || '',
+  zerionBaseUrl:            process.env.ZERION_BASE_URL  || '',
+  zerionApiKey:             process.env.ZERION_API_KEY   || '',
+  eventAggregationWindowMs: parseInt(process.env.EVENT_AGGREGATION_WINDOW_MS || '120000', 10),
+  walletEventCooldownMs:    parseInt(process.env.WALLET_EVENT_COOLDOWN_MS    || '300000', 10),
+  walletPollIntervalMs:     parseInt(process.env.WALLET_POLL_INTERVAL_MS     || '60000',  10),
+  supportedChains:          process.env.SUPPORTED_CHAINS || 'eth,polygon,bnb',
+  // Alchemy Notify – webhook management
+  alchemyAuthToken:         process.env.ALCHEMY_AUTH_TOKEN      || '',
+  alchemyNotifyBaseUrl:     process.env.ALCHEMY_NOTIFY_BASE_URL || 'https://dashboard.alchemy.com/api',
+  alchemyWebhookIds:        process.env.ALCHEMY_WEBHOOK_IDS     || '{}',
+  alchemyWebhookSigningKeys: process.env.ALCHEMY_WEBHOOK_SIGNING_KEYS || '{}',
+  // Zerion tx-subscriptions
+  zerionSubscriptionId:     process.env.ZERION_SUBSCRIPTION_ID  || '',
+  // Public webhook URL (Cloudflare tunnel)
+  webhookBaseUrl:           process.env.WEBHOOK_BASE_URL         || '',
 };
 

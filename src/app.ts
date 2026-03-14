@@ -17,6 +17,7 @@ import newsBoardRoutes from './modules/newsboard/routes';
 import commentRoutes from './modules/comment/routes';
 import reactionRoutes from './modules/reaction/routes';
 import chartRoutes from './modules/chart/routes';
+import portfolioRoutes from './modules/portfolio/routes';
 
 const app: Application = express();
 
@@ -34,7 +35,10 @@ console.log('CORS Options:', corsOptions);
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+// Attach raw body buffer to req so webhook controllers can verify HMAC signatures
+app.use(express.json({
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check
@@ -55,6 +59,7 @@ app.use('/api/newsboards', newsBoardRoutes);
 app.use('/api/news', commentRoutes);
 app.use('/api/news', reactionRoutes);
 app.use('/api/charts', chartRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 // Error handling
 app.use(notFound);

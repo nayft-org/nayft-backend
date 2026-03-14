@@ -9,7 +9,6 @@ import { registerAdapter, startStreams } from './services/streams/registry';
 import { BinanceKlineAdapter } from './services/streams/adapters';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
-
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
@@ -23,6 +22,7 @@ const startServer = async (): Promise<void> => {
     const httpServer = http.createServer(app);
     attachWebSocketServer(httpServer);
     binanceWebSocket.start();
+    // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {
@@ -31,7 +31,8 @@ const startServer = async (): Promise<void> => {
     console.log(`📊 KlineDownsampler scheduled: ${streamConfig.kline.downsamplerCron}`);
 
     const port = config.port;
-    httpServer.listen(port, () => {
+    // Bind to 0.0.0.0 so emulator (10.0.2.2) and physical devices (LAN IP) can connect
+    httpServer.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${port}`);
       console.log(`📡 Environment: ${config.nodeEnv}`);
       console.log(`🔗 API: http://localhost:${port}/api`);
