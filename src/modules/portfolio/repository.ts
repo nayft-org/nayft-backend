@@ -1,5 +1,5 @@
 import { WalletAddress, IWalletAddress } from './models/WalletAddress';
-import { WalletEvent, IWalletEvent } from './models/WalletEvent';
+import { WalletEvent, IWalletEvent, WalletEventActivityFields } from './models/WalletEvent';
 
 export const portfolioRepository = {
   // ── WalletAddress ────────────────────────────────────────────────
@@ -61,6 +61,7 @@ export const portfolioRepository = {
     type:          IWalletEvent['type'];
     rawEventCount: number;
     enrichedData:  Record<string, unknown> | null;
+    activity?:     WalletEventActivityFields;
   }): Promise<IWalletEvent> => {
     const event = new WalletEvent({ ...data, aggregatedAt: new Date() });
     return event.save();

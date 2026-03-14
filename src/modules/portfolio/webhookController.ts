@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { alchemyNotify } from '../../utils/alchemyNotify';
 import { portfolioRepository } from './repository';
 import { ingestWalletEvent, WalletRawEvent } from '../../services/walletEventAggregator';
-import { WalletEventType } from './models/WalletEvent';
+import { WalletEventType, WalletEventActivityFields } from './models/WalletEvent';
 
 // ── Alchemy HMAC-SHA256 signature verification ───────────────────────────────
 
@@ -125,12 +125,24 @@ export const webhookController = {
         continue;
       }
 
+      const activityData: WalletEventActivityFields = {
+        txHash:         activity.hash ?? '',
+        blockNum:       activity.blockNum,
+        asset:          activity.asset,
+        value:          activity.value,
+        fromAddress:    activity.fromAddress?.toLowerCase(),
+        toAddress:      activity.toAddress?.toLowerCase(),
+        tokenContract:  activity.rawContract?.address,
+        tokenDecimals:  activity.rawContract?.decimal,
+      };
+
       const rawEvent: WalletRawEvent = {
-        userId:  wallet.userId,
-        address: addr,
-        chain:   resolvedChain,
-        txHash:  activity.hash ?? '',
-        type:    mapAlchemyCategory(activity.category),
+        userId:   wallet.userId,
+        address:  addr,
+        chain:    resolvedChain,
+        txHash:   activity.hash ?? '',
+        type:     mapAlchemyCategory(activity.category),
+        activity: activityData,
       };
       console.log(`[WebhookController] Alchemy: ingesting event`, rawEvent);
       ingestWalletEvent(rawEvent);
@@ -184,13 +196,26 @@ export const webhookController = {
     if (!wallet) return;
 
     const chainId = (tx.relationships?.chain?.id as string | undefined) ?? 'unknown';
+    const attrs   = tx.attributes ?? {};
+
+    const activityData: WalletEventActivityFields = {
+      txHash:         attrs.hash ?? '',
+      blockNum:       attrs.block_number?.toString(),
+      asset:          attrs.fungible_info?.symbol ?? attrs.fungible_info?.name,
+      value:          attrs.value,
+      fromAddress:    attrs.from?.toLowerCase(),
+      toAddress:      attrs.to?.toLowerCase(),
+      tokenContract:  attrs.fungible_info?.asset_code,
+      tokenDecimals:  attrs.fungible_info?.decimals?.toString(),
+    };
 
     const rawEvent: WalletRawEvent = {
-      userId:  wallet.userId,
+      userId:   wallet.userId,
       address,
-      chain:   chainId,
-      txHash:  tx.attributes?.hash ?? '',
-      type:    mapZerionOpType(tx.attributes?.operation_type ?? ''),
+      chain:    chainId,
+      txHash:   attrs.hash ?? '',
+      type:     mapZerionOpType(attrs.operation_type ?? ''),
+      activity: activityData,
     };
     ingestWalletEvent(rawEvent);
   },

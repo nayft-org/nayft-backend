@@ -24,6 +24,7 @@ function eventToDto(e: IWalletEvent) {
     rawEventCount: e.rawEventCount,
     enrichedData:  e.enrichedData,
     aggregatedAt:  e.aggregatedAt,
+    activity:      e.activity,
   };
 }
 

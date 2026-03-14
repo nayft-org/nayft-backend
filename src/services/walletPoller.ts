@@ -68,11 +68,21 @@ async function pollWallet(wallet: ActiveWallet, chain: string): Promise<void> {
                                      'contract_interaction';
 
       const rawEvent: WalletRawEvent = {
-        userId:  wallet.userId,
-        address: wallet.address,
+        userId:   wallet.userId,
+        address:  wallet.address,
         chain,
-        txHash:  tx.hash,
+        txHash:   tx.hash,
         type,
+        activity: {
+          txHash:         tx.hash,
+          blockNum:       tx.blockNum,
+          asset:          tx.asset ?? undefined,
+          value:          tx.value ? parseFloat(tx.value) : undefined,
+          fromAddress:    tx.from?.toLowerCase(),
+          toAddress:      tx.to?.toLowerCase(),
+          tokenContract:  undefined,
+          tokenDecimals:  undefined,
+        },
       };
       ingestWalletEvent(rawEvent);
     }

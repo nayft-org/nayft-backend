@@ -15,14 +15,19 @@ import { config } from '../config/env';
 import { alchemyApi } from '../utils/alchemy';
 import { zerionApi } from '../utils/zerion';
 import { portfolioRepository } from '../modules/portfolio/repository';
-import { IWalletEvent, WalletEventType } from '../modules/portfolio/models/WalletEvent';
+import {
+  IWalletEvent,
+  WalletEventType,
+  WalletEventActivityFields,
+} from '../modules/portfolio/models/WalletEvent';
 
 export interface WalletRawEvent {
-  userId:  string;
-  address: string;
-  chain:   string;
-  txHash:  string;
-  type:    WalletEventType;
+  userId:   string;
+  address:  string;
+  chain:    string;
+  txHash:   string;
+  type:     WalletEventType;
+  activity: WalletEventActivityFields;
 }
 
 // ── In-memory state (same pattern as klineIngester) ─────────────────────────
@@ -122,6 +127,17 @@ async function flushBuffer(key: string): Promise<void> {
   }
 
   try {
+    const first = events[0];
+    const primaryActivity = first.activity ?? {
+      txHash: first.txHash,
+      blockNum: undefined,
+      asset: undefined,
+      value: undefined,
+      fromAddress: undefined,
+      toAddress: undefined,
+      tokenContract: undefined,
+      tokenDecimals: undefined,
+    };
     const saved = await portfolioRepository.createEvent({
       userId,
       address,
@@ -129,6 +145,7 @@ async function flushBuffer(key: string): Promise<void> {
       type:          eventType,
       rawEventCount: events.length,
       enrichedData,
+      activity:      primaryActivity,
     });
 
     // Set cooldown for this address
