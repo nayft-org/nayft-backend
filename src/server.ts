@@ -9,8 +9,6 @@ import { registerAdapter, startStreams } from './services/streams/registry';
 import { BinanceKlineAdapter } from './services/streams/adapters';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
-import { walletPoller } from './services/walletPoller';
-
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
@@ -24,7 +22,7 @@ const startServer = async (): Promise<void> => {
     const httpServer = http.createServer(app);
     attachWebSocketServer(httpServer);
     binanceWebSocket.start();
-    walletPoller.start();
+    // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {

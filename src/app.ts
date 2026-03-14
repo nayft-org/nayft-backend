@@ -35,7 +35,10 @@ console.log('CORS Options:', corsOptions);
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+// Attach raw body buffer to req so webhook controllers can verify HMAC signatures
+app.use(express.json({
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check

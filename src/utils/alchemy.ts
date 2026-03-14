@@ -73,6 +73,7 @@ export const alchemyApi = {
         },
       ],
     });
+    console.log('getAssetTransfers response', response.data);
     return response.data?.result?.transfers ?? [];
   },
 

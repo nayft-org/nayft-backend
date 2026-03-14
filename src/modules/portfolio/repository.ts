@@ -16,7 +16,20 @@ export const portfolioRepository = {
     userId: string,
     address: string
   ): Promise<IWalletAddress | null> => {
-    return WalletAddress.findOne({ userId, address });
+    const normalized = address.toLowerCase();
+    return WalletAddress.findOne({
+      userId,
+      address: { $regex: new RegExp(`^${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    });
+  },
+
+  /** Used by webhook controller to resolve userId from an incoming address. */
+  findWalletByAddress: async (address: string): Promise<IWalletAddress | null> => {
+    const normalized = address.toLowerCase();
+    // Case-insensitive match: DB may store EIP-55 checksum (mixed case), webhook sends lowercase
+    return WalletAddress.findOne({
+      address: { $regex: new RegExp(`^${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    });
   },
 
   findAllActiveWallets: async (): Promise<IWalletAddress[]> => {
@@ -29,7 +42,8 @@ export const portfolioRepository = {
     chains: string[],
     label?: string
   ): Promise<IWalletAddress> => {
-    const wallet = new WalletAddress({ userId, address, chains, label });
+    const normalized = address.toLowerCase();
+    const wallet = new WalletAddress({ userId, address: normalized, chains, label });
     return wallet.save();
   },
 
