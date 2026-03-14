@@ -89,4 +89,13 @@ export const portfolioController = {
       sendError(res, error.message, 500);
     }
   },
+
+  refreshEventStatuses: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const result = await portfolioService.refreshEventStatuses(req.userId!);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 500);
+    }
+  },
 };

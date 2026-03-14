@@ -6,6 +6,9 @@ export type WalletEventType =
   | 'contract_interaction'
   | 'multi_chain_activity';
 
+/** Transaction status from eth_getTransactionReceipt (status: 1=success, 0=failed) */
+export type TxStatus = 'success' | 'failed' | 'pending';
+
 /** Activity fields from Alchemy ADDRESS_ACTIVITY webhook payload */
 export interface WalletEventActivityFields {
   txHash:         string;
@@ -16,6 +19,10 @@ export interface WalletEventActivityFields {
   toAddress?:    string;
   tokenContract?: string;
   tokenDecimals?: string;
+  /** From eth_getTransactionReceipt: 1=success, 0=failed, null=pending */
+  txStatus?:     TxStatus | null;
+  /** Block explorer URL for "View on Etherscan" */
+  explorerUrl?:  string;
 }
 
 export interface IWalletEvent extends Document {
@@ -42,6 +49,8 @@ const activitySchema = new Schema<WalletEventActivityFields>(
     toAddress:      { type: String },
     tokenContract:  { type: String },
     tokenDecimals:  { type: String },
+    txStatus:       { type: String, enum: ['success', 'failed', 'pending'] },
+    explorerUrl:    { type: String },
   },
   { _id: false }
 );

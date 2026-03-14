@@ -14,6 +14,7 @@
 import { config } from '../config/env';
 import { alchemyApi } from '../utils/alchemy';
 import { zerionApi } from '../utils/zerion';
+import { getExplorerTxUrl } from '../utils/explorerUrls';
 import { portfolioRepository } from '../modules/portfolio/repository';
 import {
   IWalletEvent,
@@ -138,6 +139,23 @@ async function flushBuffer(key: string): Promise<void> {
       tokenContract: undefined,
       tokenDecimals: undefined,
     };
+
+    // Fetch tx status via eth_getTransactionReceipt and build explorer URL
+    const txHash = primaryActivity.txHash?.trim();
+    if (txHash) {
+      const receipt = await alchemyApi.getTransactionReceipt(txHash, chain);
+      if (receipt) {
+        primaryActivity.txStatus =
+          receipt.status === '0x1' ? 'success'
+          : receipt.status === '0x0' ? 'failed'
+          : 'pending';
+      } else {
+        primaryActivity.txStatus = 'pending';
+      }
+      const explorerUrl = getExplorerTxUrl(chain, txHash);
+      if (explorerUrl) primaryActivity.explorerUrl = explorerUrl;
+    }
+
     const saved = await portfolioRepository.createEvent({
       userId,
       address,

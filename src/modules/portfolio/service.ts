@@ -2,6 +2,8 @@ import { portfolioRepository } from './repository';
 import { config } from '../../config/env';
 import { alchemyNotify } from '../../utils/alchemyNotify';
 import { zerionSubscriptions } from '../../utils/zerionSubscriptions';
+import { alchemyApi } from '../../utils/alchemy';
+import { getExplorerTxUrl } from '../../utils/explorerUrls';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
 
@@ -99,5 +101,29 @@ export const portfolioService = {
     limit:  number
   ): Promise<IWalletEvent[]> => {
     return portfolioRepository.findEventsByUser(userId, page, limit);
+  },
+
+  refreshEventStatuses: async (userId: string): Promise<{ updated: number }> => {
+    const events = await portfolioRepository.findEventsNeedingStatusRefresh(userId, 20);
+    let updated = 0;
+    for (const event of events) {
+      const txHash = event.activity?.txHash?.trim();
+      const chain = event.chain;
+      if (!txHash || !chain) continue;
+      const receipt = await alchemyApi.getTransactionReceipt(txHash, chain);
+      if (!receipt) continue;
+      const txStatus =
+        receipt.status === '0x1' ? 'success'
+        : receipt.status === '0x0' ? 'failed'
+        : 'pending';
+      const explorerUrl = getExplorerTxUrl(chain, txHash);
+      const eventId = typeof event._id === 'string' ? event._id : (event._id as { toString(): string }).toString();
+      await portfolioRepository.updateEventActivity(eventId, userId, {
+        txStatus,
+        explorerUrl: explorerUrl || undefined,
+      });
+      updated++;
+    }
+    return { updated };
   },
 };
