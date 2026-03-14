@@ -17,14 +17,16 @@ function walletToDto(w: IWalletAddress) {
 
 function eventToDto(e: IWalletEvent) {
   return {
-    id:            (e._id as { toString(): string }).toString(),
-    address:       e.address,
-    chain:         e.chain,
-    type:          e.type,
-    rawEventCount: e.rawEventCount,
-    enrichedData:  e.enrichedData,
-    aggregatedAt:  e.aggregatedAt,
-    activity:      e.activity,
+    id:               (e._id as { toString(): string }).toString(),
+    address:          e.address,
+    chain:            e.chain,
+    type:             e.type,
+    rawEventCount:    e.rawEventCount,
+    transactionCount: e.transactionCount,
+    eventSummaries:   e.eventSummaries,
+    enrichedData:     e.enrichedData,
+    aggregatedAt:     e.aggregatedAt,
+    activity:         e.activity,
   };
 }
 
@@ -85,6 +87,15 @@ export const portfolioController = {
       const limit = parseInt((req.query.limit as string) || '20', 10);
       const events = await portfolioService.getEvents(req.userId!, page, limit);
       sendSuccess(res, { events: events.map(eventToDto) });
+    } catch (error: any) {
+      sendError(res, error.message, 500);
+    }
+  },
+
+  refreshEventStatuses: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const result = await portfolioService.refreshEventStatuses(req.userId!);
+      sendSuccess(res, result);
     } catch (error: any) {
       sendError(res, error.message, 500);
     }

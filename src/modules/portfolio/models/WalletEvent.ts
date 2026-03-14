@@ -6,6 +6,9 @@ export type WalletEventType =
   | 'contract_interaction'
   | 'multi_chain_activity';
 
+/** Transaction status from eth_getTransactionReceipt (status: 1=success, 0=failed) */
+export type TxStatus = 'success' | 'failed' | 'pending';
+
 /** Activity fields from Alchemy ADDRESS_ACTIVITY webhook payload */
 export interface WalletEventActivityFields {
   txHash:         string;
@@ -16,6 +19,10 @@ export interface WalletEventActivityFields {
   toAddress?:    string;
   tokenContract?: string;
   tokenDecimals?: string;
+  /** From eth_getTransactionReceipt: 1=success, 0=failed, null=pending */
+  txStatus?:     TxStatus | null;
+  /** Block explorer URL for "View on Etherscan" */
+  explorerUrl?:  string;
 }
 
 export interface IWalletEvent extends Document {
@@ -24,6 +31,10 @@ export interface IWalletEvent extends Document {
   chain:          string;
   type:           WalletEventType;
   rawEventCount:  number;
+  /** Unique tx hashes in the batch */
+  transactionCount?: number;
+  /** Human-readable event descriptions, e.g. ["swap USDC -> POL", "transfer 100 USDC"] */
+  eventSummaries?:  string[];
   enrichedData:   Record<string, unknown> | null;
   aggregatedAt:   Date;
   /** Core activity data from webhook (txHash, asset, value, etc.) — optional for legacy docs */
@@ -42,6 +53,8 @@ const activitySchema = new Schema<WalletEventActivityFields>(
     toAddress:      { type: String },
     tokenContract:  { type: String },
     tokenDecimals:  { type: String },
+    txStatus:       { type: String, enum: ['success', 'failed', 'pending'] },
+    explorerUrl:    { type: String },
   },
   { _id: false }
 );
@@ -56,8 +69,10 @@ const walletEventSchema = new Schema<IWalletEvent>(
       enum:    ['token_transfer', 'native_transfer', 'contract_interaction', 'multi_chain_activity'],
       default: 'token_transfer',
     },
-    rawEventCount: { type: Number, default: 1 },
-    enrichedData:  { type: Schema.Types.Mixed, default: null },
+    rawEventCount:     { type: Number, default: 1 },
+    transactionCount:  { type: Number },
+    eventSummaries:    { type: [String], default: [] },
+    enrichedData:      { type: Schema.Types.Mixed, default: null },
     aggregatedAt:  { type: Date, default: Date.now },
     activity:      { type: activitySchema },
   },

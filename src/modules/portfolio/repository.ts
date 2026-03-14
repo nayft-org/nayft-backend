@@ -55,13 +55,15 @@ export const portfolioRepository = {
   // ── WalletEvent ──────────────────────────────────────────────────
 
   createEvent: async (data: {
-    userId:        string;
-    address:       string;
-    chain:         string;
-    type:          IWalletEvent['type'];
-    rawEventCount: number;
-    enrichedData:  Record<string, unknown> | null;
-    activity?:     WalletEventActivityFields;
+    userId:            string;
+    address:           string;
+    chain:             string;
+    type:              IWalletEvent['type'];
+    rawEventCount:     number;
+    transactionCount?: number;
+    eventSummaries?:   string[];
+    enrichedData:      Record<string, unknown> | null;
+    activity?:         WalletEventActivityFields;
   }): Promise<IWalletEvent> => {
     const event = new WalletEvent({ ...data, aggregatedAt: new Date() });
     return event.save();
@@ -76,6 +78,44 @@ export const portfolioRepository = {
     return WalletEvent.find({ userId })
       .sort({ aggregatedAt: -1 })
       .skip(skip)
+      .limit(limit)
+      .lean() as unknown as IWalletEvent[];
+  },
+
+  findEventByIdAndUser: async (eventId: string, userId: string): Promise<IWalletEvent | null> => {
+    return WalletEvent.findOne({ _id: eventId, userId });
+  },
+
+  updateEventActivity: async (
+    eventId: string,
+    userId: string,
+    activity: Partial<WalletEventActivityFields>
+  ): Promise<IWalletEvent | null> => {
+    const event = await WalletEvent.findOne({ _id: eventId, userId });
+    if (!event) return null;
+    if (event.activity) {
+      Object.assign(event.activity, activity);
+    } else {
+      event.activity = activity as WalletEventActivityFields;
+    }
+    await event.save();
+    return event;
+  },
+
+  findEventsNeedingStatusRefresh: async (
+    userId: string,
+    limit: number = 20
+  ): Promise<IWalletEvent[]> => {
+    return WalletEvent.find({
+      userId,
+      'activity.txHash': { $exists: true, $ne: '' },
+      $or: [
+        { 'activity.txStatus': { $exists: false } },
+        { 'activity.txStatus': null },
+        { 'activity.txStatus': 'pending' },
+      ],
+    })
+      .sort({ aggregatedAt: -1 })
       .limit(limit)
       .lean() as unknown as IWalletEvent[];
   },
