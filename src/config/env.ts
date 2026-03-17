@@ -31,6 +31,7 @@ export const config = {
   walletEventCooldownMs:    parseInt(process.env.WALLET_EVENT_COOLDOWN_MS    || '300000', 10),
   walletPollIntervalMs:     parseInt(process.env.WALLET_POLL_INTERVAL_MS     || '60000',  10),
   supportedChains:          process.env.SUPPORTED_CHAINS || 'eth,polygon,bnb',
+  holdingsCacheTtlMs:       parseInt(process.env.HOLDINGS_CACHE_TTL_MS       || '300000', 10),
   // Alchemy Notify – webhook management
   alchemyAuthToken:         process.env.ALCHEMY_AUTH_TOKEN      || '',
   alchemyNotifyBaseUrl:     process.env.ALCHEMY_NOTIFY_BASE_URL || 'https://dashboard.alchemy.com/api',

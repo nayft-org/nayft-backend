@@ -4,6 +4,7 @@ import { alchemyNotify } from '../../utils/alchemyNotify';
 import { zerionSubscriptions } from '../../utils/zerionSubscriptions';
 import { alchemyApi } from '../../utils/alchemy';
 import { getExplorerTxUrl } from '../../utils/explorerUrls';
+import { fetchAndAggregateHoldings } from '../../utils/holdingsAggregator';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
 
@@ -34,6 +35,7 @@ export const portfolioService = {
     if (invalid.length > 0) throw new Error(`Unsupported chains: ${invalid.join(', ')}`);
 
     const wallet = await portfolioRepository.createWallet(userId, address, chains, label);
+    await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
 
     // Register address with Alchemy Address Activity webhooks (one per chain)
     for (const chain of chains) {
@@ -87,6 +89,7 @@ export const portfolioService = {
 
     const deleted = await portfolioRepository.deleteWallet(walletId, userId);
     if (!deleted) throw new Error('Wallet not found');
+    await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
 
     return { message: 'Wallet removed' };
   },
@@ -101,6 +104,38 @@ export const portfolioService = {
     limit:  number
   ): Promise<IWalletEvent[]> => {
     return portfolioRepository.findEventsByUser(userId, page, limit);
+  },
+
+  getHoldings: async (userId: string, forceRefresh = false) => {
+    console.log('[Holdings] service.getHoldings: entry', { userId, forceRefresh });
+    const cached = await portfolioRepository.findHoldingsByUser(userId);
+    const now = Date.now();
+    const cacheAge = cached?.syncedAt ? now - new Date(cached.syncedAt).getTime() : Infinity;
+    const useCache = cached && cached.syncedAt && cacheAge < config.holdingsCacheTtlMs;
+    const staleZero = cached && cached.totalValue === 0 && (cached.positions?.length ?? 0) === 0;
+    if (useCache && !forceRefresh && !staleZero) {
+      console.log('[Holdings] service.getHoldings: returning cached', { totalValue: cached.totalValue, cacheAgeMs: cacheAge });
+      return {
+        totalValue:        cached.totalValue,
+        absoluteChange24h: cached.absoluteChange24h,
+        relativeChange24h: cached.relativeChange24h,
+        positions:         cached.positions ?? [],
+      };
+    }
+
+    const wallets = await portfolioRepository.findWalletsByUser(userId);
+    console.log('[Holdings] service.getHoldings: wallets', { count: wallets.length });
+    if (wallets.length === 0) {
+      console.log('[Holdings] service.getHoldings: no wallets, returning empty');
+      return { totalValue: 0, absoluteChange24h: 0, relativeChange24h: 0, positions: [] };
+    }
+
+    const addresses = wallets.map((w) => w.address);
+    console.log('[Holdings] service.getHoldings: fetching from Zerion', { addresses });
+    const aggregated = await fetchAndAggregateHoldings(addresses);
+    console.log('[Holdings] service.getHoldings: aggregated', { totalValue: aggregated.totalValue, positionsCount: aggregated.positions.length });
+    await portfolioRepository.upsertHoldings(userId, aggregated);
+    return aggregated;
   },
 
   refreshEventStatuses: async (userId: string): Promise<{ updated: number }> => {
