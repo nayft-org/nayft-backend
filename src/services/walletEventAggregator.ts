@@ -117,6 +117,29 @@ async function flushBuffer(key: string): Promise<void> {
       const portfolio = await zerionApi.getWalletPortfolio(address);
       const positions = await zerionApi.getWalletPositions(address);
       enrichedData = { source: 'zerion', portfolio, positions };
+
+      // Opportunistic holdings cache update: only when user has exactly 1 wallet (complete data)
+      try {
+        const wallets = await portfolioRepository.findWalletsByUser(userId);
+        const normalizedAddr = address.toLowerCase();
+        if (
+          wallets.length === 1 &&
+          wallets[0].address?.toLowerCase() === normalizedAddr
+        ) {
+          const totalValue =
+            positions.length > 0
+              ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
+              : portfolio.totalValue;
+          await portfolioRepository.upsertHoldings(userId, {
+            totalValue,
+            absoluteChange24h: portfolio.absoluteChange24h,
+            relativeChange24h:  portfolio.relativeChange24h,
+            positions,
+          });
+        }
+      } catch (holdErr) {
+        console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);
+      }
     } else {
       // Case B: single chain → Alchemy
       console.log('getAssetTransfers', address, chain);
