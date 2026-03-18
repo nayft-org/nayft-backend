@@ -35,9 +35,11 @@ export const newsController = {
 
   getFollowingNews: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      console.log("getFollowingNews is fired");
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
+      const modeParam = (req.query.mode as string | undefined)?.toLowerCase();
+      const mode: 'all' | 'coin' | 'users' =
+        modeParam === 'coin' || modeParam === 'users' ? modeParam : 'all';
       const categoriesParam = (req.query.categories || req.query.category) as string | undefined;
       const categories = categoriesParam
         ? categoriesParam
@@ -45,7 +47,7 @@ export const newsController = {
             .map((c) => c.trim())
             .filter(Boolean)
         : [];
-      const news = await newsService.getFollowingNews(req.userId!, page, limit, categories);
+      const news = await newsService.getFollowingNews(req.userId!, page, limit, categories, mode);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);

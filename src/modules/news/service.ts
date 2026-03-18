@@ -1,10 +1,13 @@
-import { authRepository } from '../auth/repository';
 import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
 import { coinRepository } from '../coin/repository';
 import { NewsArticle } from './models';
 import type { INewsArticle } from './models/NewsArticle';
 import { reactionService } from '../reaction/service';
 import type { ReactionType } from '../reaction/model';
+import { Reaction } from '../reaction/model';
+import { Comment } from '../comment/model';
+import { NewsBoard } from '../newsboard/model';
+import { followService } from '../follow/service';
 
 const ALLOWED_NEWS_CATEGORIES = new Set([
   'BTC',
@@ -13,22 +16,6 @@ const ALLOWED_NEWS_CATEGORIES = new Set([
   'MARKET',
   'CRYPTOCURRENCY',
 ]);
-
-const filterByCategories = (articles: any[], categories: string[]): any[] => {
-  if (!categories.length) return articles;
-  const allowed = new Set(
-    categories
-      .map((c) => c.toUpperCase())
-      .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
-  );
-  if (!allowed.size) return articles;
-
-  return articles.filter((raw) => {
-    const article = normalizeArticle(raw);
-    if (!article.categories || !article.categories.length) return false;
-    return article.categories.some((cat) => allowed.has(cat.toUpperCase()));
-  });
-};
 
 const mapNewsArticleToDto = (
   article: INewsArticle,
@@ -100,29 +87,91 @@ export const newsService = {
     userId: string,
     page: number = 1,
     limit: number = 50,
-    categories: string[] = []
+    categories: string[] = [],
+    mode: 'all' | 'coin' | 'users' = 'all'
   ) => {
-    const user = await authRepository.findById(userId);
-    if (!user || !user.followingCoins || user.followingCoins.length === 0) {
-      return [];
-    }
+    const allowedCategoryKeys =
+      categories.length > 0
+        ? categories
+            .map((c) => c.toUpperCase())
+            .filter((c) => ALLOWED_NEWS_CATEGORIES.has(c))
+            .map((c) => c.toLowerCase())
+        : [];
 
-    // Map following coin IDs to symbols
-    const symbols: string[] = [];
-    for (const coinId of user.followingCoins) {
-      const coin = await coinRepository.findById(coinId);
-      if (coin?.symbol) {
-        symbols.push(coin.symbol);
+    const followCoinIds = mode === 'users' ? [] : await followService.getFollowedCoinIds(userId);
+    const followUserIds = mode === 'coin' ? [] : await followService.getFollowedUserIds(userId);
+
+    const candidateExternalIds = new Set<string>();
+    const originByNewsId = new Map<string, 'coin' | 'user' | 'both'>();
+
+    if (followCoinIds.length > 0) {
+      const coinDocs = await Promise.all(followCoinIds.map((coinId) => coinRepository.findById(coinId)));
+      const symbols = coinDocs
+        .map((coin) => coin?.symbol?.toUpperCase())
+        .filter((symbol): symbol is string => Boolean(symbol));
+
+      if (symbols.length > 0) {
+        const coinQuery: Record<string, unknown> = {
+          status: 'active',
+          'coins.symbol': { $in: symbols },
+        };
+        if (allowedCategoryKeys.length > 0) {
+          coinQuery['categories.key'] = { $in: allowedCategoryKeys };
+        }
+
+        const coinArticles = await NewsArticle.find(coinQuery)
+          .sort({ publishedAt: -1 })
+          .limit(limit * 3)
+          .select('externalId')
+          .lean<Array<{ externalId: string }>>();
+
+        for (const article of coinArticles) {
+          candidateExternalIds.add(article.externalId);
+          originByNewsId.set(article.externalId, 'coin');
+        }
       }
     }
 
-    if (symbols.length === 0) {
+    if (followUserIds.length > 0) {
+      const recentUserNewsIds = await getRecentNewsIdsEngagedByUsers(followUserIds, limit * 4);
+      for (const newsId of recentUserNewsIds) {
+        candidateExternalIds.add(newsId);
+        const existingOrigin = originByNewsId.get(newsId);
+        originByNewsId.set(newsId, existingOrigin === 'coin' ? 'both' : 'user');
+      }
+    }
+
+    if (candidateExternalIds.size === 0) {
       return [];
     }
 
-    const articles = await coindeskApi.getNewsByTickers(symbols, page, limit * 2);
-    const filtered = filterByCategories(articles, categories);
-    return filtered.slice(0, limit).map(mapCoindeskToDto);
+    const query: Record<string, unknown> = {
+      status: 'active',
+      externalId: { $in: Array.from(candidateExternalIds) },
+    };
+    if (allowedCategoryKeys.length > 0) {
+      query['categories.key'] = { $in: allowedCategoryKeys };
+    }
+
+    const skip = (Math.max(1, page) - 1) * Math.max(1, limit);
+    const articles = await NewsArticle.find(query)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean<INewsArticle[]>();
+
+    let userReactionsMap: Record<string, ReactionType> = {};
+    if (articles.length > 0) {
+      userReactionsMap = await reactionService.getUserReactionsForArticles(
+        userId,
+        articles.map((a) => a.externalId)
+      );
+    }
+
+    return articles.map((article) => ({
+      ...mapNewsArticleToDto(article, userReactionsMap[article.externalId]),
+      origin: originByNewsId.get(article.externalId) || 'coin',
+    }));
   },
 
   getNewsByCoinSymbol: async (coinSymbol: string, limit: number = 20) => {
@@ -175,4 +224,46 @@ const mapCoindeskToDto = (articleRaw: any) => {
     relatedCoins,
     publishedAt: new Date(article.publishedAt),
   };
+};
+
+const getRecentNewsIdsEngagedByUsers = async (
+  userIds: string[],
+  maxItems: number
+): Promise<string[]> => {
+  if (userIds.length === 0 || maxItems <= 0) return [];
+
+  const [reactionRows, commentRows, boards] = await Promise.all([
+    Reaction.find({ userId: { $in: userIds }, targetType: 'news' })
+      .sort({ updatedAt: -1 })
+      .limit(maxItems)
+      .select('targetId')
+      .lean<Array<{ targetId: string }>>(),
+    Comment.find({ userId: { $in: userIds } })
+      .sort({ createdAt: -1 })
+      .limit(maxItems)
+      .select('newsId')
+      .lean<Array<{ newsId: string }>>(),
+    NewsBoard.find({ userId: { $in: userIds } })
+      .sort({ updatedAt: -1 })
+      .limit(Math.max(20, Math.floor(maxItems / 2)))
+      .select('newsIds')
+      .lean<Array<{ newsIds: string[] }>>(),
+  ]);
+
+  const ranked = new Map<string, number>();
+  const pushRank = (newsId: string) => {
+    if (!newsId) return;
+    ranked.set(newsId, (ranked.get(newsId) || 0) + 1);
+  };
+
+  for (const row of reactionRows) pushRank(row.targetId);
+  for (const row of commentRows) pushRank(row.newsId);
+  for (const board of boards) {
+    for (const newsId of board.newsIds || []) pushRank(newsId);
+  }
+
+  return Array.from(ranked.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxItems)
+    .map(([newsId]) => newsId);
 };

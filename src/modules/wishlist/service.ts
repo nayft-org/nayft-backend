@@ -1,5 +1,6 @@
 import { wishlistRepository } from './repository';
 import { coinRepository } from '../coin/repository';
+import { followService } from '../follow/service';
 
 export const wishlistService = {
   addToWishlist: async (userId: string, coinId: string) => {
@@ -9,27 +10,25 @@ export const wishlistService = {
       throw new Error('Coin not found');
     }
 
-    // Check if already in wishlist
     const existing = await wishlistRepository.findByUserAndCoin(userId, coinId);
-    if (existing) {
-      throw new Error('Coin already in wishlist');
+    if (!existing) {
+      await wishlistRepository.create(userId, coinId);
     }
 
-    await wishlistRepository.create(userId, coinId);
+    await followService.followCoin(userId, coinId);
+    await followService.syncLegacyFollowingCoins(userId);
     return { message: 'Coin added to wishlist' };
   },
 
   removeFromWishlist: async (userId: string, coinId: string) => {
-    const deleted = await wishlistRepository.delete(userId, coinId);
-    if (!deleted) {
-      throw new Error('Coin not found in wishlist');
-    }
+    await wishlistRepository.delete(userId, coinId);
+    await followService.unfollowCoin(userId, coinId);
+    await followService.syncLegacyFollowingCoins(userId);
     return { message: 'Coin removed from wishlist' };
   },
 
   getWishlist: async (userId: string) => {
-    const wishlistItems = await wishlistRepository.findByUser(userId);
-    const coinIds = wishlistItems.map((item) => item.coinId);
+    const coinIds = await followService.getFollowedCoinIds(userId);
 
     const coins = await Promise.all(
       coinIds.map(async (coinId) => {

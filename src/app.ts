@@ -18,6 +18,7 @@ import commentRoutes from './modules/comment/routes';
 import reactionRoutes from './modules/reaction/routes';
 import chartRoutes from './modules/chart/routes';
 import portfolioRoutes from './modules/portfolio/routes';
+import followRoutes from './modules/follow/routes';
 
 const app: Application = express();
 
@@ -60,6 +61,7 @@ app.use('/api/news', commentRoutes);
 app.use('/api/news', reactionRoutes);
 app.use('/api/charts', chartRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/follow', followRoutes);
 
 // Error handling
 app.use(notFound);
