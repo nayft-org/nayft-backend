@@ -1,3 +1,4 @@
+import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 import { newsService } from '../news/service';
 import { userService } from '../user/service';
 
@@ -73,6 +74,37 @@ const toCoinResult = (coin: any): SearchCoinResult | null => {
   };
 };
 
+async function enrichCoinsWithImages(results: SearchCoinResult[]): Promise<SearchCoinResult[]> {
+  if (results.length === 0) return results;
+  try {
+    const coinIds = [...new Set(results.map((r) => r.coinId))];
+    const symbols = [...new Set(results.map((r) => r.symbol.toLowerCase()))];
+
+    const labeled = await LabeledActiveCoin.find({
+      $or: [{ id: { $in: coinIds } }, { symbol: { $in: symbols } }],
+    })
+      .select('id symbol image')
+      .lean<Array<{ id: string; symbol: string; image?: string }>>();
+
+    const byId = new Map<string, string>();
+    const bySymbol = new Map<string, string>();
+    for (const doc of labeled) {
+      if (doc.image) {
+        byId.set(doc.id.toLowerCase(), doc.image);
+        bySymbol.set(doc.symbol.toLowerCase(), doc.image);
+      }
+    }
+
+    return results.map((r) => {
+      const image =
+        byId.get(r.coinId.toLowerCase()) ?? bySymbol.get(r.symbol.toLowerCase()) ?? r.image;
+      return { ...r, image: image || r.image };
+    });
+  } catch {
+    return results;
+  }
+}
+
 export const searchRepository = {
   async searchCoins(query: string, limit: number): Promise<SearchCoinResult[]> {
     try {
@@ -108,7 +140,8 @@ export const searchRepository = {
         }
       }
 
-      return Array.from(unique.values()).slice(0, limit);
+      const results = Array.from(unique.values()).slice(0, limit);
+      return enrichCoinsWithImages(results);
     } catch {
       return [];
     }
