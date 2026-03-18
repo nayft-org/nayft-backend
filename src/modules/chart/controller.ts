@@ -73,4 +73,34 @@ export const chartController = {
       res.status(500).json({ error: 'Failed to fetch aggTrades' });
     }
   },
+
+  getMarketTrend: async (req: Request, res: Response) => {
+    try {
+      const interval = String(req.query.interval || '1m').toLowerCase() as KlineInterval;
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      const exchange = req.query.exchange as string | undefined;
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+      const maxCoins = req.query.maxCoins ? parseInt(String(req.query.maxCoins), 10) : undefined;
+
+      if (!VALID_INTERVALS.includes(interval)) {
+        res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(', ')}` });
+        return;
+      }
+
+      const marketTrend = await chartService.getMarketTrend({
+        interval,
+        from,
+        to,
+        exchange,
+        limit,
+        maxCoins,
+      });
+
+      res.json(marketTrend);
+    } catch (err) {
+      console.error('[chartController.getMarketTrend]', err);
+      res.status(500).json({ error: 'Failed to fetch market trend' });
+    }
+  },
 };
