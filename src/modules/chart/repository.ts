@@ -37,11 +37,13 @@ export const chartRepository = {
       'meta.interval': interval,
       openTime: { $gte: from, $lte: to },
     })
-      .sort({ openTime: 1 })
+      // Pull latest candles first so limit returns most recent window.
+      .sort({ openTime: -1 })
       .limit(limit)
       .lean();
 
-    return docs.map((d) => ({
+    // API consumers expect time-series order oldest -> newest.
+    return docs.reverse().map((d) => ({
       openTime: d.openTime,
       open: d.open,
       high: d.high,
