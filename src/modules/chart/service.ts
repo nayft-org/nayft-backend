@@ -1,6 +1,7 @@
 import { chartRepository } from './repository';
 import type { KlineInterval } from './model';
 import { streamConfig } from '../../config/streamConfig';
+import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 
 const QUOTE_SUFFIXES = ['USDT', 'USDC', 'BUSD', 'USD'];
 
@@ -160,5 +161,76 @@ export const chartService = {
       limit,
       dataType,
     });
+  },
+
+  async getMarketTrend(params: {
+    interval?: KlineInterval;
+    from?: string;
+    to?: string;
+    exchange?: string;
+    limit?: number;
+    maxCoins?: number;
+  }) {
+    const exchange = params.exchange || streamConfig.exchanges[0] || 'binance';
+    const interval = params.interval || '1m';
+    const limit = Math.min(Math.max(params.limit ?? 240, 30), 720);
+    const maxCoins = Math.min(Math.max(params.maxCoins ?? 25, 5), 100);
+
+    const now = new Date();
+    const bucketMs = INTERVAL_MS[interval];
+    const to = params.to ? new Date(params.to) : now;
+    const from = params.from
+      ? new Date(params.from)
+      : new Date(to.getTime() - bucketMs * (limit + Math.ceil(limit * 0.5)));
+
+    const activeCoins = await LabeledActiveCoin.find({
+      symbol: { $exists: true, $ne: '' },
+      market_cap: { $gt: 0 },
+    })
+      .select('symbol market_cap market_cap_change_percentage_24h market_cap_rank')
+      .sort({ market_cap_rank: 1 })
+      .limit(maxCoins)
+      .lean();
+
+    const constituents = activeCoins
+      .map((coin) => ({
+        symbol: String(coin.symbol || '').trim().toUpperCase(),
+        marketCap: Number(coin.market_cap || 0),
+        marketCapChange24h: Number(coin.market_cap_change_percentage_24h || 0),
+      }))
+      .filter((coin) => coin.symbol && Number.isFinite(coin.marketCap) && coin.marketCap > 0);
+
+    const points = await chartRepository.findMarketTrend({
+      exchange,
+      interval,
+      from,
+      to,
+      limit,
+      constituents: constituents.map(({ symbol, marketCap }) => ({ symbol, marketCap })),
+    });
+
+    const latestValue = constituents.reduce((sum, coin) => sum + coin.marketCap, 0);
+    const previousValue = constituents.reduce((sum, coin) => {
+      const divisor = 1 + coin.marketCapChange24h / 100;
+      if (!Number.isFinite(divisor) || divisor <= 0) return sum;
+      return sum + coin.marketCap / divisor;
+    }, 0);
+
+    const absoluteChange24h = latestValue - previousValue;
+    const relativeChange24h = previousValue > 0 ? (absoluteChange24h / previousValue) * 100 : 0;
+
+    return {
+      points,
+      latestValue,
+      absoluteChange24h,
+      relativeChange24h,
+      range: {
+        interval,
+        from,
+        to,
+        limit,
+      },
+      constituents: constituents.length,
+    };
   },
 };
