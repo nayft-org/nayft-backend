@@ -2,6 +2,19 @@ import { chartRepository } from './repository';
 import type { KlineInterval } from './model';
 import { streamConfig } from '../../config/streamConfig';
 
+const QUOTE_SUFFIXES = ['USDT', 'USDC', 'BUSD', 'USD'];
+
+function normalizeChartSymbol(raw: string): string {
+  const symbol = raw.trim().toUpperCase();
+  if (!symbol) return '';
+  for (const suffix of QUOTE_SUFFIXES) {
+    if (symbol.endsWith(suffix) && symbol.length > suffix.length) {
+      return symbol.slice(0, -suffix.length);
+    }
+  }
+  return symbol;
+}
+
 /** Interval to milliseconds for bucketing trades */
 const INTERVAL_MS: Record<KlineInterval, number> = {
   '1m': 60 * 1000,
@@ -21,7 +34,7 @@ export const chartService = {
     limit?: number;
   }) {
     const exchange = params.exchange || streamConfig.exchanges[0] || 'binance';
-    const symbol = params.symbol.trim().toUpperCase();
+    const symbol = normalizeChartSymbol(params.symbol);
     const interval = params.interval;
     const limit = Math.min(params.limit ?? 1000, 2000);
 
@@ -131,7 +144,7 @@ export const chartService = {
     dataType?: 'trade' | 'aggTrade';
   }) {
     const exchange = params.exchange || streamConfig.exchanges[0] || 'binance';
-    const symbol = params.symbol.trim().toUpperCase();
+    const symbol = normalizeChartSymbol(params.symbol);
     const limit = Math.min(params.limit ?? 1000, 2000);
     const dataType = params.dataType || 'aggTrade';
 
