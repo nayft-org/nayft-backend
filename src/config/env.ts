@@ -19,9 +19,10 @@ export const config = {
     (process.env.COIN_GECKO_API_TYPE?.toLowerCase() === 'pro'
       ? 'https://pro-api.coingecko.com/api/v3'
       : 'https://api.coingecko.com/api/v3'),
-  frontendUrls: (process.env.FRONTEND_URL || 'http://localhost:8083')
+  frontendUrls: (process.env.FRONTEND_URL || 'http://localhost:8082,http://localhost:8083')
     .split(',')
-    .map((u) => u.trim()),
+    .map((u) => u.trim())
+    .filter(Boolean),
   // Wallet monitoring – RPC
   alchemyBaseUrl:           process.env.ALCHEMY_BASE_URL || '',
   alchemyApiKey:            process.env.ALCHEMY_API_KEY  || '',
