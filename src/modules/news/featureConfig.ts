@@ -1,8 +1,10 @@
-import type { FeatureConfig } from '../../core/feature-system';
+import type { FeatureConfig } from '../../core/feature-system/featureRegistry';
 
 export const featureConfig: FeatureConfig = {
   key: 'news_feed',
   name: 'News Feed',
   module: 'news',
-  description: 'Crypto news articles with categories and related coins',
+  description: 'News feed, following, and explore',
+  category: 'free',
+  controllable: true,
 };

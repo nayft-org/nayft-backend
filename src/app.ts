@@ -28,14 +28,19 @@ const app: Application = express();
 // CORS Configuration
 const isWildcard = config.frontendUrls.length === 1 && config.frontendUrls[0] === '*';
 
+// When FRONTEND_URL=*, allow any origin (reflect request origin for credentials).
+// Otherwise restrict to configured frontend URLs.
 const corsOptions = {
-  origin: isWildcard ? true : config.frontendUrls,
+  origin: isWildcard
+    ? (origin: string | undefined, cb: (err: Error | null, allow?: boolean | string) => void) =>
+        cb(null, origin ?? true)
+    : config.frontendUrls,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key'],
 };
 
-console.log('CORS Options:', corsOptions);
+console.log('CORS Options:', { ...corsOptions, origin: isWildcard ? '(dynamic)' : corsOptions.origin });
 
 // Middleware
 app.use(cors(corsOptions));

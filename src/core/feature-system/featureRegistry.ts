@@ -35,8 +35,10 @@ export async function registerFeature(config: FeatureConfig): Promise<void> {
         metadata,
         category,
         controllable,
-        isActive: true,
         updatedAt: new Date(),
+      },
+      $setOnInsert: {
+        isActive: true,
       },
     },
     {

@@ -24,4 +24,22 @@ export const featureService = {
     const f = await Feature.findOne({ key }).select('isActive').lean().exec();
     return f?.isActive ?? false;
   },
+
+  async updateIsActive(key: string, isActive: boolean) {
+    const f = await Feature.findOneAndUpdate(
+      { key },
+      { $set: { isActive, updatedAt: new Date() } },
+      { new: true }
+    )
+      .lean()
+      .exec();
+    if (!f) throw new Error(`Feature not found: ${key}`);
+    return f;
+  },
+
+  async delete(key: string) {
+    const f = await Feature.findOneAndDelete({ key }).lean().exec();
+    if (!f) throw new Error(`Feature not found: ${key}`);
+    return f;
+  },
 };
