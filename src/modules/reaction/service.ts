@@ -28,6 +28,18 @@ function emptyReactionCounts(): ReactionCounts {
 
 const REACTION_REWARD_POINTS = 1;
 
+// Background reward processing helper
+function processRewardInBackground(userId: string, action: string, points: number): void {
+  process.nextTick(async () => {
+    try {
+      await RewardsActivity.create({ userId, action, points });
+      await User.findByIdAndUpdate(userId, { $inc: { rewardPoints: points } });
+    } catch (error) {
+      console.error('Background reward processing error:', error);
+    }
+  });
+}
+
 export const reactionService = {
   toggleReaction: async (
     userId: string,
@@ -58,14 +70,8 @@ export const reactionService = {
         }
       );
 
-      await RewardsActivity.create({
-        userId,
-        action: `reaction_${type}`,
-        points: REACTION_REWARD_POINTS,
-      });
-      await User.findByIdAndUpdate(userId, {
-        $inc: { rewardPoints: REACTION_REWARD_POINTS },
-      });
+      // Process rewards in background to avoid blocking user response
+      processRewardInBackground(userId, `reaction_${type}`, REACTION_REWARD_POINTS);
 
       const reactions = await getReactionCounts(newsId);
       return { userReaction: type, reactions };

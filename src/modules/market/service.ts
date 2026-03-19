@@ -1,6 +1,10 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { marketRepository } from './repository';
 import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
+import { Coin } from '../coin/model';
+import { cacheHelpers } from '../../config/redis';
+
+const MARKET_CACHE_TTL = 120; // 2 minutes
 
 const mapCoinMarketCapData = (cmcData: any): any[] => {
   if (!cmcData?.data) return [];
@@ -38,22 +42,43 @@ const mapCoinMarketCapData = (cmcData: any): any[] => {
 
 export const marketService = {
   getTrending: async () => {
+    const cacheKey = 'market:trending';
+    
+    // Try cache first
+    const cached = await cacheHelpers.get<any[]>(cacheKey);
+    if (cached) return cached;
+    
     try {
       const cmcResponse = await coinmarketcapApi.getListingsLatest(20);
       const coins = mapCoinMarketCapData(cmcResponse);
 
-      // Update database
-      for (const coin of coins) {
-        await marketRepository.upsertCoin({
-          coinId: coin.coinId,
-          symbol: coin.symbol,
-          name: coin.name,
-          rank: coin.rank,
-          price: coin.price,
-          percentChange24h: coin.percentChange24h,
-        });
+      // Batch update database using bulkWrite
+      if (coins.length > 0) {
+        const bulkOps = coins.map((coin) => ({
+          updateOne: {
+            filter: { coinId: coin.coinId },
+            update: {
+              $set: {
+                coinId: coin.coinId,
+                symbol: coin.symbol,
+                name: coin.name,
+                rank: coin.rank,
+                price: coin.price,
+                percentChange24h: coin.percentChange24h,
+                lastUpdated: new Date(),
+                symbolLower: coin.symbol.toLowerCase(),
+                nameLower: coin.name.toLowerCase(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+        
+        await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
+      // Cache the result
+      await cacheHelpers.set(cacheKey, coins, MARKET_CACHE_TTL);
       return coins;
     } catch (error: any) {
       // Fallback to database if API fails
@@ -70,6 +95,12 @@ export const marketService = {
   },
 
   getTopGainers: async () => {
+    const cacheKey = 'market:top-gainers';
+    
+    // Try cache first
+    const cached = await cacheHelpers.get<any[]>(cacheKey);
+    if (cached) return cached;
+    
     try {
       const cmcResponse = await coinmarketcapApi.getTrendingGainersLosers();
       const coins = mapCoinMarketCapData(cmcResponse);
@@ -80,18 +111,33 @@ export const marketService = {
         .sort((a: any, b: any) => b.percentChange24h - a.percentChange24h)
         .slice(0, 10);
 
-      // Update database
-      for (const coin of gainers) {
-        await marketRepository.upsertCoin({
-          coinId: coin.coinId,
-          symbol: coin.symbol,
-          name: coin.name,
-          rank: coin.rank,
-          price: coin.price,
-          percentChange24h: coin.percentChange24h,
-        });
+      // Batch update database using bulkWrite
+      if (gainers.length > 0) {
+        const bulkOps = gainers.map((coin) => ({
+          updateOne: {
+            filter: { coinId: coin.coinId },
+            update: {
+              $set: {
+                coinId: coin.coinId,
+                symbol: coin.symbol,
+                name: coin.name,
+                rank: coin.rank,
+                price: coin.price,
+                percentChange24h: coin.percentChange24h,
+                lastUpdated: new Date(),
+                symbolLower: coin.symbol.toLowerCase(),
+                nameLower: coin.name.toLowerCase(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+        
+        await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
+      // Cache the result
+      await cacheHelpers.set(cacheKey, gainers, MARKET_CACHE_TTL);
       return gainers;
     } catch (error: any) {
       // Fallback to database
@@ -108,6 +154,12 @@ export const marketService = {
   },
 
   getTopLosers: async () => {
+    const cacheKey = 'market:top-losers';
+    
+    // Try cache first
+    const cached = await cacheHelpers.get<any[]>(cacheKey);
+    if (cached) return cached;
+    
     try {
       const cmcResponse = await coinmarketcapApi.getTrendingGainersLosers();
       const coins = mapCoinMarketCapData(cmcResponse);
@@ -118,18 +170,33 @@ export const marketService = {
         .sort((a: any, b: any) => a.percentChange24h - b.percentChange24h)
         .slice(0, 10);
 
-      // Update database
-      for (const coin of losers) {
-        await marketRepository.upsertCoin({
-          coinId: coin.coinId,
-          symbol: coin.symbol,
-          name: coin.name,
-          rank: coin.rank,
-          price: coin.price,
-          percentChange24h: coin.percentChange24h,
-        });
+      // Batch update database using bulkWrite
+      if (losers.length > 0) {
+        const bulkOps = losers.map((coin) => ({
+          updateOne: {
+            filter: { coinId: coin.coinId },
+            update: {
+              $set: {
+                coinId: coin.coinId,
+                symbol: coin.symbol,
+                name: coin.name,
+                rank: coin.rank,
+                price: coin.price,
+                percentChange24h: coin.percentChange24h,
+                lastUpdated: new Date(),
+                symbolLower: coin.symbol.toLowerCase(),
+                nameLower: coin.name.toLowerCase(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+        
+        await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
+      // Cache the result
+      await cacheHelpers.set(cacheKey, losers, MARKET_CACHE_TTL);
       return losers;
     } catch (error: any) {
       // Fallback to database

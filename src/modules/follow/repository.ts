@@ -50,6 +50,20 @@ export const followRepository = {
     return Follow.countDocuments({ targetType, targetId });
   },
 
+  countByTargets: async (
+    targetType: FollowTargetType,
+    targetIds: string[]
+  ): Promise<Map<string, number>> => {
+    if (targetIds.length === 0) return new Map();
+    
+    const counts = await Follow.aggregate([
+      { $match: { targetType, targetId: { $in: targetIds } } },
+      { $group: { _id: '$targetId', count: { $sum: 1 } } }
+    ]);
+    
+    return new Map(counts.map((c: any) => [c._id, c.count]));
+  },
+
   findFollowers: async (
     targetType: FollowTargetType,
     targetId: string,

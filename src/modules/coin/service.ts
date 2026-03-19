@@ -118,11 +118,33 @@ export const coinService = {
   getCoinProfile: async (coinId: string) => {
     const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
 
-    const filteredCoin = await filteredCoinRepository.findByBaseAsset(actualCoinId);
+    // Parallelize DB lookups first - fast path
+    const [filteredCoin, dbCoinById, dbCoinBySymbol] = await Promise.all([
+      filteredCoinRepository.findByBaseAsset(actualCoinId),
+      coinRepository.findById(actualCoinId),
+      coinRepository.findBySymbol(actualCoinId),
+    ]);
+
     if (filteredCoin) {
       return mapFilteredCoinToDto(filteredCoin);
     }
 
+    // Check if we found it in local DB
+    const dbCoin = dbCoinById || dbCoinBySymbol;
+    if (dbCoin && looksLikeCoinGeckoId(actualCoinId)) {
+      // Return DB data immediately if we have it
+      return {
+        coinId: dbCoin.coinId,
+        symbol: dbCoin.symbol,
+        name: dbCoin.name,
+        rank: dbCoin.rank,
+        price: dbCoin.price,
+        percentChange24h: dbCoin.percentChange24h,
+        image: undefined,
+      };
+    }
+
+    // Try CoinGecko API if it looks like a CoinGecko ID
     let coinGeckoId: string | null = null;
     if (looksLikeCoinGeckoId(actualCoinId)) {
       try {
@@ -142,14 +164,13 @@ export const coinService = {
       }
     }
 
+    // Try resolution
     if (!coinGeckoId) {
       coinGeckoId = await resolveToCoinGeckoId(coinId);
     }
 
+    // If still no CoinGecko ID, return DB data if we have it
     if (!coinGeckoId) {
-      const dbCoin =
-        (await coinRepository.findById(actualCoinId)) ||
-        (await coinRepository.findBySymbol(actualCoinId));
       if (dbCoin) {
         return {
           coinId: dbCoin.coinId,
@@ -164,6 +185,7 @@ export const coinService = {
       throw new Error('Coin not found');
     }
 
+    // Final API call with resolved CoinGecko ID
     const coin = await coingeckoApi.getCoinById(coinGeckoId);
     const coinDto = mapCoinGeckoToDto(coin);
 

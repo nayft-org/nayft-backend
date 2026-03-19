@@ -72,24 +72,24 @@ export const followService = {
 
   getFollowedCoins: async (userId: string) => {
     const coinIds = await followRepository.findTargetIdsByFollower(userId, 'coin');
-    const coins = await Promise.all(
-      coinIds.map(async (coinId) => {
-        const coin = await coinRepository.findById(coinId);
-        if (!coin) return null;
-        const followersCount = await followRepository.countByTarget('coin', coinId);
-        return {
-          coinId: coin.coinId,
-          symbol: coin.symbol,
-          name: coin.name,
-          rank: coin.rank,
-          price: coin.price,
-          percentChange24h: coin.percentChange24h,
-          followersCount,
-        };
-      })
-    );
-
-    return coins.filter((coin) => coin !== null);
+    
+    if (coinIds.length === 0) return [];
+    
+    // Batch fetch coins and follower counts
+    const [coins, followerCountsMap] = await Promise.all([
+      coinRepository.findByIds(coinIds),
+      followRepository.countByTargets('coin', coinIds)
+    ]);
+    
+    return coins.map((coin) => ({
+      coinId: coin.coinId,
+      symbol: coin.symbol,
+      name: coin.name,
+      rank: coin.rank,
+      price: coin.price,
+      percentChange24h: coin.percentChange24h,
+      followersCount: followerCountsMap.get(coin.coinId) || 0,
+    }));
   },
 
   getFollowedUsers: async (userId: string) => {

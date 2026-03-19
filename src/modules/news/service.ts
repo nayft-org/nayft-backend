@@ -105,7 +105,8 @@ export const newsService = {
     const originByNewsId = new Map<string, 'coin' | 'user' | 'both'>();
 
     if (followCoinIds.length > 0) {
-      const coinDocs = await Promise.all(followCoinIds.map((coinId) => coinRepository.findById(coinId)));
+      // Batch query instead of N+1 individual queries
+      const coinDocs = await coinRepository.findByIds(followCoinIds);
       const symbols = coinDocs
         .map((coin) => coin?.symbol?.toUpperCase())
         .filter((symbol): symbol is string => Boolean(symbol));
