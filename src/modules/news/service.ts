@@ -1,6 +1,7 @@
 import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
 import { coinRepository } from '../coin/repository';
 import { NewsArticle } from './models';
+import { eventService } from '../../core/event-system';
 import type { INewsArticle } from './models/NewsArticle';
 import { reactionService } from '../reaction/service';
 import type { ReactionType } from '../reaction/model';
@@ -199,6 +200,12 @@ export const newsService = {
         const map = await reactionService.getUserReactionsForArticles(userId, [newsId]);
         userReaction = map[newsId] ?? null;
       }
+      eventService.emitEvent({
+        featureKey: 'news_feed',
+        eventType: 'article_viewed',
+        userId,
+        metadata: { newsId },
+      }).catch(() => {});
       return mapNewsArticleToDto(dbArticle, userReaction);
     }
 
@@ -206,6 +213,13 @@ export const newsService = {
     if (!article) {
       throw new Error('News not found');
     }
+
+    eventService.emitEvent({
+      featureKey: 'news_feed',
+      eventType: 'article_viewed',
+      userId,
+      metadata: { newsId },
+    }).catch(() => {});
 
     return mapCoindeskToDto(article);
   },

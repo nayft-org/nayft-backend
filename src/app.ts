@@ -20,6 +20,8 @@ import chartRoutes from './modules/chart/routes';
 import portfolioRoutes from './modules/portfolio/routes';
 import followRoutes from './modules/follow/routes';
 import metricsRoutes from './modules/metrics/routes';
+import adminRoutes from './core/admin/routes';
+import publicFeatureRoutes from './core/public/routes';
 
 const app: Application = express();
 
@@ -64,6 +66,8 @@ app.use('/api/charts', chartRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/follow', followRoutes);
 app.use('/api/metrics', metricsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api', publicFeatureRoutes);
 
 // Error handling
 app.use(notFound);

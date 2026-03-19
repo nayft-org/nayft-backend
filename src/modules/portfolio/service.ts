@@ -1,5 +1,6 @@
 import { portfolioRepository } from './repository';
 import { config } from '../../config/env';
+import { eventService } from '../../core/event-system';
 import { alchemyNotify } from '../../utils/alchemyNotify';
 import { zerionSubscriptions } from '../../utils/zerionSubscriptions';
 import { alchemyApi } from '../../utils/alchemy';
@@ -61,6 +62,13 @@ export const portfolioService = {
     } catch (err) {
       console.error('[PortfolioService] Zerion subscription update failed:', err);
     }
+
+    eventService.emitEvent({
+      featureKey: 'portfolio_tracking',
+      eventType: 'wallet_added',
+      userId,
+      metadata: { address, chains: chains.length },
+    }).catch(() => {});
 
     return wallet;
   },
