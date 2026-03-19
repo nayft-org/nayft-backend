@@ -9,10 +9,15 @@ import { registerAdapter, startStreams } from './services/streams/registry';
 import { BinanceKlineAdapter } from './services/streams/adapters';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
+import { bootstrapFeatures } from './core/bootstrapFeatures';
+
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Auto-register features from modules
+    await bootstrapFeatures();
 
     // Register and start kline stream adapters
     registerAdapter('binance', new BinanceKlineAdapter());

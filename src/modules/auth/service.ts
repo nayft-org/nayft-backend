@@ -4,6 +4,7 @@ import { config } from '../../config/env';
 import { authRepository } from './repository';
 import { SignupDto, LoginDto } from './dto';
 import { IUser } from '../../types';
+import { eventService } from '../../core/event-system';
 
 export const authService = {
   signup: async (signupDto: SignupDto): Promise<{ user: IUser; token: string }> => {
@@ -38,6 +39,13 @@ export const authService = {
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;
 
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'signup',
+      userId: user._id.toString(),
+      metadata: {},
+    }).catch(() => {});
+
     return { user: userObj as IUser, token };
   },
 
@@ -63,6 +71,13 @@ export const authService = {
 
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;
+
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'login',
+      userId: user._id.toString(),
+      metadata: {},
+    }).catch(() => {});
 
     return { user: userObj as IUser, token };
   },
