@@ -18,6 +18,8 @@ export interface ICoin extends Document {
   price: number;
   percentChange24h: number;
   lastUpdated: Date;
+  symbolLower?: string;
+  nameLower?: string;
 }
 
 export interface INews extends Document {

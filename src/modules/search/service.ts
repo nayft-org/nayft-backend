@@ -6,6 +6,7 @@ import {
   SearchUserResult,
   searchRepository,
 } from './repository';
+import { cacheHelpers } from '../../config/redis';
 
 export type SearchSegment =
   | 'all'
@@ -40,9 +41,7 @@ const DEFAULT_SEGMENTS: Exclude<SearchSegment, 'all'>[] = [
   'portfolioAssets',
 ];
 
-const CACHE_TTL_MS = 30_000;
-const CACHE_MAX_ENTRIES = 250;
-const queryCache = new Map<string, { value: UnifiedSearchResponse; expiresAt: number }>();
+const CACHE_TTL_SECONDS = 30;
 
 const normalizeQuery = (query: string): string => query.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -69,28 +68,15 @@ function buildCacheKey(
   userId?: string
 ): string {
   const userKey = userId || 'guest';
-  return `${query}|${segments.join(',')}|${limit}|${userKey}`;
+  return `search:${query}|${segments.join(',')}|${limit}|${userKey}`;
 }
 
-function readFromCache(cacheKey: string): UnifiedSearchResponse | null {
-  const row = queryCache.get(cacheKey);
-  if (!row) return null;
-  if (Date.now() > row.expiresAt) {
-    queryCache.delete(cacheKey);
-    return null;
-  }
-  return row.value;
+async function readFromCache(cacheKey: string): Promise<UnifiedSearchResponse | null> {
+  return cacheHelpers.get<UnifiedSearchResponse>(cacheKey);
 }
 
-function writeToCache(cacheKey: string, value: UnifiedSearchResponse): void {
-  if (queryCache.size >= CACHE_MAX_ENTRIES) {
-    const firstKey = queryCache.keys().next().value;
-    if (firstKey) queryCache.delete(firstKey);
-  }
-  queryCache.set(cacheKey, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS,
-  });
+async function writeToCache(cacheKey: string, value: UnifiedSearchResponse): Promise<void> {
+  await cacheHelpers.set(cacheKey, value, CACHE_TTL_SECONDS);
 }
 
 export const searchService = {
@@ -126,7 +112,7 @@ export const searchService = {
     }
 
     const cacheKey = buildCacheKey(query, segments, limit, params.userId);
-    const cached = readFromCache(cacheKey);
+    const cached = await readFromCache(cacheKey);
     if (cached) {
       return {
         ...cached,
@@ -187,7 +173,7 @@ export const searchService = {
       },
     };
 
-    writeToCache(cacheKey, response);
+    await writeToCache(cacheKey, response);
     return response;
   },
 };

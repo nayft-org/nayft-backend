@@ -10,6 +10,7 @@
     "lint": "eslint src --ext .ts",
     "test": "jest",
     "script:migrate-follows": "ts-node --transpile-only scripts/migrate-follows.ts",
+    "script:create-indexes": "ts-node --transpile-only scripts/create-indexes.ts",
     "script:compare-duplicates": "ts-node --transpile-only scripts/compare-coin-duplicates.ts",
     "script:fix-ohlcv": "ts-node --transpile-only scripts/fix-ohlcv-collection.ts"
   },
@@ -28,6 +29,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
+    "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
     "node-cron": "^4.2.1",

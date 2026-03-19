@@ -9,19 +9,30 @@ export const coinRepository = {
     return Coin.findOne({ coinId });
   },
 
+  findByIds: async (coinIds: string[]): Promise<ICoin[]> => {
+    if (coinIds.length === 0) return [];
+    return Coin.find({ coinId: { $in: coinIds } }).lean<ICoin[]>();
+  },
+
   findBySymbol: async (symbol: string): Promise<ICoin | null> => {
     return Coin.findOne({ symbol: symbol.toUpperCase() });
   },
 
+  findBySymbols: async (symbols: string[]): Promise<ICoin[]> => {
+    if (symbols.length === 0) return [];
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    return Coin.find({ symbol: { $in: upperSymbols } }).lean<ICoin[]>();
+  },
+
   searchByQuery: async (query: string, limit: number = 24): Promise<ICoin[]> => {
-    const q = escapeRegex(query.trim().toLowerCase());
+    const q = query.trim().toLowerCase();
     if (!q) return [];
-    const regex = new RegExp(q, 'i');
+    
+    // Use prefix match on indexed lowercase fields for better performance
     const coins = await Coin.find({
       $or: [
-        { symbol: regex },
-        { name: regex },
-        { coinId: regex },
+        { symbolLower: { $regex: `^${escapeRegex(q)}` } },
+        { nameLower: { $regex: `^${escapeRegex(q)}` } },
       ],
     })
       .sort({ rank: 1 })
