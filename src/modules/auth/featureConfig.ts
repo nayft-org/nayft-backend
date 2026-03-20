@@ -7,4 +7,5 @@ export const featureConfig: FeatureConfig = {
   description: 'Login, signup, and user authentication',
   category: 'free',
   controllable: true,
+  critical: true,
 };

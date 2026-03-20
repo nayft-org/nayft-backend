@@ -16,8 +16,7 @@ router.use(adminAuth);
 
 // Features API
 router.get('/features', featureController.getAll);
-router.patch('/features/:key', featureController.patchIsActive);
-router.delete('/features/:key', featureController.delete);
+router.patch('/features/:key', featureController.patch);
 
 // Plans API
 router.get('/plans', planController.getAll);

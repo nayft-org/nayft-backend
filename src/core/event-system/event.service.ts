@@ -1,8 +1,13 @@
 import { SystemEvent } from './event.model';
 import type { EmitEventPayload } from './event.types';
+import { featureExists } from '../feature-system/featureValidator';
 
 export const eventService = {
-  async emitEvent(payload: EmitEventPayload): Promise<void> {
+  /** Raw persist to MongoDB. Used by emitEvent and queue worker. */
+  async persistEvent(
+    payload: EmitEventPayload,
+    invalidFeature = false
+  ): Promise<void> {
     const { featureKey, eventType, userId, metadata = {} } = payload;
     await SystemEvent.create({
       featureKey,
@@ -10,7 +15,19 @@ export const eventService = {
       userId,
       metadata,
       timestamp: new Date(),
+      invalidFeature,
     });
+  },
+
+  async emitEvent(payload: EmitEventPayload): Promise<void> {
+    const { featureKey } = payload;
+    const exists = await featureExists(featureKey);
+    if (!exists) {
+      console.warn(`[EventSystem] Invalid featureKey: ${featureKey}`);
+      await this.persistEvent(payload, true);
+      return;
+    }
+    await this.persistEvent(payload);
   },
 
   async getEventsByFeature(

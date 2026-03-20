@@ -41,7 +41,7 @@ export const coindeskApi = {
    * Per docs, the Latest Articles endpoint is:
    *   GET /news/v1/article/list?lang=EN&limit=10
    */
-  getLatestNews: async (page: number = 1, limit: number = 50): Promise<CoindeskNewsArticle[]> => {
+  getLatestNews: async (_page: number = 1, limit: number = 50): Promise<CoindeskNewsArticle[]> => {
     // CoinDesk API uses limit (and optional time-based params), not page/offset.
     // For now we ignore page and always fetch the latest `limit` articles.
     const response = await coindeskClient.get<CoindeskNewsResponse>('/news/v1/article/list', {

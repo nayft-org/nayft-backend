@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { config } from '../../config/env';
 import { authRepository } from './repository';
 import { SignupDto, LoginDto } from './dto';
@@ -32,9 +32,11 @@ export const authService = {
     });
 
     // Generate token
-    const token = jwt.sign({ userId: user._id.toString() }, config.jwtSecret, {
-      expiresIn: config.jwtExpiresIn,
-    });
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn } as SignOptions
+    );
 
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;
@@ -65,9 +67,11 @@ export const authService = {
     }
 
     // Generate token
-    const token = jwt.sign({ userId: user._id.toString() }, config.jwtSecret, {
-      expiresIn: config.jwtExpiresIn,
-    });
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn } as SignOptions
+    );
 
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;

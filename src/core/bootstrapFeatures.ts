@@ -46,6 +46,7 @@ export async function bootstrapFeatures(): Promise<void> {
     name: 'System',
     module: 'core',
     description: 'Core system events (API errors, etc.)',
+    critical: true,
   });
   registered++;
 
