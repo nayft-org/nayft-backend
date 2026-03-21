@@ -18,6 +18,22 @@ export const redis = new Redis(config.redisUrl, {
   },
 });
 
+/**
+ * Separate connection for BRPOP and other blocking commands. Sharing the main
+ * client with BRPOP ties up the connection for the block timeout and is more
+ * fragile when the socket drops. maxRetriesPerRequest: null matches ioredis
+ * guidance for blocking commands.
+ */
+export const redisBlocking = redis.duplicate({
+  maxRetriesPerRequest: null,
+});
+
+let redisShutdownRequested = false;
+
+export function isRedisShutdownRequested(): boolean {
+  return redisShutdownRequested;
+}
+
 // Redis connection event handlers
 redis.on('connect', () => {
   console.log('✅ Redis connected');
@@ -31,10 +47,25 @@ redis.on('reconnecting', () => {
   console.log('🔄 Redis reconnecting...');
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  await redis.quit();
+redisBlocking.on('error', (err) => {
+  console.error('❌ Redis (blocking) error:', err.message);
 });
+
+redisBlocking.on('reconnecting', () => {
+  console.log('🔄 Redis (blocking) reconnecting...');
+});
+
+async function gracefulRedisClose(): Promise<void> {
+  if (redisShutdownRequested) return;
+  redisShutdownRequested = true;
+  await Promise.all([
+    redis.quit().catch(() => {}),
+    redisBlocking.quit().catch(() => {}),
+  ]);
+}
+
+process.on('SIGTERM', gracefulRedisClose);
+process.on('SIGINT', gracefulRedisClose);
 
 // Cache helpers
 export const cacheHelpers = {
