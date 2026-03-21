@@ -40,13 +40,14 @@ export const coindeskApi = {
    * Fetch latest crypto news from CoinDesk.
    * Per docs, the Latest Articles endpoint is:
    *   GET /news/v1/article/list?lang=EN&limit=…
-   * The API caps `limit` server-side; use a large value to retrieve the full list in one request.
+   * CoinDesk caps `limit` at 100 per request; larger values return HTTP 400.
    */
-  getLatestNews: async (limit: number = 10_000): Promise<CoindeskNewsArticle[]> => {
+  getLatestNews: async (limit: number = 100): Promise<CoindeskNewsArticle[]> => {
+    const safeLimit = Math.min(Math.max(1, limit), 100);
     const response = await coindeskClient.get<CoindeskNewsResponse>('/news/v1/article/list', {
       params: {
         lang: 'EN',
-        limit,
+        limit: safeLimit,
       },
     });
 

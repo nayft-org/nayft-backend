@@ -65,46 +65,9 @@ export const newsController = {
     }
   },
 
-  storeNews: async (req: Request, res: Response): Promise<void> => {
+  storeNews: async (_req: Request, res: Response): Promise<void> => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7927/ingest/46df119a-fef3-4d2e-b178-17829c05f667', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f20a21' },
-        body: JSON.stringify({
-          sessionId: 'f20a21',
-          hypothesisId: 'H1',
-          location: 'news/controller.ts:storeNews:entry',
-          message: 'storeNews handler entered',
-          data: {
-            method: req.method,
-            path: req.path,
-            originalUrl: req.originalUrl,
-            baseUrl: req.baseUrl,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const result = await ingestionService.storeNews();
-      // #region agent log
-      fetch('http://127.0.0.1:7927/ingest/46df119a-fef3-4d2e-b178-17829c05f667', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f20a21' },
-        body: JSON.stringify({
-          sessionId: 'f20a21',
-          hypothesisId: 'H4',
-          location: 'news/controller.ts:storeNews:afterIngest',
-          message: 'ingestion finished',
-          data: {
-            fetched: result.fetched,
-            stored: result.stored,
-            skipped: result.skipped,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       // Registered feature key (see feature_registry); avoids invalidFeature and ensures trends match admin filters.
       try {
         await eventService.emitEvent({
@@ -118,57 +81,13 @@ export const newsController = {
             updated: result.updated,
           },
         });
-        // #region agent log
-        fetch('http://127.0.0.1:7927/ingest/46df119a-fef3-4d2e-b178-17829c05f667', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f20a21' },
-          body: JSON.stringify({
-            sessionId: 'f20a21',
-            runId: 'post-fix',
-            hypothesisId: 'H3',
-            location: 'news/controller.ts:storeNews:emitResolved',
-            message: 'emitEvent awaited OK',
-            data: {},
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       } catch (err: any) {
-        // #region agent log
-        fetch('http://127.0.0.1:7927/ingest/46df119a-fef3-4d2e-b178-17829c05f667', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f20a21' },
-          body: JSON.stringify({
-            sessionId: 'f20a21',
-            runId: 'post-fix',
-            hypothesisId: 'H3',
-            location: 'news/controller.ts:storeNews:emitRejected',
-            message: 'emitEvent threw',
-            data: { errName: err?.name, errMessage: String(err?.message || err) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         console.error('[store-news] event emit failed', err);
         sendError(res, err?.message || 'Failed to record store-news event', 500);
         return;
       }
       sendSuccess(res, result);
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7927/ingest/46df119a-fef3-4d2e-b178-17829c05f667', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f20a21' },
-        body: JSON.stringify({
-          sessionId: 'f20a21',
-          hypothesisId: 'H4',
-          location: 'news/controller.ts:storeNews:catch',
-          message: 'storeNews threw before emit',
-          data: { errMessage: String(error?.message || error) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const message =
         error.response?.data?.message ||
         error.response?.data?.error ||
