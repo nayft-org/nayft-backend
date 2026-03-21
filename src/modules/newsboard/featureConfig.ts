@@ -1,8 +1,10 @@
-import type { FeatureConfig } from '../../core/feature-system';
+import type { FeatureConfig } from '../../core/feature-system/featureRegistry';
 
 export const featureConfig: FeatureConfig = {
   key: 'news_boards',
   name: 'News Boards',
   module: 'newsboard',
-  description: 'Save and organize news articles in boards',
+  description: 'News boards and save to board',
+  category: 'free',
+  controllable: true,
 };

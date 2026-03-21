@@ -39,11 +39,10 @@ export const coindeskApi = {
   /**
    * Fetch latest crypto news from CoinDesk.
    * Per docs, the Latest Articles endpoint is:
-   *   GET /news/v1/article/list?lang=EN&limit=10
+   *   GET /news/v1/article/list?lang=EN&limit=…
+   * The API caps `limit` server-side; use a large value to retrieve the full list in one request.
    */
-  getLatestNews: async (page: number = 1, limit: number = 50): Promise<CoindeskNewsArticle[]> => {
-    // CoinDesk API uses limit (and optional time-based params), not page/offset.
-    // For now we ignore page and always fetch the latest `limit` articles.
+  getLatestNews: async (limit: number = 10_000): Promise<CoindeskNewsArticle[]> => {
     const response = await coindeskClient.get<CoindeskNewsResponse>('/news/v1/article/list', {
       params: {
         lang: 'EN',
@@ -68,7 +67,7 @@ export const coindeskApi = {
    */
   getNewsByTickers: async (
     tickers: string[],
-    page: number = 1,
+    _page: number = 1,
     limit: number = 50
   ): Promise<CoindeskNewsArticle[]> => {
     if (tickers.length === 0) {
@@ -79,7 +78,7 @@ export const coindeskApi = {
 
     // Fetch a larger window of latest articles and then filter client-side.
     const batchSize = limit * 3;
-    const articles = await coindeskApi.getLatestNews(page, batchSize);
+    const articles = await coindeskApi.getLatestNews(batchSize);
 
     const filtered = articles.filter((article) => {
       const articleTickers = extractTickers(article);

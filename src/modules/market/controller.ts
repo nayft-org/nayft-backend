@@ -3,7 +3,7 @@ import { marketService } from './service';
 import { sendSuccess, sendError } from '../../utils/response';
 
 export const marketController = {
-  getTrending: async (req: Request, res: Response): Promise<void> => {
+  getTrending: async (_req: Request, res: Response): Promise<void> => {
     try {
       const coins = await marketService.getTrending();
       sendSuccess(res, { coins });
@@ -12,7 +12,7 @@ export const marketController = {
     }
   },
 
-  getTopGainers: async (req: Request, res: Response): Promise<void> => {
+  getTopGainers: async (_req: Request, res: Response): Promise<void> => {
     try {
       const coins = await marketService.getTopGainers();
       sendSuccess(res, { coins });
@@ -21,7 +21,7 @@ export const marketController = {
     }
   },
 
-  getTopLosers: async (req: Request, res: Response): Promise<void> => {
+  getTopLosers: async (_req: Request, res: Response): Promise<void> => {
     try {
       const coins = await marketService.getTopLosers();
       sendSuccess(res, { coins });

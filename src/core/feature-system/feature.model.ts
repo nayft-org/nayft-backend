@@ -9,6 +9,13 @@ export interface IFeature extends Document {
   metadata: Record<string, unknown>;
   category: 'free' | 'premium' | 'enterprise';
   controllable: boolean;
+  source: 'code';
+  deprecated?: boolean;
+  critical?: boolean;
+  rolloutPercentage?: number;
+  allowedUsers?: string[];
+  segments?: string[];
+  updatedBy?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +58,23 @@ const featureSchema = new Schema<IFeature>(
       type: Boolean,
       default: false,
     },
+    source: {
+      type: String,
+      enum: ['code'],
+      default: 'code',
+    },
+    deprecated: {
+      type: Boolean,
+      default: false,
+    },
+    critical: {
+      type: Boolean,
+      default: false,
+    },
+    rolloutPercentage: { type: Number },
+    allowedUsers: [{ type: String }],
+    segments: [{ type: String }],
+    updatedBy: { type: String },
   },
   {
     timestamps: true,

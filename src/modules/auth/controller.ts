@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { body, validationResult } from 'express-validator';
+import { validationResult } from 'express-validator';
 import { authService } from './service';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';

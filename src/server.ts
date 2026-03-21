@@ -10,6 +10,8 @@ import { BinanceKlineAdapter } from './services/streams/adapters';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
+import { bootstrapPlans } from './core/bootstrapPlans';
+import { runEventWorker } from './core/event-system/eventWorker';
 
 const startServer = async (): Promise<void> => {
   try {
@@ -18,6 +20,12 @@ const startServer = async (): Promise<void> => {
 
     // Auto-register features from modules
     await bootstrapFeatures();
+
+    // Seed plans if empty
+    await bootstrapPlans();
+
+    // Start event queue worker (non-blocking)
+    setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
 
     // Register and start kline stream adapters
     registerAdapter('binance', new BinanceKlineAdapter());

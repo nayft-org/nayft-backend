@@ -8,11 +8,13 @@ export interface FeatureConfig {
   metadata?: Record<string, unknown>;
   category?: 'free' | 'premium' | 'enterprise';
   controllable?: boolean;
+  critical?: boolean;
 }
 
 /**
  * Registers a feature in the registry. Idempotent: safe on server restart.
- * If feature exists → update metadata; if not → insert new feature.
+ * New features: values from code. Existing: only module/metadata/category/controllable.
+ * Never overwrite: name, description, isActive (admin-controlled).
  */
 export async function registerFeature(config: FeatureConfig): Promise<void> {
   const {
@@ -25,18 +27,24 @@ export async function registerFeature(config: FeatureConfig): Promise<void> {
     controllable = false,
   } = config;
 
+  const updateSet: Record<string, unknown> = {
+    module,
+    metadata,
+    category,
+    controllable,
+    updatedAt: new Date(),
+  };
+  if (config.critical !== undefined) updateSet.critical = config.critical;
+
   await Feature.findOneAndUpdate(
     { key },
     {
-      $set: {
+      $set: updateSet,
+      $setOnInsert: {
         name,
-        module,
         description,
-        metadata,
-        category,
-        controllable,
         isActive: true,
-        updatedAt: new Date(),
+        source: 'code',
       },
     },
     {

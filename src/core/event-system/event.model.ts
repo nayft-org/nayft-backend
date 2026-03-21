@@ -6,6 +6,7 @@ export interface ISystemEvent extends Document {
   userId?: string;
   metadata: Record<string, unknown>;
   timestamp: Date;
+  invalidFeature?: boolean;
 }
 
 const systemEventSchema = new Schema<ISystemEvent>(
@@ -32,6 +33,10 @@ const systemEventSchema = new Schema<ISystemEvent>(
       type: Date,
       default: Date.now,
       index: true,
+    },
+    invalidFeature: {
+      type: Boolean,
+      default: false,
     },
   },
   {
