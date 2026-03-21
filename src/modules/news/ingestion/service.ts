@@ -3,8 +3,30 @@ import { CoinMaster } from '../models';
 import { ingestionRepository } from './repository';
 import type { INewsArticle, INewsArticleCategory, INewsArticleCoin } from '../models/NewsArticle';
 
-const BATCH_SIZE = 50;
 const SUBTITLE_MAX_LENGTH = 300;
+/** Keywords this length or shorter need API ticker corroboration (avoids e.g. ETH in "ETHICS"). */
+const SHORT_KEYWORD_MAX_LEN = 3;
+
+export type StoreNewsResult = {
+  fetched: number;
+  stored: number;
+  skipped: number;
+  inserted: number;
+  updated: number;
+};
+
+type CoinMasterLean = { symbol: string; name: string; keywords: string[] };
+
+type CompiledKeyword = {
+  coin: CoinMasterLean;
+  regex: RegExp;
+  strict: boolean;
+};
+
+function normalizeSymbol(symbol: string): string {
+  const segment = symbol.split(/[-/]/)[0]?.trim() ?? '';
+  return segment.toUpperCase();
+}
 
 function mapCategories(categories: string[] | undefined): INewsArticleCategory[] {
   if (!categories || categories.length === 0) return [];
@@ -15,68 +37,94 @@ function mapCategories(categories: string[] | undefined): INewsArticleCategory[]
   }));
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Precompile keyword regexes once per ingestion run (see plan: performance).
+ * Short keywords (length ≤ SHORT_KEYWORD_MAX_LEN) use strict mode: title match alone is not enough;
+ * the same coin must appear in API tickers (corroboration) to reduce false positives.
+ */
+function buildCompiledKeywords(coinMasterList: CoinMasterLean[]): CompiledKeyword[] {
+  const out: CompiledKeyword[] = [];
+  for (const coin of coinMasterList) {
+    if (!coin.keywords?.length) continue;
+    for (const kw of coin.keywords) {
+      const trimmed = kw.trim();
+      if (!trimmed) continue;
+      out.push({
+        coin,
+        regex: new RegExp(`\\b${escapeRegex(trimmed)}\\b`, 'i'),
+        strict: trimmed.length <= SHORT_KEYWORD_MAX_LEN,
+      });
+    }
+  }
+  return out;
+}
+
 function matchCoinsFromTitle(
   title: string,
-  coinMasterList: { symbol: string; name: string; keywords: string[] }[]
+  compiled: CompiledKeyword[],
+  apiNormSet: Set<string>
 ): INewsArticleCoin[] {
   const titleLower = title.toLowerCase();
   const seen = new Set<string>();
   const coins: INewsArticleCoin[] = [];
 
-  for (const coin of coinMasterList) {
-    if (!coin.keywords || coin.keywords.length === 0) continue;
-    const matched = coin.keywords.some((kw) => {
-      const pattern = new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i');
-      return pattern.test(titleLower);
-    });
-    if (matched && !seen.has(coin.symbol.toUpperCase())) {
-      seen.add(coin.symbol.toUpperCase());
-      coins.push({ symbol: coin.symbol, name: coin.name });
+  for (const { coin, regex, strict } of compiled) {
+    if (!regex.test(titleLower)) continue;
+    const symNorm = normalizeSymbol(coin.symbol);
+    if (!symNorm) continue;
+    if (strict && !apiNormSet.has(symNorm)) continue;
+    if (!seen.has(symNorm)) {
+      seen.add(symNorm);
+      coins.push({ symbol: symNorm, name: coin.name });
     }
   }
 
   return coins;
 }
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function mergeCoins(
   fromKeywords: INewsArticleCoin[],
-  fromApi: string[],
+  fromApiNormalized: string[],
   coinMasterMap: Map<string, { symbol: string; name: string }>
 ): INewsArticleCoin[] {
   const seen = new Set<string>();
   const result: INewsArticleCoin[] = [];
 
   for (const c of fromKeywords) {
-    const key = c.symbol.toUpperCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(c);
-    }
+    const key = normalizeSymbol(c.symbol);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ symbol: key, name: c.name });
   }
 
-  for (const sym of fromApi) {
-    const key = sym.toUpperCase();
-    if (seen.has(key)) continue;
+  for (const sym of fromApiNormalized) {
+    const key = normalizeSymbol(sym);
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     const master = coinMasterMap.get(key);
     result.push({
-      symbol: sym.toUpperCase(),
-      name: master?.name ?? sym,
+      symbol: key,
+      name: master?.name ?? key,
     });
   }
 
   return result;
 }
 
+type IngestionArticleContext = {
+  coinMasterMap: Map<string, { symbol: string; name: string }>;
+  trackedSymbols: Set<string>;
+  compiledKeywords: CompiledKeyword[];
+};
+
 function coindeskToNewsArticle(
   article: CoindeskNewsArticle,
-  coinMasterList: { symbol: string; name: string; keywords: string[] }[],
-  coinMasterMap: Map<string, { symbol: string; name: string }>
-): Omit<INewsArticle, 'createdAt' | 'updatedAt'> {
+  ctx: IngestionArticleContext
+): Omit<INewsArticle, 'createdAt' | 'updatedAt'> | null {
   const externalId = article.id;
   const subtitle = article.summary || article.description;
   const truncatedSubtitle = subtitle
@@ -96,9 +144,20 @@ function coindeskToNewsArticle(
           )
         : 'coindesk';
   const sourceKey = sourceStr.toLowerCase().replace(/\s+/g, '-');
-  const apiTickers = extractTickers(article);
-  const fromKeywords = matchCoinsFromTitle(article.title || article.headline || '', coinMasterList);
-  const coins = mergeCoins(fromKeywords, apiTickers, coinMasterMap);
+
+  const rawTickers = extractTickers(article);
+  const apiNormalized = [...new Set(rawTickers.map((t) => normalizeSymbol(t)).filter(Boolean))];
+  const apiNormSet = new Set(apiNormalized);
+
+  const fromKeywords = matchCoinsFromTitle(
+    article.title || article.headline || '',
+    ctx.compiledKeywords,
+    apiNormSet
+  );
+  const coinsMerged = mergeCoins(fromKeywords, apiNormalized, ctx.coinMasterMap);
+  const coins = coinsMerged.filter((c) => ctx.trackedSymbols.has(normalizeSymbol(c.symbol)));
+
+  if (coins.length === 0) return null;
 
   return {
     externalId,
@@ -138,42 +197,53 @@ function coindeskToNewsArticle(
 }
 
 export const ingestionService = {
-  storeNews: async (): Promise<{ fetched: number; inserted: number; updated: number }> => {
-    const coinMasterList = await CoinMaster.find({ keywords: { $exists: true, $ne: [] } }).lean();
+  storeNews: async (): Promise<StoreNewsResult> => {
+    const allMasters = (await CoinMaster.find({}).lean()) as CoinMasterLean[];
+    const trackedSymbols = new Set(
+      allMasters.map((m) => normalizeSymbol(m.symbol)).filter((s): s is string => Boolean(s))
+    );
+
     const coinMasterMap = new Map<string, { symbol: string; name: string }>();
-    for (const c of coinMasterList) {
-      coinMasterMap.set(c.symbol.toUpperCase(), { symbol: c.symbol, name: c.name });
+    for (const c of allMasters) {
+      const k = normalizeSymbol(c.symbol);
+      if (!k) continue;
+      coinMasterMap.set(k, { symbol: k, name: c.name });
     }
 
-    let totalFetched = 0;
-    let inserted = 0;
-    let updated = 0;
-    let page = 1;
+    const coinMasterList = allMasters.filter((c) => Array.isArray(c.keywords) && c.keywords.length > 0);
+    const compiledKeywords = buildCompiledKeywords(coinMasterList);
 
-    while (true) {
-      let articles;
-      try {
-        articles = await coindeskApi.getLatestNews(page, BATCH_SIZE);
-      } catch (err: any) {
-        const msg = err.response?.data?.message || err.response?.data?.error || err.message;
-        throw new Error(`CoinDesk API error: ${msg || `HTTP ${err.response?.status}`}`);
-      }
-      if (articles.length === 0) break;
-
-      totalFetched += articles.length;
-
-      const toUpsert = articles.map((a) =>
-        coindeskToNewsArticle(a, coinMasterList, coinMasterMap)
-      );
-
-      const result = await ingestionRepository.upsertMany(toUpsert);
-      inserted += result.inserted;
-      updated += result.updated;
-
-      if (articles.length < BATCH_SIZE) break;
-      page++;
+    let articles: CoindeskNewsArticle[];
+    try {
+      articles = await coindeskApi.getLatestNews();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message;
+      throw new Error(`CoinDesk API error: ${msg || `HTTP ${err.response?.status}`}`);
     }
 
-    return { fetched: totalFetched, inserted, updated };
+    const fetched = articles.length;
+    if (fetched === 0) {
+      return { fetched: 0, stored: 0, skipped: 0, inserted: 0, updated: 0 };
+    }
+
+    const ctx: IngestionArticleContext = { coinMasterMap, trackedSymbols, compiledKeywords };
+    const toUpsert: Omit<INewsArticle, 'createdAt' | 'updatedAt'>[] = [];
+    for (const a of articles) {
+      const doc = coindeskToNewsArticle(a, ctx);
+      if (doc) toUpsert.push(doc);
+    }
+
+    const stored = toUpsert.length;
+    const skipped = fetched - stored;
+
+    const result = await ingestionRepository.upsertMany(toUpsert);
+
+    return {
+      fetched,
+      stored,
+      skipped,
+      inserted: result.inserted,
+      updated: result.updated,
+    };
   },
 };
