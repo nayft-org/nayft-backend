@@ -1,6 +1,7 @@
 # Matches CRYPTO_BACKEND_BUILD_GUIDE.md — MongoDB without auth for local dev.
 # Run: docker compose up -d
 # Backend MONGO_URI: mongodb://localhost:27018/crypto_db
+# Backend REDIS_URL (src/config/env.ts default): redis://localhost:6379
 
 services:
   mongodb:
@@ -13,5 +14,15 @@ services:
     environment:
       MONGO_INITDB_DATABASE: crypto_db
 
+  redis:
+    image: redis:7-alpine
+    container_name: crypto-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
 volumes:
   mongo_data:
+  redis_data:
