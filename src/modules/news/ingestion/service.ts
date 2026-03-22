@@ -1,5 +1,5 @@
 import { coindeskApi, extractTickers, type CoindeskNewsArticle } from '../../../utils/coindesk';
-import { CoinMaster } from '../models';
+import { FilteredCoin } from '../../coin/models/FilteredCoin';
 import { ingestionRepository } from './repository';
 import type { INewsArticle, INewsArticleCategory, INewsArticleCoin } from '../models/NewsArticle';
 
@@ -15,10 +15,11 @@ export type StoreNewsResult = {
   updated: number;
 };
 
-type CoinMasterLean = { symbol: string; name: string; keywords: string[] };
+/** Built from `filtered_coins` distinct base_asset (see storeNews). */
+type TrackedCoinLean = { symbol: string; name: string; keywords: string[] };
 
 type CompiledKeyword = {
-  coin: CoinMasterLean;
+  coin: TrackedCoinLean;
   regex: RegExp;
   strict: boolean;
 };
@@ -45,10 +46,14 @@ function escapeRegex(str: string): string {
  * Precompile keyword regexes once per ingestion run (see plan: performance).
  * Short keywords (length ≤ SHORT_KEYWORD_MAX_LEN) use strict mode: title match alone is not enough;
  * the same coin must appear in API tickers (corroboration) to reduce false positives.
+ *
+ * Keywords come from each base_asset lowercased only (unlike curated CoinMaster aliases such as
+ * "bitcoin" for BTC), so title-only mentions of full coin names may match less often unless
+ * tickers appear in the article payload or the title includes the base ticker token.
  */
-function buildCompiledKeywords(coinMasterList: CoinMasterLean[]): CompiledKeyword[] {
+function buildCompiledKeywords(trackedCoinList: TrackedCoinLean[]): CompiledKeyword[] {
   const out: CompiledKeyword[] = [];
-  for (const coin of coinMasterList) {
+  for (const coin of trackedCoinList) {
     if (!coin.keywords?.length) continue;
     for (const kw of coin.keywords) {
       const trimmed = kw.trim();
@@ -89,7 +94,7 @@ function matchCoinsFromTitle(
 function mergeCoins(
   fromKeywords: INewsArticleCoin[],
   fromApiNormalized: string[],
-  coinMasterMap: Map<string, { symbol: string; name: string }>
+  trackedCoinMap: Map<string, { symbol: string; name: string }>
 ): INewsArticleCoin[] {
   const seen = new Set<string>();
   const result: INewsArticleCoin[] = [];
@@ -105,10 +110,10 @@ function mergeCoins(
     const key = normalizeSymbol(sym);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    const master = coinMasterMap.get(key);
+    const tracked = trackedCoinMap.get(key);
     result.push({
       symbol: key,
-      name: master?.name ?? key,
+      name: tracked?.name ?? key,
     });
   }
 
@@ -116,7 +121,7 @@ function mergeCoins(
 }
 
 type IngestionArticleContext = {
-  coinMasterMap: Map<string, { symbol: string; name: string }>;
+  trackedCoinMap: Map<string, { symbol: string; name: string }>;
   trackedSymbols: Set<string>;
   compiledKeywords: CompiledKeyword[];
 };
@@ -154,7 +159,7 @@ function coindeskToNewsArticle(
     ctx.compiledKeywords,
     apiNormSet
   );
-  const coinsMerged = mergeCoins(fromKeywords, apiNormalized, ctx.coinMasterMap);
+  const coinsMerged = mergeCoins(fromKeywords, apiNormalized, ctx.trackedCoinMap);
   const coins = coinsMerged.filter((c) => ctx.trackedSymbols.has(normalizeSymbol(c.symbol)));
 
   if (coins.length === 0) return null;
@@ -196,22 +201,48 @@ function coindeskToNewsArticle(
   };
 }
 
+/**
+ * Build tracked coin rows from exchange `filtered_coins` (distinct base_asset).
+ * Run POST /create-collections first so this collection is populated.
+ */
+function trackedCoinsFromFilteredBaseAssets(baseAssets: string[]): TrackedCoinLean[] {
+  const out: TrackedCoinLean[] = [];
+  const seen = new Set<string>();
+  for (const raw of baseAssets) {
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+    const sym = normalizeSymbol(trimmed);
+    if (!sym || seen.has(sym)) continue;
+    seen.add(sym);
+    out.push({
+      symbol: sym,
+      name: sym,
+      keywords: [trimmed.toLowerCase()],
+    });
+  }
+  return out;
+}
+
 export const ingestionService = {
   storeNews: async (): Promise<StoreNewsResult> => {
-    const allMasters = (await CoinMaster.find({}).lean()) as CoinMasterLean[];
+    const baseAssets = (await FilteredCoin.distinct('base_asset', {
+      base_asset: { $exists: true, $nin: [null, ''] },
+    })) as string[];
+
+    const trackedCoinList = trackedCoinsFromFilteredBaseAssets(baseAssets);
     const trackedSymbols = new Set(
-      allMasters.map((m) => normalizeSymbol(m.symbol)).filter((s): s is string => Boolean(s))
+      trackedCoinList.map((m) => normalizeSymbol(m.symbol)).filter((s): s is string => Boolean(s))
     );
 
-    const coinMasterMap = new Map<string, { symbol: string; name: string }>();
-    for (const c of allMasters) {
+    const trackedCoinMap = new Map<string, { symbol: string; name: string }>();
+    for (const c of trackedCoinList) {
       const k = normalizeSymbol(c.symbol);
       if (!k) continue;
-      coinMasterMap.set(k, { symbol: k, name: c.name });
+      trackedCoinMap.set(k, { symbol: k, name: c.name });
     }
 
-    const coinMasterList = allMasters.filter((c) => Array.isArray(c.keywords) && c.keywords.length > 0);
-    const compiledKeywords = buildCompiledKeywords(coinMasterList);
+    const withKeywords = trackedCoinList.filter((c) => Array.isArray(c.keywords) && c.keywords.length > 0);
+    const compiledKeywords = buildCompiledKeywords(withKeywords);
 
     let articles: CoindeskNewsArticle[];
     try {
@@ -226,7 +257,7 @@ export const ingestionService = {
       return { fetched: 0, stored: 0, skipped: 0, inserted: 0, updated: 0 };
     }
 
-    const ctx: IngestionArticleContext = { coinMasterMap, trackedSymbols, compiledKeywords };
+    const ctx: IngestionArticleContext = { trackedCoinMap, trackedSymbols, compiledKeywords };
     const toUpsert: Omit<INewsArticle, 'createdAt' | 'updatedAt'>[] = [];
     for (const a of articles) {
       const doc = coindeskToNewsArticle(a, ctx);
