@@ -4,16 +4,6 @@
 # Backend REDIS_URL (src/config/env.ts default): redis://localhost:6379
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: crypto-mongo
-    ports:
-      - "27018:27017"
-    volumes:
-      - mongo_data:/data/db
-    environment:
-      MONGO_INITDB_DATABASE: crypto_db
-
   redis:
     image: redis:7-alpine
     container_name: crypto-redis
@@ -24,5 +14,4 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
 
 volumes:
-  mongo_data:
   redis_data:
