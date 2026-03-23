@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: nayft-backend
+    env: node
+    rootDir: nayft-backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
