@@ -1,7 +1,10 @@
-# Matches CRYPTO_BACKEND_BUILD_GUIDE.md — MongoDB without auth for local dev.
+# Local / compose stack: Redis + API image.
+# Build image: docker compose build backend
 # Run: docker compose up -d
-# Backend MONGO_URI: mongodb://localhost:27018/crypto_db
-# Backend REDIS_URL (src/config/env.ts default): redis://localhost:6379
+#
+# From inside the backend container, use redis://redis:6379 (set below).
+# MongoDB must reach a host the container can see, e.g. mongodb://host.docker.internal:27017/crypto_db
+# (extra_hosts below enables host.docker.internal on Linux).
 
 services:
   redis:
@@ -12,6 +15,25 @@ services:
     volumes:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nayft-backend:latest
+    container_name: nayft-backend
+    ports:
+      - "4001:4001"
+    environment:
+      REDIS_URL: redis://redis:6379
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 
 volumes:
   redis_data:
