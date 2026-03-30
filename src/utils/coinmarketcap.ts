@@ -120,8 +120,7 @@ export const coinmarketcapApi = {
         id: `${ids}`,
       },
     });
-    console.log(response);
-    
+
     // Cache the response
     await cacheHelpers.set(cacheKey, response.data, CMC_CACHE_TTL);
     return response.data;

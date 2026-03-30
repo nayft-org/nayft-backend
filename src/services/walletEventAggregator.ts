@@ -55,7 +55,6 @@ export function subscribeToWalletEvents(cb: EventCallback): () => void {
 }
 
 export function ingestWalletEvent(event: WalletRawEvent): void {
-  console.log('ingestWalletEvent', event);
   const cooldownExpiry = cooldownMap.get(event.address);
   if (cooldownExpiry && Date.now() < cooldownExpiry) {
     // Wallet is in cooldown — suppress until cooldown expires
@@ -73,7 +72,6 @@ export function ingestWalletEvent(event: WalletRawEvent): void {
 // ── Internal ─────────────────────────────────────────────────────────────────
 
 function scheduleFlush(key: string): void {
-  console.log('scheduleFlush', key);
   if (flushTimers.has(key)) return; // already scheduled
 
   const timer = setTimeout(async () => {
@@ -85,7 +83,6 @@ function scheduleFlush(key: string): void {
 }
 
 async function flushBuffer(key: string): Promise<void> {
-  console.log('flushBuffer', key);
   const events = eventBuffer.get(key);
   if (!events || events.length === 0) {
     eventBuffer.delete(key);
@@ -109,7 +106,6 @@ async function flushBuffer(key: string): Promise<void> {
 
   let enrichedData: Record<string, unknown> | null = null;
   let eventType: WalletEventType = events[0].type;
-  console.log('chainsWithActivity', chainsWithActivity);
   try {
     if (chainsWithActivity.size > 1) {
       // Case A: same wallet across multiple chains → Zerion
@@ -142,7 +138,6 @@ async function flushBuffer(key: string): Promise<void> {
       }
     } else {
       // Case B: single chain → Alchemy
-      console.log('getAssetTransfers', address, chain);
       const transfers = await alchemyApi.getAssetTransfers(address, chain);
       enrichedData = { source: 'alchemy', transfers };
     }

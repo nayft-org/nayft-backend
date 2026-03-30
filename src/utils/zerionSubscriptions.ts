@@ -50,7 +50,6 @@ export const zerionSubscriptions = {
     const id = response.data?.data?.id;
     if (!id) throw new Error('[ZerionSubscriptions] createSubscription: missing ID in response');
 
-    console.log(`[ZerionSubscriptions] Created subscription ${id}. Save ZERION_SUBSCRIPTION_ID=${id} in .env`);
     return id;
   },
 

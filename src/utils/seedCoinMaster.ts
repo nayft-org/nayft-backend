@@ -76,9 +76,6 @@ export async function seedCoinMaster(): Promise<void> {
 
   if (toInsert.length > 0) {
     await CoinMaster.insertMany(toInsert);
-    console.log(`Seeded ${toInsert.length} coins into coinMaster`);
-  } else {
-    console.log('coinMaster already seeded, no new coins added');
   }
 }
 

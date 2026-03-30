@@ -103,10 +103,8 @@ export const portfolioController = {
 
   getHoldings: async (req: AuthRequest, res: Response): Promise<void> => {
     const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-    console.log('[Holdings] controller.getHoldings: request received', { userId: req.userId, forceRefresh });
     try {
       const holdings = await portfolioService.getHoldings(req.userId!, forceRefresh);
-      console.log('[Holdings] controller.getHoldings: success', { totalValue: holdings?.totalValue, positionsCount: holdings?.positions?.length });
       sendSuccess(res, { holdings });
     } catch (error: any) {
       console.error('[Holdings] controller.getHoldings: error', error?.message);

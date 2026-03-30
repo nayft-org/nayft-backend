@@ -19,7 +19,6 @@ export async function bootstrapFeatures(): Promise<void> {
     .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
     .map((e) => e.name);
 
-  let registered = 0;
   for (const modName of moduleNames) {
     const base = path.join(MODULES_DIR, modName);
     const tsPath = path.join(base, 'featureConfig.ts');
@@ -33,7 +32,6 @@ export async function bootstrapFeatures(): Promise<void> {
       const mod = require(configPath);
       if (mod.featureConfig) {
         await registerFeature(mod.featureConfig);
-        registered++;
       }
     } catch (err) {
       console.warn(`[FeatureSystem] Failed to load featureConfig from ${modName}:`, err);
@@ -48,7 +46,4 @@ export async function bootstrapFeatures(): Promise<void> {
     description: 'Core system events (API errors, etc.)',
     critical: true,
   });
-  registered++;
-
-  console.log(`[FeatureSystem] Registered ${registered} features from modules`);
 }

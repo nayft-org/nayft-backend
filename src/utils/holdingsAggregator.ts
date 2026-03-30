@@ -31,7 +31,6 @@ function mergePositions(
 export async function fetchAndAggregateHoldings(
   addresses: string[]
 ): Promise<AggregatedHoldings> {
-  console.log('[Holdings] fetchAndAggregateHoldings: entry', { addressCount: addresses.length });
   let totalValue = 0;
   let absoluteChange24h = 0;
   let relativeChange24h = 0;
@@ -41,7 +40,6 @@ export async function fetchAndAggregateHoldings(
 
   for (const address of addresses) {
     try {
-      console.log('[Holdings] fetchAndAggregateHoldings: fetching Zerion for', address.slice(0, 10) + '...');
       let portfolioTotal = 0;
       let port: Awaited<ReturnType<typeof zerionApi.getWalletPortfolio>>;
       let positions: ZerionPosition[] = [];
@@ -68,7 +66,6 @@ export async function fetchAndAggregateHoldings(
         positions.length > 0
           ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
           : portfolioTotal;
-      console.log('[Holdings] fetchAndAggregateHoldings: Zerion response', { address: address.slice(0, 10) + '...', portfolioTotal, positionsCount: positions.length, effectiveTotal });
 
       totalValue += effectiveTotal;
       absoluteChange24h += port.absoluteChange24h;
@@ -81,8 +78,6 @@ export async function fetchAndAggregateHoldings(
 
   relativeChange24h = totalValue > 0 ? weightedRelativeSum / totalValue : 0;
   const positions = mergePositions(allPositions);
-
-  console.log('[Holdings] fetchAndAggregateHoldings: done', { totalValue, positionsCount: positions.length });
 
   return {
     totalValue,

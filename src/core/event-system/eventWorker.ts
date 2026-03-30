@@ -71,13 +71,12 @@ async function processOne(): Promise<boolean> {
   } catch {
     console.error(`[EventSystem] Failed to persist event after ${MAX_RETRIES} retries:`, payload);
     await redisEventQueue.pushToDlq(payload);
-    console.log('[EventSystem] Moved to DLQ after retries');
+    console.error('[EventSystem] Moved to DLQ after retries');
   }
   return true;
 }
 
 export async function runEventWorker(): Promise<void> {
-  console.log('[EventSystem] Event worker started');
   while (!isRedisShutdownRequested()) {
     try {
       const processed = await processOne();
@@ -96,5 +95,4 @@ export async function runEventWorker(): Promise<void> {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
-  console.log('[EventSystem] Event worker stopped');
 }

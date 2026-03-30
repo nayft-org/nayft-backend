@@ -39,5 +39,4 @@ export async function bootstrapPlans(): Promise<void> {
   }
 
   await Plan.insertMany(DEFAULT_PLANS);
-  console.log('[Plans] Seeded default plans');
 }

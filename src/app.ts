@@ -40,8 +40,6 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key'],
 };
 
-console.log('CORS Options:', { ...corsOptions, origin: isWildcard ? '(dynamic)' : corsOptions.origin });
-
 // Middleware
 app.use(cors(corsOptions));
 // Attach raw body buffer to req so webhook controllers can verify HMAC signatures

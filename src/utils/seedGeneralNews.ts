@@ -103,6 +103,5 @@ export const seedGeneralNews = async () => {
 
   // Insert general news
   await News.insertMany(generalNews);
-  console.log(`✅ Seeded ${generalNews.length} general news items`);
 };
 

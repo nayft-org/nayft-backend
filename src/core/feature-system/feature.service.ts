@@ -91,7 +91,6 @@ export const featureService = {
         userId: updatedBy,
         timestamp: new Date(),
       });
-      console.log(`[Admin] Feature ${key} isActive: ${feature.isActive} -> ${updates.isActive}`);
     }
     if (updates.name !== undefined || updates.description !== undefined) {
       const oldVal: Record<string, unknown> = {};

@@ -294,9 +294,6 @@ export async function runKlineDownsampler(): Promise<void> {
           d1 += r3.deleted;
           const d4 = await deleteOld1d(exchange, symbol);
           d1 += d4;
-          if (u1 > 0 || d1 > 0) {
-            console.log(`[KlineDownsampler] ${exchange}/${symbol}: upserted=${u1}, deleted=${d1}`);
-          }
         }
       } catch (err) {
         console.error(`[KlineDownsampler] Error for ${exchange}/${symbol}:`, err);

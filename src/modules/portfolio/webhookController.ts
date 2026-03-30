@@ -60,7 +60,6 @@ export const webhookController = {
   alchemyWebhook: async (req: Request, res: Response): Promise<void> => {
     // Respond 200 immediately — Alchemy retries on non-200 responses
     res.status(200).send('ok');
-    console.log('alchemyWebhook', req.headers);
     const rawBody   = (req as any).rawBody as Buffer | undefined;
     const signature = req.headers['x-alchemy-signature'] as string | undefined;
 
@@ -98,7 +97,6 @@ export const webhookController = {
 
     const resolvedChain = chain ?? network ?? 'unknown';
     const activities: any[] = body.event?.activity ?? [];
-    console.log(`[WebhookController] Alchemy: processing ${activities.length} activities for chain="${resolvedChain}"`);
 
     for (const activity of activities) {
       const toAddr   = activity.toAddress?.toLowerCase() as string | undefined;
@@ -144,7 +142,6 @@ export const webhookController = {
         type:     mapAlchemyCategory(activity.category),
         activity: activityData,
       };
-      console.log(`[WebhookController] Alchemy: ingesting event`, rawEvent);
       ingestWalletEvent(rawEvent);
     }
   },
@@ -156,8 +153,7 @@ export const webhookController = {
    * (X-Certificate-URL, X-Timestamp, X-Signature).
    *
    * Full asymmetric cert verification requires fetching the public cert from
-   * X-Certificate-URL at runtime. The initial implementation logs the headers
-   * for inspection; TODO: add full verification before production deployment.
+   * X-Certificate-URL at runtime. TODO: add full verification before production deployment.
    */
   zerionWebhook: async (req: Request, res: Response): Promise<void> => {
     // Respond 200 immediately — Zerion stops after 3 failed attempts
@@ -168,13 +164,6 @@ export const webhookController = {
       console.warn('[WebhookController] Zerion: missing rawBody');
       return;
     }
-
-    // Log signature headers for debugging / future cert verification
-    console.log('[WebhookController] Zerion headers:', {
-      certUrl:   req.headers['x-certificate-url'],
-      timestamp: req.headers['x-timestamp'],
-      signature: req.headers['x-signature'],
-    });
 
     let body: any;
     try {

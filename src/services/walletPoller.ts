@@ -106,7 +106,6 @@ export const walletPoller = {
       for (const w of wallets) {
         activeWallets.set(w.id as string, walletFromDoc(w));
       }
-      console.log(`[WalletPoller] Loaded ${wallets.length} wallet(s). Poll interval: ${config.walletPollIntervalMs}ms`);
     } catch (err) {
       console.error('[WalletPoller] Failed to load wallets from DB:', err);
     }
@@ -114,8 +113,6 @@ export const walletPoller = {
     pollTimer = setInterval(() => {
       tick().catch((err) => console.error('[WalletPoller] Tick error:', err));
     }, config.walletPollIntervalMs);
-
-    console.log('[WalletPoller] Started');
   },
 
   stop(): void {
@@ -125,7 +122,6 @@ export const walletPoller = {
     }
     activeWallets.clear();
     lastSeenBlock.clear();
-    console.log('[WalletPoller] Stopped');
   },
 
   /**
@@ -135,7 +131,6 @@ export const walletPoller = {
   addWallet(wallet: IWalletAddress): void {
     const id = (wallet._id as { toString(): string }).toString();
     activeWallets.set(id, walletFromDoc(wallet));
-    console.log(`[WalletPoller] Added wallet ${wallet.address} on chains [${wallet.chains.join(', ')}]`);
   },
 
   /**
@@ -149,7 +144,6 @@ export const walletPoller = {
       }
     }
     activeWallets.delete(walletId);
-    console.log(`[WalletPoller] Removed wallet ${walletId}`);
   },
 };
 

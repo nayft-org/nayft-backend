@@ -82,6 +82,40 @@ function mapToRawDocument(
   }
 }
 
+const FILTERED_UPSERT_BATCH = 1000;
+
+async function bulkUpsertFilteredCoinsFromAggDocs(
+  docs: Record<string, unknown>[]
+): Promise<void> {
+  if (docs.length === 0) return;
+  const ops = docs.map((d) => {
+    const base_asset = d.base_asset as string;
+    const provider = d.provider as ProviderType;
+    return {
+      updateOne: {
+        filter: { base_asset, provider },
+        update: {
+          $set: {
+            provider,
+            provider_coin_id: d.provider_coin_id as string,
+            symbol: d.symbol as string,
+            base_asset,
+            quote_asset: d.quote_asset as string,
+            status: d.status as string,
+            raw_payload: d.raw_payload as Record<string, unknown>,
+            fetched_at: d.fetched_at as Date,
+            ...(d.provider_timestamp != null
+              ? { provider_timestamp: d.provider_timestamp as Date }
+              : {}),
+          },
+        },
+        upsert: true,
+      },
+    };
+  });
+  await FilteredCoin.bulkWrite(ops);
+}
+
 export const ingestionRepository = {
   async bulkUpsertRawData(
     provider: ProviderType,
@@ -130,18 +164,24 @@ export const ingestionRepository = {
         },
       },
       { $replaceRoot: { newRoot: '$doc' } },
-      { $project: { __v: 0 } },
-      {
-        $merge: {
-          into: 'filtered_coins',
-          on: ['base_asset', 'provider'],
-          whenMatched: 'replace',
-          whenNotMatched: 'insert',
-        },
-      },
+      // Exclude _id so we never carry coin_raw_data ids into filtered_coins (avoids any merge/replace _id issues).
+      { $project: { _id: 0, __v: 0 } },
     ];
 
-    await CoinRawData.aggregate(pipeline as any[]).exec();
+    const cursor = CoinRawData.aggregate(pipeline as any[]).cursor({ batchSize: 500 });
+    let batch: Record<string, unknown>[] = [];
+
+    for await (const doc of cursor) {
+      batch.push(doc as Record<string, unknown>);
+      if (batch.length >= FILTERED_UPSERT_BATCH) {
+        await bulkUpsertFilteredCoinsFromAggDocs(batch);
+        batch = [];
+      }
+    }
+    if (batch.length > 0) {
+      await bulkUpsertFilteredCoinsFromAggDocs(batch);
+    }
+
     return await FilteredCoin.countDocuments();
   },
 };

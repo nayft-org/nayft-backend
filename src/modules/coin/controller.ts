@@ -11,6 +11,7 @@ export const coinController = {
         success: result.success,
         providers: result.providers,
         filtered_coins_count: result.filtered_coins_count,
+        coinmasters_upserted: result.coinmasters_upserted,
         errors: result.errors.length > 0 ? result.errors : undefined,
       });
     } catch (error: any) {
@@ -80,7 +81,6 @@ export const coinController = {
   },
 
   getCoinProfile: async (req: Request, res: Response): Promise<void> => {
-    console.log("coinController.getCoinProfile", req.params);
     try {
       const { coinId } = req.params;
       const coin = await coinService.getCoinProfile(coinId);

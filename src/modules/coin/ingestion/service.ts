@@ -1,12 +1,64 @@
 import { fetchAllProviders } from './providers';
 import { ingestionRepository } from './repository';
 import type { ProviderType } from '../models/CoinRawData';
+import { FilteredCoin } from '../models/FilteredCoin';
+import { CoinMaster } from '../../news/models';
 
 export interface IngestResult {
   success: boolean;
   providers: Record<ProviderType, number>;
   filtered_coins_count: number;
+  coinmasters_upserted: number;
   errors: { provider: string; error: string }[];
+}
+
+function normalizeSymbol(symbol: string): string {
+  const segment = symbol.split(/[-/]/)[0]?.trim() ?? '';
+  return segment.toUpperCase();
+}
+
+async function syncCoinMastersFromFilteredCoins(): Promise<number> {
+  const baseAssets = (await FilteredCoin.distinct('base_asset', {
+    base_asset: { $exists: true, $nin: [null, ''] },
+  })) as string[];
+
+  const seen = new Set<string>();
+  let upsertedOrUpdated = 0;
+
+  for (const raw of baseAssets) {
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+    const sym = normalizeSymbol(trimmed);
+    if (!sym || seen.has(sym)) continue;
+    seen.add(sym);
+
+    const keywords = [trimmed.toLowerCase()];
+
+    const res = await CoinMaster.updateOne(
+      { symbol: sym },
+      {
+        $setOnInsert: { symbol: sym },
+        $set: {
+          name: sym,
+          keywords,
+        },
+      },
+      { upsert: true }
+    ).exec();
+
+    // For Mongoose >=6, `modifiedCount`/`upsertedCount` exist; fall back to `nModified` / `upserted` if present.
+    const modified =
+      // @ts-expect-error legacy driver fields
+      (res.modifiedCount ?? res.nModified ?? 0);
+    // @ts-expect-error legacy driver fields
+    const upserted = res.upsertedCount ?? (res.upserted ? 1 : 0);
+
+    if (modified > 0 || upserted > 0) {
+      upsertedOrUpdated += 1;
+    }
+  }
+
+  return upsertedOrUpdated;
 }
 
 export const ingestionService = {
@@ -41,11 +93,14 @@ export const ingestionService = {
 
     const hasSuccess = Object.values(counts).some((c) => c > 0);
     const filteredCount = hasSuccess ? await ingestionRepository.populateFilteredCoins() : 0;
+    const coinMastersUpserted =
+      hasSuccess && filteredCount > 0 ? await syncCoinMastersFromFilteredCoins() : 0;
 
     return {
       success: hasSuccess,
       providers: counts,
       filtered_coins_count: filteredCount,
+      coinmasters_upserted: coinMastersUpserted,
       errors,
     };
   },
