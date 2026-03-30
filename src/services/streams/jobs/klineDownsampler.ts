@@ -1,6 +1,7 @@
 import { OhlcvKline } from '../../../modules/chart/model';
 import { streamConfig } from '../../../config/streamConfig';
 import type { KlineInterval } from '../../../modules/chart/model';
+import { archiveOhlcvForExchangeSymbol } from '../../archival';
 
 const MS_1M = 60 * 1000;
 const MS_5M = 5 * MS_1M;
@@ -279,6 +280,14 @@ export async function runKlineDownsampler(): Promise<void> {
 
   for (const exchange of exchanges) {
     for (const symbol of symbols) {
+      const archival = await archiveOhlcvForExchangeSymbol(exchange, symbol);
+      if (!archival.ok) {
+        console.error(
+          `[KlineDownsampler] OHLCV archival failed for ${exchange}/${symbol}; skipping downsampler for this pair`
+        );
+        continue;
+      }
+
       try {
         let u1 = 0,
           d1 = 0;

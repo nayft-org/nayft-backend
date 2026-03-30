@@ -32,6 +32,8 @@ services:
       - "4001:4001"
     environment:
       REDIS_URL: redis://redis:6379
+      # OHLCV CSV archival (set on host via .env). Maps to named volume below.
+      OHLCV_ARCHIVE_ROOT: /app/data
     env_file:
       - path: .env
         required: false
@@ -40,6 +42,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    volumes:
+      # Persist OHLCV CSV archives. On the VM, replace with a bind mount, e.g.
+      #   - /home/ubuntu/ohlcv_data:/app/data
+      # and ensure that directory is writable by the container user (uid 1000 / node).
+      - /home/ubuntu/ohlcv_data:/app/data
 
 volumes:
   redis_data:
+  ohlcv_archive:

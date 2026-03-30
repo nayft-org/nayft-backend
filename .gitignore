@@ -5,3 +5,6 @@ dist/
 .DS_Store
 coverage/
 
+# Service account keys (Google Drive, etc.) — use env path to mount at runtime
+**/nayft-storage*.json
+
