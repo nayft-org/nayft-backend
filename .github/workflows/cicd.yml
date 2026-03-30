@@ -56,7 +56,10 @@ jobs:
         run: |
           sudo docker compose -f docker-compose.yml build backend
 
+      # Full `docker compose down` (all services) — not `down backend`. Stopping only the
+      # backend can remove the project network while redis still references it, causing
+      # "network ... not found" on the next `up`.
       - name: Deploy backend
         run: |
-          sudo docker compose down backend || true
-          sudo docker compose up -d backend
+          sudo docker compose -f docker-compose.yml down --remove-orphans || true
+          sudo docker compose -f docker-compose.yml up -d --force-recreate

@@ -5,6 +5,12 @@
 # From inside the backend container, use redis://redis:6379 (set below).
 # MongoDB must reach a host the container can see, e.g. mongodb://host.docker.internal:27017/crypto_db
 # (extra_hosts below enables host.docker.internal on Linux).
+#
+# Explicit default network name keeps the stack stable across `compose down` / `up` on self-hosted runners.
+
+networks:
+  default:
+    name: nayft-backend_default
 
 services:
   redis:
