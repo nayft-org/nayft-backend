@@ -2,8 +2,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/** HTTP bind address: set `HOST` in `.env` (e.g. LAN IP) to reach from devices; omit for `localhost` only. */
+const hostFromEnv = process.env.HOST?.trim();
 export const config = {
   port: parseInt(process.env.PORT || '4001', 10),
+  host: hostFromEnv && hostFromEnv.length > 0 ? hostFromEnv : 'localhost',
   nodeEnv: process.env.NODE_ENV || 'development',
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27018/crypto_db',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
