@@ -53,7 +53,84 @@ const mapNewsArticleToDto = (
   };
 };
 
+/** Escape user input for safe use inside MongoDB `$regex` (ReDoS mitigation). */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export type NewsArticleSearchDto = ReturnType<typeof mapNewsArticleToDto>;
+
 export const newsService = {
+  /**
+   * Indexed NewsArticle search for unified `/api/search` (not getAllNews + filter).
+   * Stage A: prefix match on title, subtitle, coins.symbol. Stage B (optional): contains on title/subtitle.
+   */
+  searchArticlesForUnifiedSearch: async (
+    query: string,
+    limit: number,
+    userId?: string,
+    maxTimeMS = 220
+  ): Promise<{ articles: NewsArticleSearchDto[]; usedStageB: boolean }> => {
+    const cap = Math.min(Math.max(1, limit), 25);
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      return { articles: [], usedStageB: false };
+    }
+
+    const escaped = escapeRegex(trimmed);
+    if (!escaped) {
+      return { articles: [], usedStageB: false };
+    }
+
+    const base: Record<string, unknown> = { status: 'active' };
+    const prefixOr: Record<string, unknown>[] = [
+      { title: { $regex: `^${escaped}`, $options: 'i' } },
+      { subtitle: { $regex: `^${escaped}`, $options: 'i' } },
+      { 'coins.symbol': { $regex: `^${escaped}`, $options: 'i' } },
+    ];
+
+    let articles = await NewsArticle.find({ ...base, $or: prefixOr })
+      .sort({ publishedAt: -1 })
+      .limit(cap)
+      .maxTimeMS(maxTimeMS)
+      .lean<INewsArticle[]>();
+
+    let usedStageB = false;
+    if (articles.length < cap && trimmed.length >= 3) {
+      const seen = new Set(articles.map((a) => a.externalId));
+      const containsOr: Record<string, unknown>[] = [
+        { title: { $regex: escaped, $options: 'i' } },
+        { subtitle: { $regex: escaped, $options: 'i' } },
+      ];
+      const more = await NewsArticle.find({
+        ...base,
+        externalId: { $nin: [...seen] },
+        $or: containsOr,
+      })
+        .sort({ publishedAt: -1 })
+        .limit(cap - articles.length)
+        .maxTimeMS(maxTimeMS)
+        .lean<INewsArticle[]>();
+
+      if (more.length > 0) {
+        usedStageB = true;
+      }
+      const merged = [...articles, ...more].sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+      articles = merged.slice(0, cap);
+    }
+
+    let userReactionsMap: Record<string, ReactionType> = {};
+    if (userId && articles.length > 0) {
+      const newsIds = articles.map((a) => a.externalId);
+      userReactionsMap = await reactionService.getUserReactionsForArticles(userId, newsIds);
+    }
+
+    const dtos = articles.map((a) => mapNewsArticleToDto(a, userReactionsMap[a.externalId]));
+    return { articles: dtos, usedStageB };
+  },
+
   getAllNews: async (page: number = 1, limit: number = 50, categories: string[] = [], userId?: string) => {
     const skip = (page - 1) * limit;
     const allowedCategoryKeys =

@@ -5,6 +5,7 @@ import { ingestionService } from './ingestion/service';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { eventService } from '../../core/event-system';
+import { withResponseCache, buildNewsListKey, buildNewsFollowingKey } from '../../utils/responseCache';
 
 export const newsController = {
   getAllNews: async (req: AuthRequest, res: Response): Promise<void> => {
@@ -27,7 +28,14 @@ export const newsController = {
             .map((c) => c.trim())
             .filter(Boolean)
         : [];
-      const news = await newsService.getAllNews(page, limit, categories, req.userId);
+      const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
+      const userScope = req.userId ?? 'anon';
+      const { data: news } = await withResponseCache({
+        cacheKey: buildNewsListKey({ userScope, page, limit, categoriesSig }),
+        ttlSeconds: 45,
+        metricsKind: 'news:list',
+        fetcher: () => newsService.getAllNews(page, limit, categories, req.userId),
+      });
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -48,7 +56,19 @@ export const newsController = {
             .map((c) => c.trim())
             .filter(Boolean)
         : [];
-      const news = await newsService.getFollowingNews(req.userId!, page, limit, categories, mode);
+      const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
+      const { data: news } = await withResponseCache({
+        cacheKey: buildNewsFollowingKey({
+          userId: req.userId!,
+          page,
+          limit,
+          mode,
+          categoriesSig,
+        }),
+        ttlSeconds: 45,
+        metricsKind: 'news:following',
+        fetcher: () => newsService.getFollowingNews(req.userId!, page, limit, categories, mode),
+      });
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);

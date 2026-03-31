@@ -26,6 +26,55 @@ export interface MarketTrendPoint {
   value: number;
 }
 
+type KlineDoc = { openTime: Date; close: number };
+
+function computeMarketTrendPoints(
+  constituents: Array<{ symbol: string; marketCap: number }>,
+  klineSets: Array<{ symbol: string; marketCap: number; docs: KlineDoc[] }>
+): MarketTrendPoint[] {
+  const indexByTimestamp = new Map<number, { weightedIndex: number; weight: number }>();
+  for (const set of klineSets) {
+    if (set.docs.length < 2) continue;
+    const baseClose = Number(set.docs[0].close);
+    if (!Number.isFinite(baseClose) || baseClose <= 0) continue;
+    if (!Number.isFinite(set.marketCap) || set.marketCap <= 0) continue;
+
+    for (const kline of set.docs) {
+      const close = Number(kline.close);
+      if (!Number.isFinite(close) || close <= 0) continue;
+      const ts = new Date(kline.openTime).getTime();
+      const ratio = close / baseClose;
+
+      const existing = indexByTimestamp.get(ts) ?? { weightedIndex: 0, weight: 0 };
+      existing.weightedIndex += ratio * set.marketCap;
+      existing.weight += set.marketCap;
+      indexByTimestamp.set(ts, existing);
+    }
+  }
+
+  const rawPoints = Array.from(indexByTimestamp.entries())
+    .map(([ts, v]) => ({
+      openTime: new Date(ts),
+      indexValue: v.weight > 0 ? v.weightedIndex / v.weight : 0,
+    }))
+    .filter((p) => Number.isFinite(p.indexValue) && p.indexValue > 0)
+    .sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
+
+  if (rawPoints.length < 2) return [];
+
+  const latestIndexValue = rawPoints[rawPoints.length - 1].indexValue;
+  if (!Number.isFinite(latestIndexValue) || latestIndexValue <= 0) return [];
+
+  const totalMarketCap = constituents.reduce((sum, c) => sum + c.marketCap, 0);
+  if (!Number.isFinite(totalMarketCap) || totalMarketCap <= 0) return [];
+  const scale = totalMarketCap / latestIndexValue;
+
+  return rawPoints.map((point) => ({
+    openTime: point.openTime,
+    value: point.indexValue * scale,
+  }));
+}
+
 export const chartRepository = {
   async findKlines(params: {
     exchange: string;
@@ -121,46 +170,62 @@ export const chartRepository = {
       })
     );
 
-    const indexByTimestamp = new Map<number, { weightedIndex: number; weight: number }>();
-    for (const set of klineSets) {
-      if (set.docs.length < 2) continue;
-      const baseClose = Number(set.docs[0].close);
-      if (!Number.isFinite(baseClose) || baseClose <= 0) continue;
-      if (!Number.isFinite(set.marketCap) || set.marketCap <= 0) continue;
+    return computeMarketTrendPoints(constituents, klineSets);
+  },
 
-      for (const kline of set.docs) {
-        const close = Number(kline.close);
-        if (!Number.isFinite(close) || close <= 0) continue;
-        const ts = new Date(kline.openTime).getTime();
-        const ratio = close / baseClose;
+  /**
+   * Single aggregation round-trip: group klines per symbol, then same weighted index as v1.
+   */
+  async findMarketTrendBatched(params: {
+    exchange: string;
+    interval: KlineInterval;
+    from: Date;
+    to: Date;
+    limit: number;
+    constituents: Array<{ symbol: string; marketCap: number }>;
+  }): Promise<MarketTrendPoint[]> {
+    const { exchange, interval, from, to, limit, constituents } = params;
+    if (constituents.length === 0) return [];
 
-        const existing = indexByTimestamp.get(ts) ?? { weightedIndex: 0, weight: 0 };
-        existing.weightedIndex += ratio * set.marketCap;
-        existing.weight += set.marketCap;
-        indexByTimestamp.set(ts, existing);
-      }
-    }
+    const symbols = constituents.map((c) => c.symbol.toUpperCase());
+    const capBySymbol = new Map(
+      constituents.map((c) => [c.symbol.toUpperCase(), c.marketCap] as const)
+    );
 
-    const rawPoints = Array.from(indexByTimestamp.entries())
-      .map(([ts, v]) => ({
-        openTime: new Date(ts),
-        indexValue: v.weight > 0 ? v.weightedIndex / v.weight : 0,
-      }))
-      .filter((p) => Number.isFinite(p.indexValue) && p.indexValue > 0)
-      .sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
+    const grouped = (await OhlcvKline.aggregate([
+      {
+        $match: {
+          'meta.exchange': exchange,
+          'meta.interval': interval,
+          'meta.symbol': { $in: symbols },
+          openTime: { $gte: from, $lte: to },
+        },
+      },
+      { $sort: { openTime: -1 } },
+      {
+        $group: {
+          _id: '$meta.symbol',
+          docs: { $push: '$$ROOT' },
+        },
+      },
+      {
+        $project: {
+          symbol: '$_id',
+          docs: { $slice: ['$docs', limit] },
+        },
+      },
+    ])) as Array<{ symbol: string; docs: KlineDoc[] }>;
 
-    if (rawPoints.length < 2) return [];
+    const klineSets = grouped.map((g) => {
+      const sym = String(g.symbol).toUpperCase();
+      const docs = (g.docs as KlineDoc[]).slice().reverse();
+      return {
+        symbol: sym,
+        marketCap: capBySymbol.get(sym) ?? 0,
+        docs,
+      };
+    });
 
-    const latestIndexValue = rawPoints[rawPoints.length - 1].indexValue;
-    if (!Number.isFinite(latestIndexValue) || latestIndexValue <= 0) return [];
-
-    const totalMarketCap = constituents.reduce((sum, c) => sum + c.marketCap, 0);
-    if (!Number.isFinite(totalMarketCap) || totalMarketCap <= 0) return [];
-    const scale = totalMarketCap / latestIndexValue;
-
-    return rawPoints.map((point) => ({
-      openTime: point.openTime,
-      value: point.indexValue * scale,
-    }));
+    return computeMarketTrendPoints(constituents, klineSets);
   },
 };

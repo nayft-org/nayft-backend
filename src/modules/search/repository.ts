@@ -148,20 +148,20 @@ export const searchRepository = {
   },
 
   async searchNews(query: string, limit: number, userId?: string): Promise<SearchNewsResult[]> {
-    const normalizedQuery = normalizeText(query);
-    const rows = await newsService.getAllNews(1, Math.min(limit * 4, 50), [], userId);
-
-    return rows
-      .filter((item: any) => {
-        return (
-          includesQuery(item?.title, normalizedQuery) ||
-          includesQuery(item?.summary, normalizedQuery) ||
-          includesQuery(item?.subtitle, normalizedQuery) ||
-          includesQuery(item?.source, normalizedQuery) ||
-          includesQuery((item?.relatedCoins || []).join(' '), normalizedQuery)
-        );
-      })
-      .slice(0, limit);
+    const { articles } = await newsService.searchArticlesForUnifiedSearch(query, limit, userId);
+    return articles.map((item) => ({
+      id: item.id,
+      title: item.title,
+      summary: item.summary,
+      subtitle: item.subtitle,
+      source: item.source,
+      url: item.url,
+      sourceUrl: item.sourceUrl,
+      image: item.image,
+      relatedCoins: item.relatedCoins,
+      categories: item.categories,
+      publishedAt: item.publishedAt,
+    }));
   },
 
   async searchUsers(query: string, limit: number): Promise<SearchUserResult[]> {

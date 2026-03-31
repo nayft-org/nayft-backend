@@ -1,6 +1,10 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { sendError, sendSuccess } from '../../utils/response';
+import { AuthRequest } from '../../types';
 import { searchService, SearchSegment } from './service';
+
+const MIN_QUERY_LEN = 2;
+const MAX_QUERY_LEN = 64;
 
 const parseLimit = (value: unknown): number => {
   const parsed = parseInt(String(value || '8'), 10);
@@ -27,18 +31,27 @@ const parseSegments = (value: unknown): SearchSegment[] => {
 };
 
 export const searchController = {
-  search: async (req: Request, res: Response): Promise<void> => {
+  search: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const query = String(req.query.q || '').trim();
-      if (!query) {
+      const raw = String(req.query.q || '').trim();
+      if (!raw) {
         sendError(res, 'Search query is required', 400);
+        return;
+      }
+      if (raw.length > MAX_QUERY_LEN) {
+        sendError(res, `Search query must be at most ${MAX_QUERY_LEN} characters`, 400);
+        return;
+      }
+      const query = raw.normalize('NFKC');
+      if (query.length < MIN_QUERY_LEN) {
+        sendError(res, `Search query must be at least ${MIN_QUERY_LEN} characters`, 400);
         return;
       }
 
       const limit = parseLimit(req.query.limit);
       const segments = parseSegments(req.query.segments);
       const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-      const userId = (req as any).userId as string | undefined;
+      const userId = req.userId;
 
       const result = await searchService.search({
         query,

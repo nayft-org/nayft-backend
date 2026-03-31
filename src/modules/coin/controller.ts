@@ -4,6 +4,24 @@ import { ingestionService } from './ingestion/service';
 import { sendSuccess, sendError } from '../../utils/response';
 
 export const coinController = {
+  getCoinsBatch: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const raw = req.query.ids as string | undefined;
+      if (!raw?.trim()) {
+        sendSuccess(res, { coins: [] });
+        return;
+      }
+      const ids = raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const coins = await coinService.getCoinsByIds(ids);
+      sendSuccess(res, { coins });
+    } catch (error: any) {
+      sendError(res, error.message ?? 'Batch fetch failed', 500);
+    }
+  },
+
   createCollections: async (_req: Request, res: Response): Promise<void> => {
     try {
       const result = await ingestionService.ingestFromAllProviders();
