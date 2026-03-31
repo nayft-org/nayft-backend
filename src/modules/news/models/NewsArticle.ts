@@ -170,6 +170,7 @@ const newsArticleSchema = new Schema<INewsArticle>(
 );
 
 newsArticleSchema.index({ publishedAt: -1 });
+newsArticleSchema.index({ status: 1, publishedAt: -1 });
 newsArticleSchema.index({ 'coins.symbol': 1 });
 newsArticleSchema.index({ 'source.key': 1 });
 newsArticleSchema.index({ status: 1 });
