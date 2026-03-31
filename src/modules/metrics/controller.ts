@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { redis } from '../../config/redis';
+import { getHttpPerformanceSnapshot } from '../../utils/httpPerformanceStats';
 
 export const metricsController = {
   getMetrics: async (_req: Request, res: Response): Promise<void> => {
@@ -60,6 +61,8 @@ export const metricsController = {
         pid: process.pid,
       };
 
+      const httpPerf = getHttpPerformanceSnapshot();
+
       res.json({
         success: true,
         timestamp: new Date().toISOString(),
@@ -67,6 +70,7 @@ export const metricsController = {
           mongodb: mongoStatus,
           redis: redisStats,
           process: processInfo,
+          http: httpPerf,
           performance: {
             targets: {
               p50ResponseTime: '<50ms',

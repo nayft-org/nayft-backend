@@ -1,8 +1,10 @@
 import express, { Application } from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { config } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
 import { notFound } from './middlewares/notFound';
+import { performanceLogMiddleware } from './middleware/performanceLog';
 
 // Routes
 import authRoutes from './modules/auth/routes';
@@ -42,6 +44,8 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
+app.use(compression());
+app.use(performanceLogMiddleware);
 // Attach raw body buffer to req so webhook controllers can verify HMAC signatures
 app.use(express.json({
   verify: (req: any, _res, buf) => { req.rawBody = buf; },

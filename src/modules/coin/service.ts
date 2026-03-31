@@ -201,6 +201,21 @@ export const coinService = {
     return coinDto;
   },
 
+  /** Batch DB lookup for related coins on news feed (max 50 ids). */
+  getCoinsByIds: async (coinIds: string[]) => {
+    const unique = [...new Set(coinIds.map((id) => String(id).trim()).filter(Boolean))].slice(0, 50);
+    if (unique.length === 0) return [];
+    const coins = await coinRepository.findByIds(unique);
+    return coins.map((c) => ({
+      coinId: c.coinId,
+      symbol: c.symbol,
+      name: c.name,
+      rank: c.rank,
+      price: c.price,
+      percentChange24h: c.percentChange24h,
+    }));
+  },
+
   populateLabeledCoins: async () => {
     return labeledCoinRepository.populateFromCoinGeckoAndFilteredCoins();
   },

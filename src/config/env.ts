@@ -46,5 +46,13 @@ export const config = {
   zerionSubscriptionId:     process.env.ZERION_SUBSCRIPTION_ID  || '',
   // Public webhook URL (Cloudflare tunnel)
   webhookBaseUrl:           process.env.WEBHOOK_BASE_URL         || '',
+  /** 0–1: fraction of requests to log in production (Phase 0 observability). Default 1 in dev, 0.05 in prod. */
+  perfLogSampleRate: (() => {
+    const raw = process.env.PERF_LOG_SAMPLE_RATE;
+    if (raw !== undefined && raw !== '') return Math.min(1, Math.max(0, parseFloat(raw)));
+    return (process.env.NODE_ENV || 'development') === 'production' ? 0.05 : 1;
+  })(),
+  /** Use batched DB path for GET /api/charts/market-trend-v2 when true (same numeric output as v1). */
+  marketTrendV2Enabled: (process.env.MARKET_TREND_V2_ENABLED || 'true').toLowerCase() === 'true',
 };
 

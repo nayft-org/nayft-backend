@@ -3,6 +3,8 @@ import { coinController } from './controller';
 
 const router = Router();
 
+router.get('/batch', coinController.getCoinsBatch);
+
 router.post('/create-collections', coinController.createCollections);
 router.post('/populate-labeled-coins', coinController.populateLabeledCoins);
 router.post('/populate-active-coins', coinController.populateLabeledActiveCoins);

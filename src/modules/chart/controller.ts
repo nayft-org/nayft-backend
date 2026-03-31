@@ -25,6 +25,20 @@ export const chartController = {
       }
 
       const klines = await chartService.getKlines({ symbol, interval, from, to, exchange, limit });
+      const fields = String(req.query.fields || '').toLowerCase();
+      if (fields === 'minimal' || fields === 'ohlcv') {
+        res.json(
+          klines.map((k) => ({
+            openTime: k.openTime,
+            open: k.open,
+            high: k.high,
+            low: k.low,
+            close: k.close,
+            volume: k.volume,
+          }))
+        );
+        return;
+      }
       res.json(klines);
     } catch (err) {
       console.error('[chartController.getKlines]', err);
@@ -101,6 +115,36 @@ export const chartController = {
     } catch (err) {
       console.error('[chartController.getMarketTrend]', err);
       res.status(500).json({ error: 'Failed to fetch market trend' });
+    }
+  },
+
+  getMarketTrendV2: async (req: Request, res: Response) => {
+    try {
+      const interval = String(req.query.interval || '1m').toLowerCase() as KlineInterval;
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      const exchange = req.query.exchange as string | undefined;
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+      const maxCoins = req.query.maxCoins ? parseInt(String(req.query.maxCoins), 10) : undefined;
+
+      if (!VALID_INTERVALS.includes(interval)) {
+        res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(', ')}` });
+        return;
+      }
+
+      const marketTrend = await chartService.getMarketTrendV2({
+        interval,
+        from,
+        to,
+        exchange,
+        limit,
+        maxCoins,
+      });
+
+      res.json(marketTrend);
+    } catch (err) {
+      console.error('[chartController.getMarketTrendV2]', err);
+      res.status(500).json({ error: 'Failed to fetch market trend v2' });
     }
   },
 };
