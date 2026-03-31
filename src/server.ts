@@ -44,13 +44,13 @@ const startServer = async (): Promise<void> => {
     console.log(`📊 KlineDownsampler scheduled: ${streamConfig.kline.downsamplerCron}`);
 
     const port = config.port;
-    // Bind to 0.0.0.0 so emulator (10.0.2.2) and physical devices (LAN IP) can connect
-    httpServer.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${port}`);
+    const host = config.host;
+    httpServer.listen(port, host, () => {
+      console.log(`🚀 Server listening on http://${host}:${port}`);
       console.log(`📡 Environment: ${config.nodeEnv}`);
-      console.log(`🔗 API: http://localhost:${port}/api`);
-      console.log(`🔌 WebSocket: ws://localhost:${port}/ws`);
-      console.log(`📈 Charts: http://localhost:${port}/api/charts/klines`);
+      console.log(`🔗 API: http://${host}:${port}/api`);
+      console.log(`🔌 WebSocket: ws://${host}:${port}/ws`);
+      console.log(`📈 Charts: http://${host}:${port}/api/charts/klines`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
