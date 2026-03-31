@@ -1,19 +1,18 @@
-# Matches CRYPTO_BACKEND_BUILD_GUIDE.md — MongoDB without auth for local dev.
+# Local / compose stack: Redis + API image.
+# Build image: docker compose build backend
 # Run: docker compose up -d
-# Backend MONGO_URI: mongodb://localhost:27018/crypto_db
-# Backend REDIS_URL (src/config/env.ts default): redis://localhost:6379
+#
+# From inside the backend container, use redis://redis:6379 (set below).
+# MongoDB must reach a host the container can see, e.g. mongodb://host.docker.internal:27017/crypto_db
+# (extra_hosts below enables host.docker.internal on Linux).
+#
+# Explicit default network name keeps the stack stable across `compose down` / `up` on self-hosted runners.
+
+networks:
+  default:
+    name: nayft-backend_default
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: crypto-mongo
-    ports:
-      - "27018:27017"
-    volumes:
-      - mongo_data:/data/db
-    environment:
-      MONGO_INITDB_DATABASE: crypto_db
-
   redis:
     image: redis:7-alpine
     container_name: crypto-redis
@@ -23,6 +22,32 @@ services:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
 
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nayft-backend:latest
+    container_name: nayft-backend
+    ports:
+      - "4001:4001"
+    environment:
+      REDIS_URL: redis://redis:6379
+      # OHLCV CSV archival (set on host via .env). Maps to named volume below.
+      OHLCV_ARCHIVE_ROOT: /app/data
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      # Persist OHLCV CSV archives. On the VM, replace with a bind mount, e.g.
+      #   - /home/ubuntu/ohlcv_data:/app/data
+      # and ensure that directory is writable by the container user (uid 1000 / node).
+      - /home/ubuntu/ohlcv_data:/app/data
+
 volumes:
-  mongo_data:
   redis_data:
+  ohlcv_archive:
