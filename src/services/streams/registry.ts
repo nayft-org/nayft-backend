@@ -23,9 +23,17 @@ function routeEvent(event: NormalizedStreamEvent): void {
 
 export function startStreams(): void {
   const klineSymbols = streamConfig.kline.symbols;
-  const aggTradeSymbols = streamConfig.aggTrade.symbols;
-  const symbols = [...new Set([...klineSymbols, ...aggTradeSymbols])];
-  const streamTypes: ('kline' | 'aggTrade')[] = ['kline', 'aggTrade'];
+  let aggTradeSymbols = streamConfig.aggTrade.symbols;
+  const maxAgg = streamConfig.aggTrade.maxSymbols;
+  if (Number.isFinite(maxAgg) && maxAgg > 0 && aggTradeSymbols.length > maxAgg) {
+    aggTradeSymbols = aggTradeSymbols.slice(0, maxAgg);
+  }
+  const symbols = streamConfig.aggTrade.enabled
+    ? [...new Set([...klineSymbols, ...aggTradeSymbols])]
+    : [...klineSymbols];
+  const streamTypes: ('kline' | 'aggTrade')[] = streamConfig.aggTrade.enabled
+    ? ['kline', 'aggTrade']
+    : ['kline'];
   const exchanges = streamConfig.exchanges;
 
   for (const exchangeId of exchanges) {

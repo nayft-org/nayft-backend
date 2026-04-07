@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { redis } from '../../config/redis';
 import { getHttpPerformanceSnapshot } from '../../utils/httpPerformanceStats';
+import { getStreamMetricsSnapshot } from '../../observability/streamMetrics';
 
 export const metricsController = {
   getMetrics: async (_req: Request, res: Response): Promise<void> => {
@@ -62,6 +63,7 @@ export const metricsController = {
       };
 
       const httpPerf = getHttpPerformanceSnapshot();
+      const stream = getStreamMetricsSnapshot();
 
       res.json({
         success: true,
@@ -71,6 +73,7 @@ export const metricsController = {
           redis: redisStats,
           process: processInfo,
           http: httpPerf,
+          stream,
           performance: {
             targets: {
               p50ResponseTime: '<50ms',
