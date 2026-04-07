@@ -17,3 +17,7 @@ Live prices and chart ingestion use **two processes** and **Redis**:
 - `KLINE_INGEST_MAX_BUFFER`, `AGGTRADE_INGEST_MAX_BUFFER` — backpressure caps (default `50000`).
 
 **Multi-instance API:** Each instance updates the same Redis `stream:price:symref` hash; the worker polls it and merges with `TICKER_SYMBOLS` baseline.
+
+## Docker Compose
+
+`docker compose up -d --build` starts Redis, MongoDB, **`backend`** (HTTP + `/ws`), and **`stream-worker`** (`node dist/workers/streamIngestion.js`). Both app services use image `nayft-backend:local` built from the `backend` service. The worker has no exposed ports; it needs the same `REDIS_URL` and `MONGO_URI` as the API (set in `environment` / `.env` for container DNS: `redis`, `mongodb`). Run a single `stream-worker` per deployment unless symbols are sharded intentionally.
