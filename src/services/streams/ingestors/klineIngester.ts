@@ -1,12 +1,24 @@
 import type { NormalizedKlineEvent, NormalizedStreamEvent } from '../types';
 import { OhlcvKline } from '../../../modules/chart/model';
 import { streamConfig } from '../../../config/streamConfig';
+import { streamMetrics } from '../../../observability/streamMetrics';
 
 const FLUSH_INTERVAL_MS = 1500;
 const BATCH_SIZE = 300;
+const MAX_BUFFER = parseInt(process.env.KLINE_INGEST_MAX_BUFFER || '50000', 10);
+const MAX_MONGO_REQUEUE = parseInt(process.env.KLINE_MONGO_MAX_REQUEUE || '3', 10);
 
 const buffer: NormalizedKlineEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let mongoRequeueStreak = 0;
+
+function capBuffer(): void {
+  streamMetrics.klineBufferHighWater = Math.max(streamMetrics.klineBufferHighWater, buffer.length);
+  while (buffer.length > MAX_BUFFER) {
+    buffer.shift();
+    streamMetrics.klineDroppedEventsTotal += 1;
+  }
+}
 
 function flush(): void {
   if (buffer.length === 0) return;
@@ -41,10 +53,21 @@ function flush(): void {
 
   if (ops.length === 0) return;
 
-  OhlcvKline.bulkWrite(ops).catch((err) => {
-    console.error('[KlineIngester] Bulk write error:', err);
-    buffer.unshift(...toWrite);
-  });
+  void OhlcvKline.bulkWrite(ops)
+    .then(() => {
+      mongoRequeueStreak = 0;
+    })
+    .catch((err) => {
+      console.error('[KlineIngester] Bulk write error:', err);
+      if (mongoRequeueStreak >= MAX_MONGO_REQUEUE) {
+        streamMetrics.klineMongoRetryExhaustedTotal += toWrite.length;
+        mongoRequeueStreak = 0;
+        return;
+      }
+      mongoRequeueStreak++;
+      buffer.unshift(...toWrite);
+      capBuffer();
+    });
 }
 
 function scheduleFlush(): void {
@@ -59,6 +82,7 @@ function scheduleFlush(): void {
 export function ingestKlineEvent(event: NormalizedStreamEvent): void {
   if (event.type !== 'kline') return;
   buffer.push(event);
+  capBuffer();
   if (buffer.length >= BATCH_SIZE) {
     if (flushTimer) {
       clearTimeout(flushTimer);

@@ -4,9 +4,6 @@ import app from './app';
 import { connectDatabase } from './config/database';
 import { config } from './config/env';
 import { attachWebSocketServer } from './websocket/server';
-import { binanceWebSocket } from './services/binanceWebSocket';
-import { registerAdapter, startStreams } from './services/streams/registry';
-import { BinanceKlineAdapter } from './services/streams/adapters';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
@@ -27,14 +24,9 @@ const startServer = async (): Promise<void> => {
     // Start event queue worker (non-blocking)
     setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
 
-    // Register and start kline stream adapters
-    registerAdapter('binance', new BinanceKlineAdapter());
-    startStreams();
-
-    // Create HTTP server
+    // Create HTTP server (Binance ingestion runs in `npm run worker:streams`)
     const httpServer = http.createServer(app);
     attachWebSocketServer(httpServer);
-    binanceWebSocket.start();
     // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
     // Schedule KlineDownsampler (cascading aggregation)
