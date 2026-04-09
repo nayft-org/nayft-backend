@@ -19,6 +19,25 @@ export const userRepository = {
       .lean();
   },
 
+  getPreferredLanguage: async (userId: string): Promise<string | null> => {
+    const doc = await User.findById(userId).select('preferredLanguage').lean();
+    if (!doc) return null;
+    const raw = (doc as { preferredLanguage?: string | null }).preferredLanguage;
+    return raw === undefined || raw === null ? null : raw;
+  },
+
+  setPreferredLanguage: async (userId: string, language: string): Promise<IUser> => {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { preferredLanguage: language } },
+      { new: true }
+    );
+    if (!user) {
+      throw new Error('User not found');
+    }
+    return user;
+  },
+
   updateFollowingCoins: async (userId: string, coinId: string, add: boolean): Promise<IUser> => {
     const user = await User.findById(userId);
     if (!user) {

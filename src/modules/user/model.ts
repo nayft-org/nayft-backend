@@ -28,6 +28,11 @@ const userSchema = new Schema<IUser>(
       type: Number,
       default: 0,
     },
+    preferredLanguage: {
+      type: String,
+      required: false,
+      default: undefined,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

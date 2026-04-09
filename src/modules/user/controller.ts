@@ -4,6 +4,29 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 
 export const userController = {
+  getPreferences: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const data = await userService.getPreferences(req.userId!);
+      sendSuccess(res, data);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  updatePreferences: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { preferredLanguage } = req.body as { preferredLanguage?: string };
+      if (typeof preferredLanguage !== 'string' || preferredLanguage.trim() === '') {
+        sendError(res, 'preferredLanguage is required', 400);
+        return;
+      }
+      const data = await userService.updatePreferences(req.userId!, preferredLanguage.trim());
+      sendSuccess(res, data);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
   toggleFollowCoin: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { coinId } = req.params;
