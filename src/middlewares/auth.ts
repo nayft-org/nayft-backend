@@ -1,35 +1,35 @@
 import { Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/env';
 import { AuthRequest } from '../types';
 import { sendError } from '../utils/response';
+import { extractBearerToken, verifyAccessToken } from './jwtPayload';
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-      sendError(res, 'Authentication token required', 401);
-      return;
-    }
-
-    const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
-    req.userId = decoded.userId;
-    next();
-  } catch (error) {
-    sendError(res, 'Invalid or expired token', 401);
+  const token = extractBearerToken(req.headers.authorization);
+  if (!token) {
+    sendError(res, 'Authentication token required', 401);
+    return;
   }
+  const decoded = verifyAccessToken(token);
+  if (!decoded) {
+    sendError(res, 'Invalid or expired token', 401);
+    return;
+  }
+  req.userId = decoded.userId;
+  next();
 };
 
+/**
+ * Sets userId from JWT when valid. Prefer global optionalJwtClaims decode to avoid duplicate verify.
+ */
 export const optionalAuth = (req: AuthRequest, _res: Response, next: NextFunction): void => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (token) {
-      const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+  if (req.jwtUserId) {
+    req.userId = req.jwtUserId;
+  } else {
+    const token = extractBearerToken(req.headers.authorization);
+    const decoded = verifyAccessToken(token);
+    if (decoded) {
       req.userId = decoded.userId;
     }
-  } catch {
-    // Token invalid — continue as unauthenticated
   }
   next();
 };

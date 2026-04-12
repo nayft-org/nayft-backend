@@ -2,6 +2,16 @@ import path from 'path';
 import fs from 'fs';
 import { registerFeature } from './feature-system/featureRegistry';
 
+async function registerI18nFeature(): Promise<void> {
+  await registerFeature({
+    key: 'multi_language',
+    name: 'Multi-language',
+    module: 'i18n',
+    description: 'Backend-driven translation for news, search, and comments',
+    controllable: true,
+  });
+}
+
 const MODULES_DIR = path.join(__dirname, '..', 'modules');
 
 /**
@@ -46,4 +56,6 @@ export async function bootstrapFeatures(): Promise<void> {
     description: 'Core system events (API errors, etc.)',
     critical: true,
   });
+
+  await registerI18nFeature();
 }

@@ -6,6 +6,11 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { eventService } from '../../core/event-system';
 import { withResponseCache, buildNewsListKey, buildNewsFollowingKey } from '../../utils/responseCache';
+import {
+  translateNewsArticleDtos,
+  translateSingleNewsArticle,
+  type TranslatableNewsArticle,
+} from '../../i18n/translateNews';
 
 export const newsController = {
   getAllNews: async (req: AuthRequest, res: Response): Promise<void> => {
@@ -14,7 +19,8 @@ export const newsController = {
       const coinid = req.query.coinid as string | undefined;
 
       if (filterby === 'coin' && coinid?.trim()) {
-        const news = await coinService.getCoinNews(coinid.trim());
+        const newsEn = await coinService.getCoinNews(coinid.trim());
+        const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
         sendSuccess(res, { news });
         return;
       }
@@ -30,12 +36,20 @@ export const newsController = {
         : [];
       const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
       const userScope = req.userId ?? 'anon';
-      const { data: news } = await withResponseCache({
+      const { data: newsEn } = await withResponseCache({
         cacheKey: buildNewsListKey({ userScope, page, limit, categoriesSig }),
         ttlSeconds: 45,
         metricsKind: 'news:list',
         fetcher: () => newsService.getAllNews(page, limit, categories, req.userId),
       });
+      // #region agent log
+      {
+        const _dbg = { sessionId: '10418d', location: 'news/controller.ts:getAllNews', message: 'before translateNewsArticleDtos', data: { resolvedLanguage: req.resolvedLanguage, languageSource: req.languageSource, count: newsEn?.length ?? 0, title0: typeof newsEn?.[0]?.title === 'string' ? newsEn[0].title.slice(0, 50) : null }, timestamp: Date.now(), hypothesisId: 'H-B' };
+        console.log('[i18n-debug]', _dbg);
+        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
+      }
+      // #endregion
+      const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -57,7 +71,7 @@ export const newsController = {
             .filter(Boolean)
         : [];
       const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
-      const { data: news } = await withResponseCache({
+      const { data: newsEn } = await withResponseCache({
         cacheKey: buildNewsFollowingKey({
           userId: req.userId!,
           page,
@@ -69,6 +83,7 @@ export const newsController = {
         metricsKind: 'news:following',
         fetcher: () => newsService.getFollowingNews(req.userId!, page, limit, categories, mode),
       });
+      const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -78,7 +93,8 @@ export const newsController = {
   getNewsDetail: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { newsId } = req.params;
-      const news = await newsService.getNewsDetail(newsId, req.userId);
+      const newsEn = await newsService.getNewsDetail(newsId, req.userId);
+      const news = await translateSingleNewsArticle(newsEn as TranslatableNewsArticle, req.resolvedLanguage);
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 404);

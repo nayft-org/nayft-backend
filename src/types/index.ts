@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import { Document } from 'mongoose';
+export type LanguageSource = 'header' | 'query' | 'jwt' | 'default';
 
 export interface IUser extends Document {
   email: string;

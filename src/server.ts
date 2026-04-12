@@ -10,6 +10,7 @@ import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
+import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -18,6 +19,9 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+
+    await refreshCoinDictionary().catch((err) => console.error('[CoinDictionary] initial load failed', err));
+    startCoinDictionaryRefresh();
 
     // Auto-register features from modules
     await bootstrapFeatures();

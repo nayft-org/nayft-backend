@@ -1,6 +1,11 @@
 import { cacheHelpers } from '../config/redis';
 import { recordCacheEvent } from './httpPerformanceStats';
 
+/**
+ * Entity caches (news:list, news:following, …) store **English-only** DTOs.
+ * Per-language strings live in the translation Redis namespace (`i18n:p…`), not here.
+ */
+
 /** Single-flight map: one DB compute per key while in flight */
 const inflight = new Map<string, Promise<unknown>>();
 

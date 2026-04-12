@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { commentService } from './service';
+import { translateCommentDtos } from '../../i18n/translateComments';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 
@@ -9,7 +10,15 @@ export const commentController = {
       const { newsId } = req.params;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const comments = await commentService.getComments(newsId, page, limit);
+      const commentsEn = await commentService.getComments(newsId, page, limit);
+      const comments = await translateCommentDtos(commentsEn, req.resolvedLanguage);
+      // #region agent log
+      {
+        const _dbg = { sessionId: '10418d', location: 'comment/controller.ts:getComments', message: 'comments translated for response', data: { newsId, resolvedLanguage: req.resolvedLanguage, count: comments.length }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
+        console.log('[i18n-debug]', _dbg);
+        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
+      }
+      // #endregion
       sendSuccess(res, { comments });
     } catch (error: any) {
       sendError(res, error.message, 500);
@@ -21,7 +30,8 @@ export const commentController = {
       const { commentId } = req.params;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const replies = await commentService.getReplies(commentId, page, limit);
+      const repliesEn = await commentService.getReplies(commentId, page, limit);
+      const replies = await translateCommentDtos(repliesEn, req.resolvedLanguage);
       sendSuccess(res, { replies });
     } catch (error: any) {
       sendError(res, error.message, 500);

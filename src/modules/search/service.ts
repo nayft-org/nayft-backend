@@ -47,6 +47,7 @@ const DEFAULT_SEGMENTS: Exclude<SearchSegment, 'all'>[] = [
   'portfolioAssets',
 ];
 
+/** Unified response cache is English-only; per-language strings are applied in searchController via translateUnifiedSearchResponse. */
 const CACHE_TTL_SECONDS = 30;
 const MAX_QUERY_LEN = 64;
 const MIN_QUERY_LEN = 2;

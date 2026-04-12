@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { sendError, sendSuccess } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { searchService, SearchSegment } from './service';
+import { translateUnifiedSearchResponse } from '../../i18n/translateSearch';
 
 const MIN_QUERY_LEN = 2;
 const MAX_QUERY_LEN = 64;
@@ -61,7 +62,8 @@ export const searchController = {
         userId,
       });
 
-      sendSuccess(res, result);
+      const out = await translateUnifiedSearchResponse(result, req.resolvedLanguage);
+      sendSuccess(res, out);
     } catch (error: any) {
       sendError(res, error.message || 'Search failed', 500);
     }
