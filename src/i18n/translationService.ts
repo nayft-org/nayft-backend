@@ -32,6 +32,24 @@ function placeholderFactory(): (i: number) => string {
   return (i: number) => `[[C${i}]]`;
 }
 
+/**
+ * Free MT often rewrites [[C0]] → [[C1]] or drops markers. `unmaskCoinTerms` requires [[C0]]..[[C(n-1)]]
+ * matching `originals`. Re-map each [[C\d+]] in provider output (left-to-right) to ph(0)..ph(n-1).
+ */
+function realignProviderPlaceholders(
+  maskedInput: string,
+  providerOut: string,
+  placeholder: (i: number) => string
+): string {
+  const n = (maskedInput.match(/\[\[C\d+\]\]/g) || []).length;
+  if (n === 0) return providerOut;
+  let k = 0;
+  return providerOut.replace(/\[\[C\d+\]\]/g, () => {
+    if (k < n) return placeholder(k++);
+    return placeholder(n - 1);
+  });
+}
+
 /** Google allows many q[] per request; keep chunks small for URL/body limits on large feeds. */
 const GOOGLE_TRANSLATE_CHUNK = 128;
 
@@ -81,6 +99,18 @@ async function googleTranslateV2Batch(
 const MYMEMORY_MAX_LEN = 450;
 const MYMEMORY_CONCURRENCY = 6;
 
+/** Only treat explicit HTTP-style error codes as failure; success responses vary (200, "200", omitted, ""). */
+function myMemoryStatusIsError(status: unknown): boolean {
+  if (status === undefined || status === null || status === '') return false;
+  const n = typeof status === 'number' ? status : Number(String(status).trim());
+  if (Number.isFinite(n) && n >= 400) return true;
+  return false;
+}
+
+function isMyMemoryGarbageTranslation(out: string): boolean {
+  return /MYMEMORY\s+(WARNING|ERROR)/i.test(out);
+}
+
 async function myMemoryTranslateOne(text: string, target: SupportedLanguage): Promise<string> {
   if (!text || target === 'en') return text;
   const q = text.length > MYMEMORY_MAX_LEN ? text.slice(0, MYMEMORY_MAX_LEN) : text;
@@ -90,10 +120,15 @@ async function myMemoryTranslateOne(text: string, target: SupportedLanguage): Pr
     const res = await fetch(url);
     const j = (await res.json()) as {
       responseData?: { translatedText?: string };
-      responseStatus?: number;
+      responseStatus?: number | string;
     };
+    if (myMemoryStatusIsError(j.responseStatus)) {
+      return text;
+    }
     const out = j.responseData?.translatedText;
-    if (typeof out === 'string' && out.length > 0) return out;
+    if (typeof out === 'string' && out.length > 0 && !isMyMemoryGarbageTranslation(out)) {
+      return out;
+    }
   } catch {
     // fall through
   }
@@ -288,9 +323,10 @@ export async function translateBatch(
       const maskedPieces = toTranslate.map((text) => maskCoinTerms(text, ph));
       const batchIn = maskedPieces.map((m) => m.masked);
       const providerOut = await callTranslationProvider(batchIn, lang);
-      translatedPieces = providerOut.map((out, i) =>
-        unmaskCoinTerms(out, maskedPieces[i].originals, ph)
-      );
+      translatedPieces = providerOut.map((out, i) => {
+        const aligned = realignProviderPlaceholders(batchIn[i], out, ph);
+        return unmaskCoinTerms(aligned, maskedPieces[i].originals, ph);
+      });
     } catch {
       recordTranslationEvent('provider_errors', misses.length);
       translatedPieces = toTranslate;
@@ -298,13 +334,18 @@ export async function translateBatch(
 
     for (let i = 0; i < misses.length; i++) {
       const h = misses[i];
-      const val = translatedPieces[i] ?? toTranslate[i];
+      const src = toTranslate[i];
+      const val = translatedPieces[i] ?? src;
       hashToTranslated.set(h, val);
       const redisKey = buildTranslationRedisKey({ dictVer, contentHash: h, lang });
-      try {
-        await cacheHelpers.set(redisKey, { t: val, v: 1 }, ttlSeconds);
-      } catch {
-        // ignore
+      // Do not persist unchanged source (quota / failed MT); successful translations differ from English `src`.
+      const skipRedisCache = val === src && src.length > 0;
+      if (!skipRedisCache) {
+        try {
+          await cacheHelpers.set(redisKey, { t: val, v: 1 }, ttlSeconds);
+        } catch {
+          // ignore
+        }
       }
       recordTranslationEvent('chars_sent', val.length);
     }
