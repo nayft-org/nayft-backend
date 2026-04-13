@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-CREATE_COLLECTIONS_URL="${CREATE_COLLECTIONS_URL:-http://127.0.0.1:4001/api/coins/create-collections}"
+CREATE_COLLECTIONS_URL="${CREATE_COLLECTIONS_URL:-http://192.168.1.5:4001/api/coins/create-collections}"
 
 echo "[$(date -Iseconds)] POST ${CREATE_COLLECTIONS_URL}"
 

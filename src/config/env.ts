@@ -54,5 +54,20 @@ export const config = {
   })(),
   /** Use batched DB path for GET /api/charts/market-trend-v2 when true (same numeric output as v1). */
   marketTrendV2Enabled: (process.env.MARKET_TREND_V2_ENABLED || 'true').toLowerCase() === 'true',
+  /** Google Cloud Translation API v2 — enables backend news/search/comment translation when set. */
+  googleTranslateApiKey: (process.env.GOOGLE_TRANSLATE_API_KEY || '').trim(),
+  /**
+   * `google` (default when API key set), `mymemory`, or `noop` to force English passthrough for testing.
+   */
+  translationProvider: (process.env.TRANSLATION_PROVIDER || '').trim().toLowerCase(),
+  /**
+   * When no Google key: allow MyMemory public API (dev-friendly). Disable in prod with
+   * `TRANSLATION_DISABLE_MYMEMORY=true` or enable in prod with `TRANSLATION_FALLBACK_MYMEMORY=true`.
+   */
+  translationAllowMymemoryFallback: (() => {
+    if (process.env.TRANSLATION_DISABLE_MYMEMORY === 'true') return false;
+    if (process.env.TRANSLATION_FALLBACK_MYMEMORY === 'true') return true;
+    return (process.env.NODE_ENV || 'development') !== 'production';
+  })(),
 };
 

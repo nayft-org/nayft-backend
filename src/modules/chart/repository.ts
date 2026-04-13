@@ -1,6 +1,14 @@
 import { OhlcvKline, MarketTrade } from './model';
 import type { KlineInterval } from './model';
 
+const INTERVAL_MS: Record<KlineInterval, number> = {
+  '1m': 60 * 1000,
+  '5m': 5 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+  '1w': 7 * 24 * 60 * 60 * 1000,
+};
+
 export interface KlineRecord {
   openTime: Date;
   open: number;
@@ -139,6 +147,67 @@ export const chartRepository = {
     }));
   },
 
+  /**
+   * Build OHLCV buckets from aggTrades when stored klines are missing (same logic as chartService).
+   */
+  async aggregateKlinesFromTrades(params: {
+    exchange: string;
+    symbol: string;
+    interval: KlineInterval;
+    from: Date;
+    to: Date;
+    limit: number;
+  }): Promise<KlineRecord[]> {
+    const { exchange, symbol, interval, from, to, limit } = params;
+    const trades = await this.findTrades({
+      exchange,
+      symbol,
+      from,
+      to,
+      limit: Math.min(limit * 100, 20000),
+      dataType: 'aggTrade',
+      sortAsc: true,
+    });
+
+    if (trades.length === 0) return [];
+
+    const bucketMs = INTERVAL_MS[interval];
+    const buckets = new Map<number, { open: number; high: number; low: number; close: number; volume: number }>();
+
+    for (const t of trades) {
+      const time = typeof t.time === 'string' ? new Date(t.time).getTime() : t.time.getTime();
+      const bucketStart = Math.floor(time / bucketMs) * bucketMs;
+
+      const existing = buckets.get(bucketStart);
+      if (existing) {
+        existing.high = Math.max(existing.high, t.price);
+        existing.low = Math.min(existing.low, t.price);
+        existing.close = t.price;
+        existing.volume += t.quantity;
+      } else {
+        buckets.set(bucketStart, {
+          open: t.price,
+          high: t.price,
+          low: t.price,
+          close: t.price,
+          volume: t.quantity,
+        });
+      }
+    }
+
+    return Array.from(buckets.entries())
+      .sort((a, b) => a[0] - b[0])
+      .slice(-limit)
+      .map(([openTime, ohlcv]) => ({
+        openTime: new Date(openTime),
+        open: ohlcv.open,
+        high: ohlcv.high,
+        low: ohlcv.low,
+        close: ohlcv.close,
+        volume: ohlcv.volume,
+      }));
+  },
+
   async findMarketTrend(params: {
     exchange: string;
     interval: KlineInterval;
@@ -152,7 +221,7 @@ export const chartRepository = {
 
     const klineSets = await Promise.all(
       constituents.map(async (coin) => {
-        const docs = await OhlcvKline.find({
+        const raw = await OhlcvKline.find({
           'meta.exchange': exchange,
           'meta.symbol': coin.symbol.toUpperCase(),
           'meta.interval': interval,
@@ -162,10 +231,23 @@ export const chartRepository = {
           .limit(limit)
           .lean();
 
+        let docs: KlineDoc[] = raw.reverse().map((d) => ({ openTime: d.openTime, close: d.close }));
+        if (docs.length < 2) {
+          const fromTrades = await this.aggregateKlinesFromTrades({
+            exchange,
+            symbol: coin.symbol,
+            interval,
+            from,
+            to,
+            limit,
+          });
+          docs = fromTrades.map((k) => ({ openTime: k.openTime, close: k.close }));
+        }
+
         return {
           symbol: coin.symbol,
           marketCap: coin.marketCap,
-          docs: docs.reverse(),
+          docs,
         };
       })
     );
@@ -216,15 +298,35 @@ export const chartRepository = {
       },
     ])) as Array<{ symbol: string; docs: KlineDoc[] }>;
 
-    const klineSets = grouped.map((g) => {
-      const sym = String(g.symbol).toUpperCase();
-      const docs = (g.docs as KlineDoc[]).slice().reverse();
-      return {
-        symbol: sym,
-        marketCap: capBySymbol.get(sym) ?? 0,
-        docs,
-      };
-    });
+    const groupedBySym = new Map(
+      grouped.map((g) => [String(g.symbol).toUpperCase(), g] as const)
+    );
+
+    const klineSets = await Promise.all(
+      constituents.map(async (c) => {
+        const sym = c.symbol.toUpperCase();
+        const g = groupedBySym.get(sym);
+        let docs: KlineDoc[] = g
+          ? (g.docs as KlineDoc[]).slice().reverse()
+          : [];
+        if (docs.length < 2) {
+          const fromTrades = await this.aggregateKlinesFromTrades({
+            exchange,
+            symbol: c.symbol,
+            interval,
+            from,
+            to,
+            limit,
+          });
+          docs = fromTrades.map((k) => ({ openTime: k.openTime, close: k.close }));
+        }
+        return {
+          symbol: sym,
+          marketCap: capBySymbol.get(sym) ?? 0,
+          docs,
+        };
+      })
+    );
 
     return computeMarketTrendPoints(constituents, klineSets);
   },

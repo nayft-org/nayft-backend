@@ -5,6 +5,8 @@ import { config } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
 import { notFound } from './middlewares/notFound';
 import { performanceLogMiddleware } from './middleware/performanceLog';
+import { optionalJwtClaimsMiddleware } from './i18n/optionalJwtClaims';
+import { resolveLanguageMiddleware } from './i18n/resolveLanguage';
 
 // Routes
 import authRoutes from './modules/auth/routes';
@@ -39,7 +41,7 @@ const corsOptions = {
     : config.frontendUrls,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'Accept-Language'],
 };
 
 // Middleware
@@ -51,6 +53,10 @@ app.use(express.json({
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 app.use(express.urlencoded({ extended: true }));
+
+// i18n: decode JWT claims without 401, then resolve target language (see production translation plan)
+app.use(optionalJwtClaimsMiddleware);
+app.use(resolveLanguageMiddleware);
 
 // Health check
 app.get('/health', (_req, res) => {

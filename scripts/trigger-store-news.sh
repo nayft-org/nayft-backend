@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-STORE_NEWS_URL="${STORE_NEWS_URL:-http://127.0.0.1:4001/api/news/store-news}"
+STORE_NEWS_URL="${STORE_NEWS_URL:-http://192.168.1.5:4001/api/news/store-news}"
 
 echo "[$(date -Iseconds)] POST ${STORE_NEWS_URL}"
 

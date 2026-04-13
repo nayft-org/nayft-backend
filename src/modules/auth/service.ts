@@ -1,10 +1,9 @@
 import bcrypt from 'bcryptjs';
-import jwt, { type SignOptions } from 'jsonwebtoken';
-import { config } from '../../config/env';
 import { authRepository } from './repository';
 import { SignupDto, LoginDto } from './dto';
 import { IUser } from '../../types';
 import { eventService } from '../../core/event-system';
+import { signAccessToken } from '../../middlewares/jwtPayload';
 
 export const authService = {
   signup: async (signupDto: SignupDto): Promise<{ user: IUser; token: string }> => {
@@ -31,15 +30,13 @@ export const authService = {
       username,
     });
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id.toString() },
-      config.jwtSecret,
-      { expiresIn: config.jwtExpiresIn } as SignOptions
-    );
-
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;
+
+    const token = signAccessToken({
+      userId: user._id.toString(),
+      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
+    });
 
     eventService.emitEvent({
       featureKey: 'auth',
@@ -66,15 +63,13 @@ export const authService = {
       throw new Error('Invalid email or password');
     }
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id.toString() },
-      config.jwtSecret,
-      { expiresIn: config.jwtExpiresIn } as SignOptions
-    );
-
     const userObj = user.toObject();
     delete (userObj as any).passwordHash;
+
+    const token = signAccessToken({
+      userId: user._id.toString(),
+      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
+    });
 
     eventService.emitEvent({
       featureKey: 'auth',
@@ -92,6 +87,19 @@ export const authService = {
       throw new Error('User not found');
     }
     return user;
+  },
+
+  /** New JWT after preference update — embeds latest preferredLanguage without DB read per request. */
+  issueAccessTokenForUser: async (userId: string): Promise<string> => {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    const u = user as IUser;
+    return signAccessToken({
+      userId: user._id.toString(),
+      preferredLanguage: u.preferredLanguage ?? null,
+    });
   },
 };
 

@@ -1,7 +1,26 @@
 import { userRepository } from './repository';
 import { followService } from '../follow/service';
+import { isSupportedLanguage } from './supportedLanguages';
+import { authService } from '../auth/service';
 
 export const userService = {
+  getPreferences: async (userId: string): Promise<{ preferredLanguage: string | null }> => {
+    const preferredLanguage = await userRepository.getPreferredLanguage(userId);
+    return { preferredLanguage };
+  },
+
+  updatePreferences: async (
+    userId: string,
+    preferredLanguage: string
+  ): Promise<{ preferredLanguage: string; token: string }> => {
+    if (!isSupportedLanguage(preferredLanguage)) {
+      throw new Error('Unsupported language');
+    }
+    await userRepository.setPreferredLanguage(userId, preferredLanguage);
+    const token = await authService.issueAccessTokenForUser(userId);
+    return { preferredLanguage, token };
+  },
+
   toggleFollowCoin: async (userId: string, coinId: string) => {
     const isFollowing = await followService.isFollowingCoin(userId, coinId);
     if (isFollowing) {

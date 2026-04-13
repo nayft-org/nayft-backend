@@ -4,16 +4,24 @@ import app from './app';
 import { connectDatabase } from './config/database';
 import { config } from './config/env';
 import { attachWebSocketServer } from './websocket/server';
+import { startBinanceTickerIngestion } from './services/binanceTickerIngestion';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
+import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
+
+/** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
+let stopInlineTickerRef: (() => void) | null = null;
 
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+
+    await refreshCoinDictionary().catch((err) => console.error('[CoinDictionary] initial load failed', err));
+    startCoinDictionaryRefresh();
 
     // Auto-register features from modules
     await bootstrapFeatures();
@@ -24,9 +32,22 @@ const startServer = async (): Promise<void> => {
     // Start event queue worker (non-blocking)
     setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
 
-    // Create HTTP server (Binance ingestion runs in `npm run worker:streams`)
+    // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
+    // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.
+    // When running `dev:worker:streams` separately, set DISABLE_INLINE_TICKER_INGESTION=true to avoid duplicate Binance connections.
     const httpServer = http.createServer(app);
     attachWebSocketServer(httpServer);
+    if (process.env.DISABLE_INLINE_TICKER_INGESTION === 'true') {
+      stopInlineTickerRef = null;
+      console.log(
+        '[Server] Inline Binance ticker disabled (DISABLE_INLINE_TICKER_INGESTION); ensure stream worker is running.'
+      );
+    } else {
+      stopInlineTickerRef = startBinanceTickerIngestion();
+      console.log(
+        '[Server] Inline Binance ticker ingestion started (set DISABLE_INLINE_TICKER_INGESTION=true if using npm run dev:worker:streams)'
+      );
+    }
     // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
     // Schedule KlineDownsampler (cascading aggregation)
@@ -49,6 +70,22 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 };
+
+function shutdownInlineTicker(): void {
+  if (stopInlineTickerRef) {
+    stopInlineTickerRef();
+    stopInlineTickerRef = null;
+  }
+}
+
+process.on('SIGINT', () => {
+  shutdownInlineTicker();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  shutdownInlineTicker();
+  process.exit(0);
+});
 
 startServer();
 
