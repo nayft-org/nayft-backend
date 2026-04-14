@@ -40,6 +40,7 @@ export const marketController = {
     }
   },
 
+  // Primary Explore list uses GET /market/snapshot. Kept for degraded / snapshot-503 fallback and older clients.
   getTrending: async (_req: Request, res: Response): Promise<void> => {
     try {
       const coins = await marketService.getTrending();
