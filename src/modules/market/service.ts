@@ -1,6 +1,7 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { marketRepository } from './repository';
 import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
+import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 import { Coin } from '../coin/model';
 import { cacheHelpers } from '../../config/redis';
 
@@ -40,6 +41,26 @@ const mapCoinMarketCapData = (cmcData: any): any[] => {
   }));
 };
 
+/** Enrich a list of coins with image URLs from labeled_active_coins, keyed by symbol.
+ *  labeled_active_coins stores symbols in lowercase (CoinGecko convention), so we
+ *  normalise both sides to lowercase for a fast $in index hit.
+ */
+async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(T & { image?: string })[]> {
+  if (coins.length === 0) return coins;
+  const lowerSymbols = coins.map((c) => c.symbol.toLowerCase());
+  const docs = await LabeledActiveCoin.find(
+    { symbol: { $in: lowerSymbols } },
+    { symbol: 1, image: 1, _id: 0 }
+  ).lean().exec() as { symbol: string; image?: string }[];
+
+  const imageMap = new Map<string, string>();
+  for (const doc of docs) {
+    if (doc.image) imageMap.set(doc.symbol.toLowerCase(), doc.image);
+  }
+
+  return coins.map((c) => ({ ...c, image: imageMap.get(c.symbol.toLowerCase()) }));
+}
+
 export const marketService = {
   getTrending: async () => {
     const cacheKey = 'market:trending';
@@ -77,13 +98,13 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      // Cache the result
-      await cacheHelpers.set(cacheKey, coins, MARKET_CACHE_TTL);
-      return coins;
+      const enriched = await attachImages(coins);
+      await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
+      return enriched;
     } catch (error: any) {
       // Fallback to database if API fails
       const dbCoins = await marketRepository.findTrending(20);
-      return dbCoins.map((coin) => ({
+      const mapped = dbCoins.map((coin) => ({
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -91,6 +112,7 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
+      return attachImages(mapped);
     }
   },
 
@@ -136,13 +158,13 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      // Cache the result
-      await cacheHelpers.set(cacheKey, gainers, MARKET_CACHE_TTL);
-      return gainers;
+      const enriched = await attachImages(gainers);
+      await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
+      return enriched;
     } catch (error: any) {
       // Fallback to database
       const dbCoins = await marketRepository.findTopGainers(10);
-      return dbCoins.map((coin) => ({
+      const mapped = dbCoins.map((coin) => ({
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -150,6 +172,7 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
+      return attachImages(mapped);
     }
   },
 
@@ -195,13 +218,13 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      // Cache the result
-      await cacheHelpers.set(cacheKey, losers, MARKET_CACHE_TTL);
-      return losers;
+      const enriched = await attachImages(losers);
+      await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
+      return enriched;
     } catch (error: any) {
       // Fallback to database
       const dbCoins = await marketRepository.findTopLosers(10);
-      return dbCoins.map((coin) => ({
+      const mapped = dbCoins.map((coin) => ({
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -209,6 +232,7 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
+      return attachImages(mapped);
     }
   },
 
