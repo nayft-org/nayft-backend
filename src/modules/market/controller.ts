@@ -1,8 +1,45 @@
 import { Request, Response } from 'express';
 import { marketService } from './service';
+import { snapshotService } from './snapshot.service';
 import { sendSuccess, sendError } from '../../utils/response';
 
+function normalizeIfNoneMatch(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (t.startsWith('W/')) return null;
+  if (t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1);
+  return t;
+}
+
 export const marketController = {
+  /**
+   * Phase 1: precomputed market snapshot (Redis only).
+   * Supports If-None-Match → 304 when etag matches.
+   */
+  getSnapshot: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const snapshot = await snapshotService.getSnapshot();
+      if (!snapshot) {
+        res.setHeader('Retry-After', '5');
+        sendError(res, 'Market snapshot not ready yet', 503);
+        return;
+      }
+
+      const clientEtag = normalizeIfNoneMatch(req.headers['if-none-match']);
+      if (clientEtag && clientEtag === snapshot.etag) {
+        res.status(304).end();
+        return;
+      }
+
+      res.setHeader('ETag', `"${snapshot.etag}"`);
+      res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=30');
+      sendSuccess(res, snapshot);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Snapshot error';
+      sendError(res, message, 500);
+    }
+  },
+
   getTrending: async (_req: Request, res: Response): Promise<void> => {
     try {
       const coins = await marketService.getTrending();

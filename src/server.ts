@@ -11,6 +11,7 @@ import { bootstrapFeatures } from './core/bootstrapFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
 import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
+import { runMarketSnapshotBuild } from './modules/market/snapshotBuilder';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -55,6 +56,16 @@ const startServer = async (): Promise<void> => {
       runKlineDownsampler().catch((err) => console.error('[KlineDownsampler]', err));
     });
     console.log(`📊 KlineDownsampler scheduled: ${streamConfig.kline.downsamplerCron}`);
+
+    const snapshotCron = process.env.MARKET_SNAPSHOT_CRON || '*/2 * * * *';
+    cron.schedule(snapshotCron, () => {
+      runMarketSnapshotBuild().catch((err) => console.error('[MarketSnapshot]', err));
+    });
+    console.log(`📸 Market snapshot builder scheduled: ${snapshotCron}`);
+
+    setImmediate(() => {
+      runMarketSnapshotBuild().catch((err) => console.error('[MarketSnapshot] initial build:', err));
+    });
 
     const port = config.port;
     const host = config.host;
