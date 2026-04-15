@@ -5,6 +5,7 @@ import { cacheHelpers } from '../config/redis';
 
 const client = axios.create({
   baseURL: config.cmcBaseUrl,
+  timeout: 15_000,
   headers: {
     'X-CMC_PRO_API_KEY': config.cmcApiKey,
   },
@@ -93,17 +94,26 @@ export const coinmarketcapApi = {
 
   getTrendingGainersLosers: async () => {
     const cacheKey = 'cmc:trending:gainers-losers';
-    
-    // Try cache first
+
     const cached = await cacheHelpers.get<CoinMarketCapResponse>(cacheKey);
     if (cached) return cached;
-    
-    // Fetch from API
-    const response = await client.get<CoinMarketCapResponse>('/v1/cryptocurrency/trending/gainers-losers');
-    
-    // Cache the response
-    await cacheHelpers.set(cacheKey, response.data, CMC_CACHE_TTL);
-    return response.data;
+
+    try {
+      const response = await client.get<CoinMarketCapResponse>(
+        '/v1/cryptocurrency/trending/gainers-losers'
+      );
+      await cacheHelpers.set(cacheKey, response.data, CMC_CACHE_TTL);
+      return response.data;
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      /** Hobby / Starter plans often omit this endpoint (403); listings/latest is more widely allowed. */
+      if (status === 403 || status === 401) {
+        const listings = await coinmarketcapApi.getListingsLatest(100, 1);
+        await cacheHelpers.set(cacheKey, listings, CMC_CACHE_TTL);
+        return listings;
+      }
+      throw e;
+    }
   },
 
   getCryptocurrencyInfo: async (id: string | string[]) => {

@@ -159,35 +159,45 @@ async function tryBtcProxyMarketTrend(params: {
 }): Promise<MarketTrendPoint[] | null> {
   const { exchange, interval, from, to, limit, latestTotalUsd } = params;
   if (latestTotalUsd <= 0) return null;
-  let klines: KlineRecord[] = await chartRepository.findKlines({
-    exchange,
-    symbol: 'BTC',
-    interval,
-    from,
-    to,
-    limit,
-  });
-  if (klines.length < 2) {
-    klines = await chartRepository.aggregateKlinesFromTrades({
-      exchange,
-      symbol: 'BTC',
-      interval,
-      from,
-      to,
-      limit,
-    });
-  }
-  if (klines.length < 2) {
-    const rest = await fetchBinanceBtcKlinesRest({
+
+  /** Prefer public Binance first — avoids multi-second Mongo timeouts on cold/offline DB. */
+  let klines: KlineRecord[] =
+    (await fetchBinanceBtcKlinesRest({
       interval,
       from,
       to,
       limit: Math.min(limit, 1000),
-    });
-    if (rest && rest.length >= 2) {
-      klines = rest;
+    })) ?? [];
+
+  if (klines.length < 2) {
+    try {
+      klines = await chartRepository.findKlines({
+        exchange,
+        symbol: 'BTC',
+        interval,
+        from,
+        to,
+        limit,
+      });
+    } catch {
+      klines = [];
     }
   }
+  if (klines.length < 2) {
+    try {
+      klines = await chartRepository.aggregateKlinesFromTrades({
+        exchange,
+        symbol: 'BTC',
+        interval,
+        from,
+        to,
+        limit,
+      });
+    } catch {
+      klines = [];
+    }
+  }
+
   if (klines.length < 2) return null;
   const lastClose = klines[klines.length - 1].close;
   if (!Number.isFinite(lastClose) || lastClose <= 0) return null;
@@ -195,6 +205,41 @@ async function tryBtcProxyMarketTrend(params: {
     openTime: k.openTime,
     value: latestTotalUsd * (k.close / lastClose),
   }));
+}
+
+/** BTC/USDT closes (USD) when cap series is unavailable; shows global market *shape* when DB+CMC fail. */
+async function tryBinanceBtcPriceOnlyTrend(params: {
+  interval: KlineInterval;
+  from: Date;
+  to: Date;
+  limit: number;
+}): Promise<{
+  points: MarketTrendPoint[];
+  latestValue: number;
+  absoluteChange24h: number;
+  relativeChange24h: number;
+} | null> {
+  const klines = await fetchBinanceBtcKlinesRest({
+    interval: params.interval,
+    from: params.from,
+    to: params.to,
+    limit: Math.min(params.limit, 1000),
+  });
+  if (!klines || klines.length < 2) return null;
+  const points: MarketTrendPoint[] = klines.map((k) => ({
+    openTime: k.openTime,
+    value: k.close,
+  }));
+  const first = klines[0].close;
+  const last = klines[klines.length - 1].close;
+  const absoluteChange24h = last - first;
+  const relativeChange24h = first > 0 ? (absoluteChange24h / first) * 100 : 0;
+  return {
+    points,
+    latestValue: last,
+    absoluteChange24h,
+    relativeChange24h,
+  };
 }
 
 /**
@@ -251,13 +296,30 @@ async function buildMarketTrendPayload(params: {
     ? new Date(params.from)
     : new Date(to.getTime() - bucketMs * (limit + Math.ceil(limit * 0.5)));
 
-  const activeCoins = await LabeledActiveCoin.find({
+  /** When Mongo is down or times out, fall back to stream symbols + CMC/Binance-only paths (no 500). */
+  let activeCoins: Array<{
+    symbol?: string;
+    market_cap?: number;
+    market_cap_change_percentage_24h?: number;
+    market_cap_rank?: number;
+  }> = [];
+  const labeledQuery = LabeledActiveCoin.find({
     symbol: { $exists: true, $ne: '' },
   })
     .select('symbol market_cap market_cap_change_percentage_24h market_cap_rank')
     .sort({ market_cap_rank: 1 })
     .limit(maxCoins)
+    .maxTimeMS(8000)
     .lean();
+  try {
+    activeCoins = await Promise.race([
+      labeledQuery,
+      new Promise<typeof activeCoins>((resolve) => setTimeout(() => resolve([]), 5000)),
+    ]);
+  } catch (err) {
+    console.warn('[buildMarketTrendPayload] LabeledActiveCoin unavailable; using non-DB fallbacks', err);
+    activeCoins = [];
+  }
 
   const fromDb = activeCoins
     .map((coin) => {
@@ -286,6 +348,13 @@ async function buildMarketTrendPayload(params: {
       }))
     : fromDb;
 
+  /** Only when DB gave no ranked coins — runs in parallel with aggregate kline query below. */
+  const binanceBtcTrendPromise = useFallbackConstituents
+    ? tryBinanceBtcPriceOnlyTrend({ interval, from, to, limit })
+    : Promise.resolve<
+        Awaited<ReturnType<typeof tryBinanceBtcPriceOnlyTrend>>
+      >(null);
+
   const findParams = {
     exchange,
     interval,
@@ -295,9 +364,20 @@ async function buildMarketTrendPayload(params: {
     constituents: constituents.map(({ symbol, marketCap }) => ({ symbol, marketCap })),
   };
 
-  const repoPoints = params.useBatchedKlines
-    ? await chartRepository.findMarketTrendBatched(findParams)
-    : await chartRepository.findMarketTrend(findParams);
+  const findTrendPromise = params.useBatchedKlines
+    ? chartRepository.findMarketTrendBatched(findParams)
+    : chartRepository.findMarketTrend(findParams);
+
+  let repoPoints: MarketTrendPoint[] = [];
+  try {
+    repoPoints = await Promise.race([
+      findTrendPromise,
+      new Promise<MarketTrendPoint[]>((resolve) => setTimeout(() => resolve([]), 8000)),
+    ]);
+  } catch (err) {
+    console.warn('[buildMarketTrendPayload] findMarketTrend* unavailable; using CMC/Binance fallbacks', err);
+    repoPoints = [];
+  }
 
   let latestValue = constituents.reduce((sum, coin) => sum + coin.marketCap, 0);
   let absoluteChange24h = 0;
@@ -327,6 +407,16 @@ async function buildMarketTrendPayload(params: {
   }
 
   let points = repoPoints;
+
+  if (points.length === 0 && useFallbackConstituents) {
+    const fastBtc = await binanceBtcTrendPromise;
+    if (fastBtc && fastBtc.points.length >= 2) {
+      points = fastBtc.points;
+      latestValue = fastBtc.latestValue;
+      absoluteChange24h = fastBtc.absoluteChange24h;
+      relativeChange24h = fastBtc.relativeChange24h;
+    }
+  }
 
   if (points.length === 0) {
     let cmcSnap: Awaited<ReturnType<typeof getCmcTotalMarketCap>> = null;
