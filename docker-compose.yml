@@ -49,7 +49,7 @@ services:
         max-file: "3"
 
   backend:
-    profiles: ["app"]
+    # profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -75,7 +75,7 @@ services:
 
   # Built from the same Dockerfile as backend; different CMD — Binance → Redis pub/sub + Mongo klines/trades.
   stream-worker:
-    profiles: ["app"]
+    # profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
