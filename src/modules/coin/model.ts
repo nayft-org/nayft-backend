@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { randomUUID } from 'crypto';
 import { ICoin } from '../../types';
 
 const coinSchema = new Schema<ICoin>(
@@ -7,6 +8,12 @@ const coinSchema = new Schema<ICoin>(
       type: String,
       required: true,
       unique: true,
+    },
+    internalCoinId: {
+      type: String,
+      required: true,
+      default: () => randomUUID(),
+      index: true,
     },
     symbol: {
       type: String,
@@ -39,6 +46,12 @@ const coinSchema = new Schema<ICoin>(
     nameLower: {
       type: String,
       index: true,
+    },
+    migratedAt: {
+      type: Date,
+    },
+    migrationVersion: {
+      type: String,
     },
   },
   {
@@ -80,6 +93,7 @@ coinSchema.pre('findOneAndUpdate', function(next) {
 
 coinSchema.index({ percentChange24h: -1 }, { background: true });
 coinSchema.index({ rank: 1 }, { background: true });
+coinSchema.index({ internalCoinId: 1 }, { unique: true, sparse: true, background: true });
 
-export const Coin = mongoose.model<ICoin>('Coin', coinSchema);
+export const Coin = mongoose.model<ICoin>('Coin', coinSchema, 'coin_registry');
 

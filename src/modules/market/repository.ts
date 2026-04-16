@@ -1,5 +1,8 @@
 import { Coin } from '../coin/model';
 import { ICoin } from '../../types';
+import { randomUUID } from 'crypto';
+import { config } from '../../config/env';
+import mongoose from 'mongoose';
 
 export const marketRepository = {
   findById: async (coinId: string): Promise<ICoin | null> => {
@@ -7,6 +10,7 @@ export const marketRepository = {
   },
 
   upsertCoin: async (coinData: {
+    internalCoinId?: string;
     coinId: string;
     symbol: string;
     name: string;
@@ -14,11 +18,37 @@ export const marketRepository = {
     price: number;
     percentChange24h: number;
   }): Promise<ICoin> => {
-    return Coin.findOneAndUpdate(
+    const updated = await Coin.findOneAndUpdate(
       { coinId: coinData.coinId },
-      { ...coinData, lastUpdated: new Date() },
-      { upsert: true, new: true }
+      {
+        ...coinData,
+        internalCoinId: coinData.internalCoinId ?? randomUUID(),
+        lastUpdated: new Date(),
+        migrationVersion: 'coin-domain-v1',
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    if (config.coinDataDualWriteEnabled) {
+      const db = mongoose.connection.db;
+      if (db) {
+        await db.collection('coins').updateOne(
+          { coinId: coinData.coinId },
+          {
+            $set: {
+              coinId: coinData.coinId,
+              symbol: coinData.symbol,
+              name: coinData.name,
+              rank: coinData.rank,
+              price: coinData.price,
+              percentChange24h: coinData.percentChange24h,
+              lastUpdated: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+      }
+    }
+    return updated;
   },
 
   findTopGainers: async (limit: number = 10): Promise<ICoin[]> => {

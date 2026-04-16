@@ -1,4 +1,6 @@
 import { coingeckoApi } from '../../utils/coingecko';
+import mongoose from 'mongoose';
+import { config } from '../../config/env';
 import { FilteredCoin } from './models/FilteredCoin';
 import { LabeledCoin } from './models/LabeledCoin';
 import type { ProviderType } from './models/CoinRawData';
@@ -56,6 +58,12 @@ export const labeledCoinRepository = {
       }));
       const result = await LabeledCoin.bulkWrite(ops);
       totalUpserted += result.upsertedCount + result.modifiedCount;
+      if (config.coinDataDualWriteEnabled) {
+        const db = mongoose.connection.db;
+        if (db) {
+          await db.collection('labeled_coins').bulkWrite(ops as any, { ordered: false });
+        }
+      }
     }
 
     const count = await LabeledCoin.countDocuments();

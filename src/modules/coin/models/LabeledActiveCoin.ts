@@ -2,6 +2,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 import type { ProviderType } from './CoinRawData';
 
 export interface ILabeledActiveCoin extends Document {
+  internalCoinId?: string;
+  provider: string;
   id: string;
   symbol: string;
   name: string;
@@ -28,11 +30,15 @@ export interface ILabeledActiveCoin extends Document {
   atl_date?: string;
   last_updated?: string;
   relatedIDs: Partial<Record<ProviderType, string>>;
+  migratedAt?: Date;
+  migrationVersion?: string;
 }
 
 const labeledActiveCoinSchema = new Schema<ILabeledActiveCoin>(
   {
-    id: { type: String, required: true, unique: true },
+    internalCoinId: { type: String, index: true },
+    provider: { type: String, required: true, default: 'coingecko', index: true },
+    id: { type: String, required: true },
     symbol: { type: String, required: true },
     name: { type: String, required: true },
     image: { type: String },
@@ -58,16 +64,19 @@ const labeledActiveCoinSchema = new Schema<ILabeledActiveCoin>(
     atl_date: { type: String },
     last_updated: { type: String },
     relatedIDs: { type: Schema.Types.Mixed, default: {} },
+    migratedAt: { type: Date },
+    migrationVersion: { type: String },
   },
   { timestamps: true }
 );
 
-labeledActiveCoinSchema.index({ id: 1 }, { unique: true });
+labeledActiveCoinSchema.index({ id: 1, provider: 1 }, { unique: true });
+labeledActiveCoinSchema.index({ internalCoinId: 1, provider: 1 });
 labeledActiveCoinSchema.index({ symbol: 1 });
 labeledActiveCoinSchema.index({ market_cap_rank: 1 });
 
 export const LabeledActiveCoin = mongoose.model<ILabeledActiveCoin>(
   'LabeledActiveCoin',
   labeledActiveCoinSchema,
-  'labeled_active_coins'
+  'coin_market_snapshots'
 );

@@ -44,6 +44,11 @@ ohlcvKlineSchema.index({ 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 
 export const OhlcvKline = mongoose.model<IOhlcvKline>(
   'OhlcvKline',
   ohlcvKlineSchema,
+  'market_ohlcv_candles'
+);
+export const LegacyOhlcvKline = mongoose.model<IOhlcvKline>(
+  'LegacyOhlcvKline',
+  ohlcvKlineSchema,
   'ohlcv_klines'
 );
 
@@ -96,6 +101,11 @@ marketTradeSchema.index(
 
 export const MarketTrade = mongoose.model<IMarketTrade>(
   'MarketTrade',
+  marketTradeSchema,
+  'exchange_trade_ticks'
+);
+export const LegacyMarketTrade = mongoose.model<IMarketTrade>(
+  'LegacyMarketTrade',
   marketTradeSchema,
   'market_trades'
 );

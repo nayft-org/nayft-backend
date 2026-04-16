@@ -1,4 +1,6 @@
 import { coingeckoApi, CoinGeckoMarketEntry } from '../../utils/coingecko';
+import { config } from '../../config/env';
+import mongoose from 'mongoose';
 import { FilteredCoin } from './models/FilteredCoin';
 import { LabeledActiveCoin } from './models/LabeledActiveCoin';
 import type { ProviderType } from './models/CoinRawData';
@@ -26,6 +28,7 @@ function mapMarketEntryToDocument(
   relatedIDs: Partial<Record<ProviderType, string>>
 ) {
   return {
+    provider: config.coinDataPrimarySnapshotProvider,
     id: entry.id,
     symbol: entry.symbol ?? '',
     name: entry.name ?? '',
@@ -56,10 +59,11 @@ function mapMarketEntryToDocument(
 }
 
 const LIST_PAGE_FIELDS =
-  'id symbol name image current_price market_cap_rank price_change_percentage_24h market_cap total_volume';
+  'id internalCoinId symbol name image current_price market_cap_rank price_change_percentage_24h market_cap total_volume';
 
 export interface LabeledActiveCoinListEntry {
   id: string;
+  internalCoinId?: string;
   symbol: string;
   name: string;
   image?: string;
@@ -79,7 +83,10 @@ export const labeledActiveCoinRepository = {
     nextCursor: number | null;
   }> {
     const { limit, cursor } = params;
-    const filter = cursor != null ? { market_cap_rank: { $gt: cursor } } : {};
+    const filter: Record<string, unknown> = { provider: config.coinDataPrimarySnapshotProvider };
+    if (cursor != null) {
+      filter.market_cap_rank = { $gt: cursor };
+    }
     const results = await LabeledActiveCoin.find(filter)
       .select(LIST_PAGE_FIELDS)
       .sort({ market_cap_rank: 1 })
@@ -121,7 +128,10 @@ export const labeledActiveCoinRepository = {
     const fields =
       'id image current_price market_cap market_cap_rank fully_diluted_valuation total_volume high_24h low_24h circulating_supply total_supply max_supply ath ath_date atl atl_date';
     const actualId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
-    const byId = await LabeledActiveCoin.findOne({ id: actualId })
+    const byId = await LabeledActiveCoin.findOne({
+      id: actualId,
+      provider: config.coinDataPrimarySnapshotProvider,
+    })
       .select(fields)
       .lean()
       .exec();
@@ -131,6 +141,7 @@ export const labeledActiveCoinRepository = {
     if (!symbolKey) return null;
     const escaped = escapeRegex(symbolKey);
     const bySymbol = await LabeledActiveCoin.find({
+      provider: config.coinDataPrimarySnapshotProvider,
       symbol: { $regex: new RegExp(`^${escaped}$`, 'i') },
     })
       .select(fields)
@@ -163,20 +174,37 @@ export const labeledActiveCoinRepository = {
     });
 
     if (documents.length === 0) {
-      const count = await LabeledActiveCoin.countDocuments();
+      const count = await LabeledActiveCoin.countDocuments({
+        provider: config.coinDataPrimarySnapshotProvider,
+      });
       return { count, success: true, page };
     }
 
     const ops = documents.map((doc) => ({
       updateOne: {
-        filter: { id: doc.id },
+        filter: { id: doc.id, provider: doc.provider },
         update: { $set: doc },
         upsert: true,
       },
     }));
 
     await LabeledActiveCoin.bulkWrite(ops);
-    const count = await LabeledActiveCoin.countDocuments();
+    if (config.coinDataDualWriteEnabled) {
+      const db = mongoose.connection.db;
+      if (db) {
+        const legacyOps = documents.map((doc) => ({
+          updateOne: {
+            filter: { id: doc.id },
+            update: { $set: { ...doc } },
+            upsert: true,
+          },
+        }));
+        await db.collection('labeled_active_coins').bulkWrite(legacyOps as any, { ordered: false });
+      }
+    }
+    const count = await LabeledActiveCoin.countDocuments({
+      provider: config.coinDataPrimarySnapshotProvider,
+    });
     return { count, success: true, page };
   },
 };

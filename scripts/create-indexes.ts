@@ -58,22 +58,22 @@ const INDEX_SPECS: IndexSpec[] = [
 
   // Chart queries
   {
-    collection: 'ohlcvklines',
+    collection: 'market_ohlcv_candles',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: -1 },
     options: { name: 'kline_market_lookup' },
   },
   {
-    collection: 'ohlcvklines',
+    collection: 'market_ohlcv_candles',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: 1 },
     options: { unique: true, name: 'kline_market_open_unique' },
   },
   {
-    collection: 'markettrades',
+    collection: 'exchange_trade_ticks',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, time: -1 },
     options: { name: 'trade_market_lookup' },
   },
   {
-    collection: 'markettrades',
+    collection: 'exchange_trade_ticks',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, tradeId: 1 },
     options: { sparse: true, unique: true, name: 'trade_market_id_unique' },
   },

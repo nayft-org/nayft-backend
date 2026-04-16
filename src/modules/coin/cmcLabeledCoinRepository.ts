@@ -1,4 +1,6 @@
 import { cmcApi, CmcListingEntry } from '../../utils/cmc';
+import mongoose from 'mongoose';
+import { config } from '../../config/env';
 import { FilteredCoin } from './models/FilteredCoin';
 import { CmcLabeledCoin } from './models/CmcLabeledCoin';
 import type { ProviderType } from './models/CoinRawData';
@@ -85,6 +87,12 @@ export const cmcLabeledCoinRepository = {
     }));
 
     await CmcLabeledCoin.bulkWrite(ops);
+    if (config.coinDataDualWriteEnabled) {
+      const db = mongoose.connection.db;
+      if (db) {
+        await db.collection('cmc_labeled_coins').bulkWrite(ops as any, { ordered: false });
+      }
+    }
     const count = await CmcLabeledCoin.countDocuments();
     return { count, success: true, start };
   },

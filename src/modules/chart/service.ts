@@ -304,6 +304,7 @@ async function buildMarketTrendPayload(params: {
     market_cap_rank?: number;
   }> = [];
   const labeledQuery = LabeledActiveCoin.find({
+    provider: config.coinDataPrimarySnapshotProvider,
     symbol: { $exists: true, $ne: '' },
   })
     .select('symbol market_cap market_cap_change_percentage_24h market_cap_rank')

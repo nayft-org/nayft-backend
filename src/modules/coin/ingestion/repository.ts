@@ -1,5 +1,7 @@
 import { CoinRawData, ProviderType } from '../models/CoinRawData';
 import { FilteredCoin } from '../models/FilteredCoin';
+import mongoose from 'mongoose';
+import { config } from '../../../config/env';
 
 export interface RawDataDocument {
   provider: ProviderType;
@@ -114,6 +116,12 @@ async function bulkUpsertFilteredCoinsFromAggDocs(
     };
   });
   await FilteredCoin.bulkWrite(ops);
+  if (config.coinDataDualWriteEnabled) {
+    const db = mongoose.connection.db;
+    if (db) {
+      await db.collection('filtered_coins').bulkWrite(ops as any, { ordered: false });
+    }
+  }
 }
 
 export const ingestionRepository = {
@@ -145,6 +153,12 @@ export const ingestionRepository = {
     }));
 
     const result = await CoinRawData.bulkWrite(ops);
+    if (config.coinDataDualWriteEnabled) {
+      const db = mongoose.connection.db;
+      if (db) {
+        await db.collection('coin_raw_data').bulkWrite(ops as any, { ordered: false });
+      }
+    }
     return result.upsertedCount + result.modifiedCount;
   },
 

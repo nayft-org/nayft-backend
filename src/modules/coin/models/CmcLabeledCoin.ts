@@ -12,6 +12,7 @@ export interface ICmcQuoteUsd {
 }
 
 export interface ICmcLabeledCoin extends Document {
+  internalCoinId?: string;
   id: number;
   name: string;
   symbol: string;
@@ -25,6 +26,8 @@ export interface ICmcLabeledCoin extends Document {
   last_updated?: string;
   quote_usd?: ICmcQuoteUsd;
   coinIds: Partial<Record<ProviderType, string>>;
+  migratedAt?: Date;
+  migrationVersion?: string;
 }
 
 const cmcQuoteUsdSchema = new Schema(
@@ -42,6 +45,7 @@ const cmcQuoteUsdSchema = new Schema(
 
 const cmcLabeledCoinSchema = new Schema<ICmcLabeledCoin>(
   {
+    internalCoinId: { type: String, index: true },
     id: { type: Number, required: true, unique: true },
     name: { type: String, required: true },
     symbol: { type: String, required: true },
@@ -55,16 +59,19 @@ const cmcLabeledCoinSchema = new Schema<ICmcLabeledCoin>(
     last_updated: { type: String },
     quote_usd: { type: cmcQuoteUsdSchema },
     coinIds: { type: Schema.Types.Mixed, default: {} },
+    migratedAt: { type: Date },
+    migrationVersion: { type: String },
   },
   { timestamps: true }
 );
 
 cmcLabeledCoinSchema.index({ id: 1 }, { unique: true });
+cmcLabeledCoinSchema.index({ internalCoinId: 1 });
 cmcLabeledCoinSchema.index({ symbol: 1 });
 cmcLabeledCoinSchema.index({ cmc_rank: 1 });
 
 export const CmcLabeledCoin = mongoose.model<ICmcLabeledCoin>(
   'CmcLabeledCoin',
   cmcLabeledCoinSchema,
-  'cmc_labeled_coins'
+  'cmc_coin_mappings'
 );

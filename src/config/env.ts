@@ -79,5 +79,13 @@ export const config = {
   })(),
   /** Coin profile `/coins/:id/news`: when Mongo has no articles, allow CoinDesk HTTP fallback (2s race). Default false. */
   enableCoindeskNewsFallback: (process.env.ENABLE_COINDESK_NEWS_FALLBACK || '').toLowerCase() === 'true',
+  coinDataReadFromNewCollections:
+    (process.env.COIN_DATA_READ_FROM_NEW_COLLECTIONS || 'true').toLowerCase() === 'true',
+  coinDataDualWriteEnabled:
+    (process.env.COIN_DATA_DUAL_WRITE_ENABLED || 'true').toLowerCase() === 'true',
+  coinDataRequireInternalCoinId:
+    (process.env.COIN_DATA_REQUIRE_INTERNAL_COIN_ID || 'false').toLowerCase() === 'true',
+  coinDataPrimarySnapshotProvider:
+    (process.env.COIN_DATA_PRIMARY_SNAPSHOT_PROVIDER || 'coingecko').toLowerCase(),
 };
 

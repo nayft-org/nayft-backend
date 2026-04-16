@@ -17,7 +17,8 @@
     "script:fix-ohlcv": "ts-node --transpile-only scripts/fix-ohlcv-collection.ts",
     "script:set-admin-key": "ts-node --transpile-only scripts/set-admin-key-mongo.ts",
     "script:get-admin-key": "ts-node --transpile-only scripts/get-admin-key-mongo.ts",
-    "script:compare-market-trend": "ts-node --transpile-only scripts/compare-market-trend.ts"
+    "script:compare-market-trend": "ts-node --transpile-only scripts/compare-market-trend.ts",
+    "script:migrate-coin-domain": "ts-node --transpile-only scripts/migrate-coin-domain.ts"
   },
   "keywords": [
     "crypto",

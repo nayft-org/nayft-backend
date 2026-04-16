@@ -1,6 +1,6 @@
 #!/usr/bin/env npx ts-node
 /**
- * Fixes ohlcv_klines collection: drops the existing time-series collection
+ * Fixes market_ohlcv_candles collection: drops the existing time-series collection
  * so it can be recreated as a regular collection (required for upsert support).
  *
  * MongoDB time-series collections do not support updateOne/upsert.
@@ -20,14 +20,14 @@ async function main(): Promise<void> {
   const db = mongoose.connection.db;
   if (!db) throw new Error('Database not connected');
 
-  const coll = db.collection('ohlcv_klines');
-  const exists = (await db.listCollections({ name: 'ohlcv_klines' }).toArray()).length > 0;
+  const coll = db.collection('market_ohlcv_candles');
+  const exists = (await db.listCollections({ name: 'market_ohlcv_candles' }).toArray()).length > 0;
 
   if (exists) {
     await coll.drop();
-    console.log('✅ Dropped ohlcv_klines collection. It will be recreated as a regular collection on next write.');
+    console.log('✅ Dropped market_ohlcv_candles collection. It will be recreated as a regular collection on next write.');
   } else {
-    console.log('ℹ️  ohlcv_klines collection does not exist. No action needed.');
+    console.log('ℹ️  market_ohlcv_candles collection does not exist. No action needed.');
   }
 
   await mongoose.disconnect();

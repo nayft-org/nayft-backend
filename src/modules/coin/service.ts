@@ -9,6 +9,7 @@ import { cmcLabeledCoinRepository } from './cmcLabeledCoinRepository';
 import { marketRepository } from '../market/repository';
 import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
+import { identityResolver } from './identityResolver';
 
 function looksLikeCoinGeckoId(id: string): boolean {
   if (!id || id.length < 2) return false;
@@ -136,9 +137,13 @@ async function resolveToSymbol(coinId: string): Promise<string | null> {
   return actualCoinId.toUpperCase();
 }
 
-function mapFilteredCoinToDto(filtered: { base_asset: string; symbol: string; provider: string }) {
+function mapFilteredCoinToDto(
+  filtered: { base_asset: string; symbol: string; provider: string },
+  internalCoinId: string | null
+) {
   const symbol = filtered.base_asset.toUpperCase();
   return {
+    internalCoinId,
     coinId: symbol,
     symbol,
     name: symbol,
@@ -151,7 +156,10 @@ function mapFilteredCoinToDto(filtered: { base_asset: string; symbol: string; pr
   };
 }
 
-function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>) {
+function mapCoinGeckoToDto(
+  coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>,
+  internalCoinId: string | null
+) {
   const price = coin.market_data?.current_price?.usd ?? 0;
   const percentChange24h = coin.market_data?.price_change_percentage_24h ?? 0;
   const marketCap = coin.market_data?.market_cap?.usd ?? 0;
@@ -159,6 +167,7 @@ function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinB
   const image =
     coin.image?.large || coin.image?.small || coin.image?.thumb || undefined;
   return {
+    internalCoinId,
     coinId: coin.id,
     symbol: (coin.symbol || '').toUpperCase(),
     name: coin.name || '',
@@ -174,6 +183,7 @@ function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinB
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
     const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+    const resolution = await identityResolver.resolve(actualCoinId);
 
     // Parallelize DB lookups first - fast path
     const [filteredCoin, dbCoinById, dbCoinBySymbol] = await Promise.all([
@@ -183,7 +193,7 @@ export const coinService = {
     ]);
 
     if (filteredCoin) {
-      return mapFilteredCoinToDto(filteredCoin);
+      return mapFilteredCoinToDto(filteredCoin, resolution.internalCoinId);
     }
 
     // Check if we found it in local DB
@@ -191,6 +201,7 @@ export const coinService = {
     if (dbCoin && looksLikeCoinGeckoId(actualCoinId)) {
       // Return DB data immediately if we have it
       return {
+        internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
         coinId: dbCoin.coinId,
         symbol: dbCoin.symbol,
         name: dbCoin.name,
@@ -206,8 +217,9 @@ export const coinService = {
     if (looksLikeCoinGeckoId(actualCoinId)) {
       try {
         const coin = await coingeckoApi.getCoinById(actualCoinId);
-        const coinDto = mapCoinGeckoToDto(coin);
+        const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
         await marketRepository.upsertCoin({
+          internalCoinId: coinDto.internalCoinId ?? undefined,
           coinId: coinDto.coinId,
           symbol: coinDto.symbol,
           name: coinDto.name,
@@ -230,6 +242,7 @@ export const coinService = {
     if (!coinGeckoId) {
       if (dbCoin) {
         return {
+          internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
           coinId: dbCoin.coinId,
           symbol: dbCoin.symbol,
           name: dbCoin.name,
@@ -244,9 +257,10 @@ export const coinService = {
 
     // Final API call with resolved CoinGecko ID
     const coin = await coingeckoApi.getCoinById(coinGeckoId);
-    const coinDto = mapCoinGeckoToDto(coin);
+    const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
 
     await marketRepository.upsertCoin({
+      internalCoinId: coinDto.internalCoinId ?? undefined,
       coinId: coinDto.coinId,
       symbol: coinDto.symbol,
       name: coinDto.name,
@@ -264,6 +278,7 @@ export const coinService = {
     if (unique.length === 0) return [];
     const coins = await coinRepository.findByIds(unique);
     return coins.map((c) => ({
+      internalCoinId: c.internalCoinId,
       coinId: c.coinId,
       symbol: c.symbol,
       name: c.name,
@@ -324,6 +339,8 @@ export const coinService = {
     }
 
     return {
+      internalCoinId: (doc as any).internalCoinId ?? coinGeckoId ?? lookupId,
+      coinId: doc.id,
       image: doc.image,
       current_price: doc.current_price,
       market_cap: doc.market_cap,

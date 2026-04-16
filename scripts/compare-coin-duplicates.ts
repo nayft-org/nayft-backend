@@ -1,6 +1,6 @@
 #!/usr/bin/env npx ts-node
 /**
- * Compares cmc_labeled_coins and labeled_active_coins collections for duplicates.
+ * Compares cmc_coin_mappings and coin_market_snapshots collections for duplicates.
  * Matches by symbol (case-insensitive). Generates a report to help decide whether to keep both or one.
  *
  * Usage: npm run script:compare-duplicates
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   const report: string[] = [];
   report.push('');
   report.push('='.repeat(80));
-  report.push('COIN DUPLICACY REPORT: cmc_labeled_coins vs labeled_active_coins');
+  report.push('COIN DUPLICACY REPORT: cmc_coin_mappings vs coin_market_snapshots');
   report.push('='.repeat(80));
   report.push('');
   report.push('MATCHING: Case-insensitive symbol (e.g. BTC = btc)');
@@ -169,8 +169,8 @@ async function main(): Promise<void> {
   report.push('-'.repeat(80));
   report.push('SUMMARY');
   report.push('-'.repeat(80));
-  report.push(`  cmc_labeled_coins total:     ${cmcCoins.length}`);
-  report.push(`  labeled_active_coins total:  ${activeCoins.length}`);
+  report.push(`  cmc_coin_mappings total:     ${cmcCoins.length}`);
+  report.push(`  coin_market_snapshots total: ${activeCoins.length}`);
   report.push(`  Unique symbols (combined):  ${allSymbols.size}`);
   report.push(`  OVERLAP (all pairs):       ${overlap.length}`);
   report.push(`  PRIMARY overlap (unique):   ${primaryOverlap.length} (best-ranked per symbol)`);
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
 
   if (cmcOnly.length > 0) {
     report.push('-'.repeat(80));
-    report.push('CMC ONLY (not in labeled_active_coins)');
+    report.push('CMC ONLY (not in coin_market_snapshots)');
     report.push('-'.repeat(80));
     const topByRank = [...cmcOnly]
       .filter((c) => c.cmc_rank != null)
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
 
   if (activeOnly.length > 0) {
     report.push('-'.repeat(80));
-    report.push('LABELED_ACTIVE ONLY (not in cmc_labeled_coins)');
+    report.push('COIN_MARKET_SNAPSHOTS ONLY (not in cmc_coin_mappings)');
     report.push('-'.repeat(80));
     const topByRank = [...activeOnly]
       .filter((a) => a.market_cap_rank != null)
@@ -262,15 +262,15 @@ async function main(): Promise<void> {
   report.push('-'.repeat(80));
   report.push('RECOMMENDATIONS');
   report.push('-'.repeat(80));
-  report.push('  - cmc_labeled_coins: CMC API, numeric id, 8728 coins, quote.USD data');
-  report.push('  - labeled_active_coins: CoinGecko API, string id, ~8750 coins (35 pages x 250), image URL');
+  report.push('  - cmc_coin_mappings: CMC API, numeric id, quote.USD data');
+  report.push('  - coin_market_snapshots: provider snapshots (CoinGecko primary), image URL + market fields');
   report.push('');
   if (overlap.length > 0) {
     report.push('  Overlap: Most top coins appear in both. Price/market_cap may differ slightly');
   }
   report.push('  Keep both if: You need CMC and CoinGecko as separate sources, or different ID schemes.');
-  report.push('  Keep cmc_labeled_coins only if: CMC is primary, need numeric IDs, larger catalog (8728).');
-  report.push('  Keep labeled_active_coins only if: CoinGecko is primary, need image URLs, smaller active set.');
+  report.push('  Keep cmc_coin_mappings as canonical CMC mapping source for numeric IDs.');
+  report.push('  Keep coin_market_snapshots as canonical market-state source (provider-aware, CoinGecko-primary reads).');
   report.push('');
   report.push('='.repeat(80));
   report.push('');

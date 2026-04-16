@@ -13,6 +13,7 @@ export interface IUser extends Document {
 }
 
 export interface ICoin extends Document {
+  internalCoinId: string;
   coinId: string;
   symbol: string;
   name: string;
@@ -22,6 +23,8 @@ export interface ICoin extends Document {
   lastUpdated: Date;
   symbolLower?: string;
   nameLower?: string;
+  migratedAt?: Date;
+  migrationVersion?: string;
 }
 
 export interface INews extends Document {
