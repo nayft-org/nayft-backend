@@ -78,5 +78,8 @@ coinSchema.pre('findOneAndUpdate', function(next) {
   next();
 });
 
+coinSchema.index({ percentChange24h: -1 }, { background: true });
+coinSchema.index({ rank: 1 }, { background: true });
+
 export const Coin = mongoose.model<ICoin>('Coin', coinSchema);
 

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import zlib from 'zlib';
+import pLimit from 'p-limit';
 import { redis } from '../../config/redis';
 import { streamConfig } from '../../config/streamConfig';
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
@@ -190,17 +191,18 @@ async function prefetchSparklines(
   coins: { symbol: string; price: number }[],
   cache: Map<string, SparklinePayload>
 ): Promise<void> {
+  const limit = pLimit(4);
   const uniqueBases = [...new Set(coins.map((c) => c.symbol.toUpperCase()))];
   for (let i = 0; i < uniqueBases.length; i += 8) {
     const chunk = uniqueBases.slice(i, i + 8);
     await Promise.all(
-      chunk.map(async (base) => {
+      chunk.map((base) => limit(async () => {
         if (cache.has(base)) return;
         const coin = coins.find((c) => c.symbol.toUpperCase() === base);
         const fallback = coin?.price ?? 0;
         const sp = await buildSparklineForSymbol(base, fallback);
         cache.set(base, sp);
-      })
+      }))
     );
   }
 }

@@ -598,14 +598,21 @@ export const chartService = {
     const to = params.to ? new Date(params.to) : now;
     const from = params.from ? new Date(params.from) : new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    return chartRepository.findTrades({
-      exchange,
-      symbol,
-      from,
-      to,
-      limit,
-      dataType,
+    const cacheKey = `chart:trades:v1:${exchange}:${symbol}:${dataType}:${limit}:${from.toISOString()}:${to.toISOString()}`;
+    const { data } = await withResponseCache({
+      cacheKey,
+      ttlSeconds: 15,
+      metricsKind: 'chart:trades',
+      fetcher: () => chartRepository.findTrades({
+        exchange,
+        symbol,
+        from,
+        to,
+        limit,
+        dataType,
+      }),
     });
+    return data;
   },
 
   async getMarketTrend(params: {

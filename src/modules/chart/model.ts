@@ -39,7 +39,7 @@ const ohlcvKlineSchema = new Schema<IOhlcvKline>(
   { timestamps: false }
 );
 
-ohlcvKlineSchema.index({ 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: 1 }, { unique: true });
+ohlcvKlineSchema.index({ 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: -1 }, { unique: true });
 
 export const OhlcvKline = mongoose.model<IOhlcvKline>(
   'OhlcvKline',
@@ -87,6 +87,11 @@ const marketTradeSchema = new Schema<IMarketTrade>(
       expireAfterSeconds: 86400,
     },
   }
+);
+
+marketTradeSchema.index(
+  { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, time: -1 },
+  { background: true, name: 'trade_lookup_desc' }
 );
 
 export const MarketTrade = mongoose.model<IMarketTrade>(

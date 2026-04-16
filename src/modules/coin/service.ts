@@ -1,4 +1,6 @@
 import { coingeckoApi } from '../../utils/coingecko';
+import { config } from '../../config/env';
+import { withResponseCache } from '../../utils/responseCache';
 import { coinRepository } from './repository';
 import { filteredCoinRepository } from './filteredCoinRepository';
 import { labeledCoinRepository } from './labeledCoinRepository';
@@ -15,7 +17,40 @@ function looksLikeCoinGeckoId(id: string): boolean {
   return /^[a-z0-9-]+$/.test(trimmed);
 }
 
-async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
+const RESOLVE_MEMO_TTL_MS = 90_000;
+const RESOLVE_MEMO_MAX = 500;
+
+type ResolveMemoEntry = {
+  promise: Promise<string | null>;
+  expiresAt: number;
+  insertedAt: number;
+};
+
+const resolveToCoinGeckoIdMemo = new Map<string, ResolveMemoEntry>();
+
+function sweepResolveMemoOnWrite(): void {
+  const now = Date.now();
+  for (const [k, e] of resolveToCoinGeckoIdMemo) {
+    if (now > e.expiresAt) {
+      resolveToCoinGeckoIdMemo.delete(k);
+    }
+  }
+  while (resolveToCoinGeckoIdMemo.size > RESOLVE_MEMO_MAX) {
+    let oldestKey: string | null = null;
+    let oldestIns = Infinity;
+    for (const [k, e] of resolveToCoinGeckoIdMemo) {
+      if (e.insertedAt < oldestIns) {
+        oldestIns = e.insertedAt;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) resolveToCoinGeckoIdMemo.delete(oldestKey);
+    else break;
+  }
+}
+
+/** Uncached CoinGecko id resolution (list scan + optional validation). */
+async function resolveToCoinGeckoIdUncached(coinId: string): Promise<string | null> {
   const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
   const numericId = actualCoinId.replace(/[^0-9]/g, '');
   const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
@@ -48,6 +83,28 @@ async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
   if (byId) return byId.id;
 
   return null;
+}
+
+/** Memoized wrapper: shared in-flight promise + TTL memo for repeated lookups (same file as Map). */
+async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
+  const key = (coinId.includes('=') ? coinId.split('=')[1] : coinId).trim();
+  if (!key) {
+    return resolveToCoinGeckoIdUncached(coinId);
+  }
+  sweepResolveMemoOnWrite();
+  const hit = resolveToCoinGeckoIdMemo.get(key);
+  if (hit && Date.now() <= hit.expiresAt) {
+    return hit.promise;
+  }
+  const now = Date.now();
+  const promise = resolveToCoinGeckoIdUncached(coinId);
+  resolveToCoinGeckoIdMemo.set(key, {
+    promise,
+    expiresAt: now + RESOLVE_MEMO_TTL_MS,
+    insertedAt: now,
+  });
+  sweepResolveMemoOnWrite();
+  return promise;
 }
 
 async function resolveToSymbol(coinId: string): Promise<string | null> {
@@ -242,14 +299,28 @@ export const coinService = {
 
     let contract_address: string | null = null;
     try {
-      const fullCoin = await coingeckoApi.getCoinById(doc.id);
-      const platform = (fullCoin as any).platform;
-      if (platform && typeof platform === 'object') {
-        const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v !== '');
-        contract_address = addrs[0] ?? null;
-      }
+      const { data } = await withResponseCache({
+        cacheKey: `cg:coin:platform:${doc.id}`,
+        ttlSeconds: 86400,
+        metricsKind: 'coin:cgPlatform',
+        fetcher: async () => {
+          const fullCoin = await Promise.race([
+            coingeckoApi.getCoinById(doc.id),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('coingecko_timeout')), 5000)
+            ),
+          ]);
+          const platform = (fullCoin as any).platform;
+          if (platform && typeof platform === 'object') {
+            const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v !== '');
+            return addrs[0] ?? null;
+          }
+          return null;
+        },
+      });
+      contract_address = data;
     } catch {
-      // ignore
+      contract_address = null;
     }
 
     return {
@@ -281,7 +352,20 @@ export const coinService = {
       return fromNewsArticles;
     }
 
-    const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
+    if (!config.enableCoindeskNewsFallback) {
+      return [];
+    }
+
+    let articles: Awaited<ReturnType<typeof coindeskApi.getNewsByTickers>>;
+    try {
+      articles = await Promise.race([
+        coindeskApi.getNewsByTickers([symbol], 1, 20),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('coindesk_timeout')), 2000)),
+      ]);
+    } catch {
+      return [];
+    }
+
     return articles.map((raw) => {
       const article = normalizeArticle(raw);
       return {
