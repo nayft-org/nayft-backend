@@ -1,23 +1,9 @@
 import pLimit from 'p-limit';
 import { config } from '../../config/env';
-import { OhlcvKline, MarketTrade, LegacyOhlcvKline, LegacyMarketTrade } from './model';
+import { OhlcvKline, MarketTrade } from './model';
 import type { KlineInterval } from './model';
 
 const chartQueryMaxMs = () => config.mongoMaxQueryTimeMs;
-
-function getKlineModels() {
-  if (config.coinDataReadFromNewCollections) {
-    return { primary: OhlcvKline, fallback: LegacyOhlcvKline };
-  }
-  return { primary: LegacyOhlcvKline, fallback: OhlcvKline };
-}
-
-function getTradeModels() {
-  if (config.coinDataReadFromNewCollections) {
-    return { primary: MarketTrade, fallback: LegacyMarketTrade };
-  }
-  return { primary: LegacyMarketTrade, fallback: MarketTrade };
-}
 
 const INTERVAL_MS: Record<KlineInterval, number> = {
   '1m': 60 * 1000,
@@ -111,26 +97,18 @@ export const chartRepository = {
     limit?: number;
   }): Promise<KlineRecord[]> {
     const { exchange, symbol, interval, from, to, limit = 1000 } = params;
-    const { primary, fallback } = getKlineModels();
     const query = {
       'meta.exchange': exchange,
       'meta.symbol': symbol.toUpperCase(),
       'meta.interval': interval,
       openTime: { $gte: from, $lte: to },
     };
-    let docs = await primary.find(query)
+    const docs = await OhlcvKline.find(query)
       .maxTimeMS(chartQueryMaxMs())
       // Pull latest candles first so limit returns most recent window.
       .sort({ openTime: -1 })
       .limit(limit)
       .lean();
-    if (docs.length === 0) {
-      docs = await fallback.find(query)
-        .maxTimeMS(chartQueryMaxMs())
-        .sort({ openTime: -1 })
-        .limit(limit)
-        .lean();
-    }
 
     // API consumers expect time-series order oldest -> newest.
     return docs.reverse().map((d) => ({
@@ -155,25 +133,17 @@ export const chartRepository = {
     sortAsc?: boolean;
   }): Promise<TradeRecord[]> {
     const { exchange, symbol, from, to, limit = 1000, dataType = 'aggTrade', sortAsc = false } = params;
-    const { primary, fallback } = getTradeModels();
     const query = {
       'meta.exchange': exchange,
       'meta.symbol': symbol.toUpperCase(),
       'meta.dataType': dataType,
       time: { $gte: from, $lte: to },
     };
-    let docs = await primary.find(query)
+    const docs = await MarketTrade.find(query)
       .maxTimeMS(chartQueryMaxMs())
       .sort({ time: sortAsc ? 1 : -1 })
       .limit(Math.min(limit, 50000))
       .lean();
-    if (docs.length === 0) {
-      docs = await fallback.find(query)
-        .maxTimeMS(chartQueryMaxMs())
-        .sort({ time: sortAsc ? 1 : -1 })
-        .limit(Math.min(limit, 50000))
-        .lean();
-    }
 
     return docs.map((d) => ({
       time: d.time,
@@ -260,25 +230,17 @@ export const chartRepository = {
     const limit8 = pLimit(8);
     const klineSets = await Promise.all(
       constituents.map((coin) => limit8(async () => {
-        const { primary, fallback } = getKlineModels();
         const query = {
           'meta.exchange': exchange,
           'meta.symbol': coin.symbol.toUpperCase(),
           'meta.interval': interval,
           openTime: { $gte: from, $lte: to },
         };
-        let raw = await primary.find(query)
+        const raw = await OhlcvKline.find(query)
           .maxTimeMS(chartQueryMaxMs())
           .sort({ openTime: -1 })
           .limit(limit)
           .lean();
-        if (raw.length === 0) {
-          raw = await fallback.find(query)
-            .maxTimeMS(chartQueryMaxMs())
-            .sort({ openTime: -1 })
-            .limit(limit)
-            .lean();
-        }
 
         let docs: KlineDoc[] = raw.reverse().map((d) => ({ openTime: d.openTime, close: d.close }));
         if (docs.length < 2) {
@@ -323,8 +285,7 @@ export const chartRepository = {
       constituents.map((c) => [c.symbol.toUpperCase(), c.marketCap] as const)
     );
 
-    const { primary, fallback } = getKlineModels();
-    let grouped = (await primary.aggregate([
+    const grouped = (await OhlcvKline.aggregate([
       {
         $match: {
           'meta.exchange': exchange,
@@ -347,31 +308,6 @@ export const chartRepository = {
         },
       },
     ]).option({ maxTimeMS: chartQueryMaxMs() })) as Array<{ symbol: string; docs: KlineDoc[] }>;
-    if (grouped.length === 0) {
-      grouped = (await fallback.aggregate([
-        {
-          $match: {
-            'meta.exchange': exchange,
-            'meta.interval': interval,
-            'meta.symbol': { $in: symbols },
-            openTime: { $gte: from, $lte: to },
-          },
-        },
-        { $sort: { openTime: -1 } },
-        {
-          $group: {
-            _id: '$meta.symbol',
-            docs: { $push: '$$ROOT' },
-          },
-        },
-        {
-          $project: {
-            symbol: '$_id',
-            docs: { $slice: ['$docs', limit] },
-          },
-        },
-      ]).option({ maxTimeMS: chartQueryMaxMs() })) as Array<{ symbol: string; docs: KlineDoc[] }>;
-    }
 
     const groupedBySym = new Map(
       grouped.map((g) => [String(g.symbol).toUpperCase(), g] as const)

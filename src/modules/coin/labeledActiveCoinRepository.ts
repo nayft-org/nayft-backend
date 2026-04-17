@@ -1,6 +1,5 @@
 import { coingeckoApi, CoinGeckoMarketEntry } from '../../utils/coingecko';
 import { config } from '../../config/env';
-import mongoose from 'mongoose';
 import { FilteredCoin } from './models/FilteredCoin';
 import { LabeledActiveCoin } from './models/LabeledActiveCoin';
 import type { ProviderType } from './models/CoinRawData';
@@ -189,19 +188,6 @@ export const labeledActiveCoinRepository = {
     }));
 
     await LabeledActiveCoin.bulkWrite(ops);
-    if (config.coinDataDualWriteEnabled) {
-      const db = mongoose.connection.db;
-      if (db) {
-        const legacyOps = documents.map((doc) => ({
-          updateOne: {
-            filter: { id: doc.id },
-            update: { $set: { ...doc } },
-            upsert: true,
-          },
-        }));
-        await db.collection('labeled_active_coins').bulkWrite(legacyOps as any, { ordered: false });
-      }
-    }
     const count = await LabeledActiveCoin.countDocuments({
       provider: config.coinDataPrimarySnapshotProvider,
     });

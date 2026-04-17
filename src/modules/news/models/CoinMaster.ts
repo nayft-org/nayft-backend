@@ -5,8 +5,6 @@ export interface ICoinMaster {
   symbol: string;
   name: string;
   keywords: string[];
-  migratedAt?: Date;
-  migrationVersion?: string;
 }
 
 const coinMasterSchema = new Schema<ICoinMaster>(
@@ -15,8 +13,6 @@ const coinMasterSchema = new Schema<ICoinMaster>(
     symbol: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     keywords: { type: [String], default: [] },
-    migratedAt: { type: Date },
-    migrationVersion: { type: String },
   },
   { timestamps: true }
 );

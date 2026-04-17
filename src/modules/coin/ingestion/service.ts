@@ -3,16 +3,12 @@ import { ingestionRepository } from './repository';
 import type { ProviderType } from '../models/CoinRawData';
 import { FilteredCoin } from '../models/FilteredCoin';
 import { CoinMaster } from '../../news/models';
-import mongoose from 'mongoose';
-import { config } from '../../../config/env';
 
 export interface IngestResult {
   success: boolean;
   providers: Record<ProviderType, number>;
   exchange_listed_assets_count: number;
-  filtered_coins_count: number;
   coin_news_tagging_map_upserted: number;
-  coinmasters_upserted: number;
   errors: { provider: string; error: string }[];
 }
 
@@ -60,25 +56,6 @@ async function syncCoinMastersFromFilteredCoins(): Promise<number> {
     if (modified > 0 || upserted > 0) {
       upsertedOrUpdated += 1;
     }
-
-    if (config.coinDataDualWriteEnabled) {
-      const db = mongoose.connection.db;
-      if (db) {
-        await db.collection('coinmasters').updateOne(
-          { symbol: sym },
-          {
-            $setOnInsert: { symbol: sym },
-            $set: {
-              name: sym,
-              keywords,
-              migratedAt: new Date(),
-              migrationVersion: 'coin-domain-v1',
-            },
-          },
-          { upsert: true }
-        );
-      }
-    }
   }
 
   return upsertedOrUpdated;
@@ -123,9 +100,7 @@ export const ingestionService = {
       success: hasSuccess,
       providers: counts,
       exchange_listed_assets_count: filteredCount,
-      filtered_coins_count: filteredCount,
       coin_news_tagging_map_upserted: coinMastersUpserted,
-      coinmasters_upserted: coinMastersUpserted,
       errors,
     };
   },

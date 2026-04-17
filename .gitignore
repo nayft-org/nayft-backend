@@ -5,3 +5,9 @@ dist/
 .DS_Store
 coverage/
 
+# Local ops artifacts (never commit)
+.backups/
+.re-audit-1/
+.migration-second/
+scripts/.coin-domain-migration-checkpoint.json
+

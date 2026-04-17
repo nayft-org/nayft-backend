@@ -26,8 +26,6 @@ export interface ICmcLabeledCoin extends Document {
   last_updated?: string;
   quote_usd?: ICmcQuoteUsd;
   coinIds: Partial<Record<ProviderType, string>>;
-  migratedAt?: Date;
-  migrationVersion?: string;
 }
 
 const cmcQuoteUsdSchema = new Schema(
@@ -59,8 +57,6 @@ const cmcLabeledCoinSchema = new Schema<ICmcLabeledCoin>(
     last_updated: { type: String },
     quote_usd: { type: cmcQuoteUsdSchema },
     coinIds: { type: Schema.Types.Mixed, default: {} },
-    migratedAt: { type: Date },
-    migrationVersion: { type: String },
   },
   { timestamps: true }
 );

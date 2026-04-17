@@ -12,8 +12,6 @@ export interface IFilteredCoin extends Document {
   raw_payload: Record<string, unknown>;
   fetched_at: Date;
   provider_timestamp?: Date;
-  migratedAt?: Date;
-  migrationVersion?: string;
 }
 
 const filteredCoinSchema = new Schema<IFilteredCoin>(
@@ -28,8 +26,6 @@ const filteredCoinSchema = new Schema<IFilteredCoin>(
     raw_payload: { type: Schema.Types.Mixed, required: true },
     fetched_at: { type: Date, required: true, default: Date.now },
     provider_timestamp: { type: Date },
-    migratedAt: { type: Date },
-    migrationVersion: { type: String },
   },
   { timestamps: true }
 );

@@ -1,7 +1,5 @@
 import { CoinRawData, ProviderType } from '../models/CoinRawData';
 import { FilteredCoin } from '../models/FilteredCoin';
-import mongoose from 'mongoose';
-import { config } from '../../../config/env';
 
 export interface RawDataDocument {
   provider: ProviderType;
@@ -116,12 +114,6 @@ async function bulkUpsertFilteredCoinsFromAggDocs(
     };
   });
   await FilteredCoin.bulkWrite(ops);
-  if (config.coinDataDualWriteEnabled) {
-    const db = mongoose.connection.db;
-    if (db) {
-      await db.collection('filtered_coins').bulkWrite(ops as any, { ordered: false });
-    }
-  }
 }
 
 export const ingestionRepository = {
@@ -153,12 +145,6 @@ export const ingestionRepository = {
     }));
 
     const result = await CoinRawData.bulkWrite(ops);
-    if (config.coinDataDualWriteEnabled) {
-      const db = mongoose.connection.db;
-      if (db) {
-        await db.collection('coin_raw_data').bulkWrite(ops as any, { ordered: false });
-      }
-    }
     return result.upsertedCount + result.modifiedCount;
   },
 
@@ -178,7 +164,7 @@ export const ingestionRepository = {
         },
       },
       { $replaceRoot: { newRoot: '$doc' } },
-      // Exclude _id so we never carry coin_raw_data ids into filtered_coins (avoids any merge/replace _id issues).
+      // Exclude _id so we never carry raw-ingest ids into exchange_listed_assets (avoids any merge/replace _id issues).
       { $project: { _id: 0, __v: 0 } },
     ];
 

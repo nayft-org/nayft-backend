@@ -26,8 +26,8 @@ export function klineRetentionDaysForInterval(interval: KlineInterval | '1w'): n
 const root = (process.env.OHLCV_ARCHIVE_ROOT || '').trim();
 
 /**
- * Disk archival for ohlcv_klines is enabled when a non-empty OHLCV_ARCHIVE_ROOT is set
- * and OHLCV_ARCHIVE_ENABLED is not the string "false".
+ * Disk archival for `market_ohlcv_candles` (OHLCV candle exports) is enabled when a non-empty
+ * OHLCV_ARCHIVE_ROOT is set and OHLCV_ARCHIVE_ENABLED is not the string "false".
  */
 export const archivalConfig = {
   root,

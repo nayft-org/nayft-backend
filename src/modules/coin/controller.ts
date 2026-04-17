@@ -34,10 +34,8 @@ export const coinController = {
       sendSuccess(res, {
         success: result.success,
         providers: result.providers,
-        exchange_listed_assets_count: result.filtered_coins_count,
-        coin_news_tagging_map_upserted: result.coinmasters_upserted,
-        filtered_coins_count: result.filtered_coins_count,
-        coinmasters_upserted: result.coinmasters_upserted,
+        exchange_listed_assets_count: result.exchange_listed_assets_count,
+        coin_news_tagging_map_upserted: result.coin_news_tagging_map_upserted,
         errors: result.errors.length > 0 ? result.errors : undefined,
       });
     } catch (error: any) {

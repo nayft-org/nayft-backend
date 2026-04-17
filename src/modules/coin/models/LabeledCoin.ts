@@ -7,8 +7,6 @@ export interface ILabeledCoin extends Document {
   symbol: string;
   name: string;
   coinIds: Partial<Record<ProviderType, string>>;
-  migratedAt?: Date;
-  migrationVersion?: string;
 }
 
 const labeledCoinSchema = new Schema<ILabeledCoin>(
@@ -18,8 +16,6 @@ const labeledCoinSchema = new Schema<ILabeledCoin>(
     symbol: { type: String, required: true },
     name: { type: String, required: true },
     coinIds: { type: Schema.Types.Mixed, default: {} },
-    migratedAt: { type: Date },
-    migrationVersion: { type: String },
   },
   { timestamps: true }
 );

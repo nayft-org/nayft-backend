@@ -1,6 +1,5 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { randomUUID } from 'crypto';
-import mongoose from 'mongoose';
 import { marketRepository } from './repository';
 import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
 import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
@@ -120,8 +119,6 @@ export const marketService = {
               },
               $setOnInsert: {
                 internalCoinId: randomUUID(),
-                migratedAt: new Date(),
-                migrationVersion: 'coin-domain-v1',
               },
             },
             upsert: true,
@@ -129,31 +126,6 @@ export const marketService = {
         }));
         
         await Coin.bulkWrite(bulkOps, { ordered: false });
-        if (config.coinDataDualWriteEnabled) {
-          const db = mongoose.connection.db;
-          if (db) {
-            const legacyOps = coins.map((coin) => ({
-              updateOne: {
-                filter: { coinId: coin.coinId },
-                update: {
-                  $set: {
-                    coinId: coin.coinId,
-                    symbol: coin.symbol,
-                    name: coin.name,
-                    rank: coin.rank,
-                    price: coin.price,
-                    percentChange24h: coin.percentChange24h,
-                    lastUpdated: new Date(),
-                    symbolLower: coin.symbol.toLowerCase(),
-                    nameLower: coin.name.toLowerCase(),
-                  },
-                },
-                upsert: true,
-              },
-            }));
-            await db.collection('coins').bulkWrite(legacyOps as any, { ordered: false });
-          }
-        }
       }
 
       const withInternalIds = await attachInternalCoinIds(coins);
@@ -213,8 +185,6 @@ export const marketService = {
               },
               $setOnInsert: {
                 internalCoinId: randomUUID(),
-                migratedAt: new Date(),
-                migrationVersion: 'coin-domain-v1',
               },
             },
             upsert: true,
@@ -222,31 +192,6 @@ export const marketService = {
         }));
         
         await Coin.bulkWrite(bulkOps, { ordered: false });
-        if (config.coinDataDualWriteEnabled) {
-          const db = mongoose.connection.db;
-          if (db) {
-            const legacyOps = gainers.map((coin) => ({
-              updateOne: {
-                filter: { coinId: coin.coinId },
-                update: {
-                  $set: {
-                    coinId: coin.coinId,
-                    symbol: coin.symbol,
-                    name: coin.name,
-                    rank: coin.rank,
-                    price: coin.price,
-                    percentChange24h: coin.percentChange24h,
-                    lastUpdated: new Date(),
-                    symbolLower: coin.symbol.toLowerCase(),
-                    nameLower: coin.name.toLowerCase(),
-                  },
-                },
-                upsert: true,
-              },
-            }));
-            await db.collection('coins').bulkWrite(legacyOps as any, { ordered: false });
-          }
-        }
       }
 
       const withInternalIds = await attachInternalCoinIds(gainers);
@@ -306,8 +251,6 @@ export const marketService = {
               },
               $setOnInsert: {
                 internalCoinId: randomUUID(),
-                migratedAt: new Date(),
-                migrationVersion: 'coin-domain-v1',
               },
             },
             upsert: true,
@@ -315,31 +258,6 @@ export const marketService = {
         }));
         
         await Coin.bulkWrite(bulkOps, { ordered: false });
-        if (config.coinDataDualWriteEnabled) {
-          const db = mongoose.connection.db;
-          if (db) {
-            const legacyOps = losers.map((coin) => ({
-              updateOne: {
-                filter: { coinId: coin.coinId },
-                update: {
-                  $set: {
-                    coinId: coin.coinId,
-                    symbol: coin.symbol,
-                    name: coin.name,
-                    rank: coin.rank,
-                    price: coin.price,
-                    percentChange24h: coin.percentChange24h,
-                    lastUpdated: new Date(),
-                    symbolLower: coin.symbol.toLowerCase(),
-                    nameLower: coin.name.toLowerCase(),
-                  },
-                },
-                upsert: true,
-              },
-            }));
-            await db.collection('coins').bulkWrite(legacyOps as any, { ordered: false });
-          }
-        }
       }
 
       const withInternalIds = await attachInternalCoinIds(losers);

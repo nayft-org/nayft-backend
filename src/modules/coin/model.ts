@@ -47,12 +47,6 @@ const coinSchema = new Schema<ICoin>(
       type: String,
       index: true,
     },
-    migratedAt: {
-      type: Date,
-    },
-    migrationVersion: {
-      type: String,
-    },
   },
   {
     timestamps: true,

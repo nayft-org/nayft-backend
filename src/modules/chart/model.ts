@@ -46,11 +46,6 @@ export const OhlcvKline = mongoose.model<IOhlcvKline>(
   ohlcvKlineSchema,
   'market_ohlcv_candles'
 );
-export const LegacyOhlcvKline = mongoose.model<IOhlcvKline>(
-  'LegacyOhlcvKline',
-  ohlcvKlineSchema,
-  'ohlcv_klines'
-);
 
 // --- Market Trades (aggTrade / trade) ---
 
@@ -103,9 +98,4 @@ export const MarketTrade = mongoose.model<IMarketTrade>(
   'MarketTrade',
   marketTradeSchema,
   'exchange_trade_ticks'
-);
-export const LegacyMarketTrade = mongoose.model<IMarketTrade>(
-  'LegacyMarketTrade',
-  marketTradeSchema,
-  'market_trades'
 );

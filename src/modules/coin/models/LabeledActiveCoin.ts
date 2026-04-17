@@ -30,8 +30,6 @@ export interface ILabeledActiveCoin extends Document {
   atl_date?: string;
   last_updated?: string;
   relatedIDs: Partial<Record<ProviderType, string>>;
-  migratedAt?: Date;
-  migrationVersion?: string;
 }
 
 const labeledActiveCoinSchema = new Schema<ILabeledActiveCoin>(
@@ -64,8 +62,6 @@ const labeledActiveCoinSchema = new Schema<ILabeledActiveCoin>(
     atl_date: { type: String },
     last_updated: { type: String },
     relatedIDs: { type: Schema.Types.Mixed, default: {} },
-    migratedAt: { type: Date },
-    migrationVersion: { type: String },
   },
   { timestamps: true }
 );

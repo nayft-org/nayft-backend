@@ -4,7 +4,6 @@ import pLimit from 'p-limit';
 import { redis } from '../../config/redis';
 import { streamConfig } from '../../config/streamConfig';
 import { config } from '../../config/env';
-import mongoose from 'mongoose';
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { chartRepository } from '../chart/repository';
 import { Coin } from '../coin/model';
@@ -160,39 +159,12 @@ async function bulkUpsertCoins(coins: RawCoin[]): Promise<void> {
         },
         $setOnInsert: {
           internalCoinId: coin.internalCoinId ?? randomUUID(),
-          migratedAt: new Date(),
-          migrationVersion: 'coin-domain-v1',
         },
       },
       upsert: true,
     },
   }));
   await Coin.bulkWrite(bulkOps, { ordered: false });
-  if (config.coinDataDualWriteEnabled) {
-    const db = mongoose.connection.db;
-    if (db) {
-      const legacyOps = coins.map((coin) => ({
-        updateOne: {
-          filter: { coinId: coin.coinId },
-          update: {
-            $set: {
-              coinId: coin.coinId,
-              symbol: coin.symbol,
-              name: coin.name,
-              rank: coin.rank,
-              price: coin.price,
-              percentChange24h: coin.percentChange24h,
-              lastUpdated: new Date(),
-              symbolLower: coin.symbol.toLowerCase(),
-              nameLower: coin.name.toLowerCase(),
-            },
-          },
-          upsert: true,
-        },
-      }));
-      await db.collection('coins').bulkWrite(legacyOps as any, { ordered: false });
-    }
-  }
 }
 
 async function fetchTrendingRows(): Promise<RawCoin[]> {
