@@ -8,7 +8,8 @@
 #   1. CI deploys new backend to the VM.
 #   2. You SSH in, cd to crypto-backend, ensure .env has MONGO_URI and REDIS_URL.
 #   3. Set PROD_CLEANUP_STOP_CMD / PROD_CLEANUP_START_CMD for your process manager.
-#   4. Run: ./scripts/prod-legacy-cleanup.sh --yes
+#   4. Run: ./scripts/prod-legacy-cleanup.sh   (interactive: type yes when prompted)
+#      or:  ./scripts/prod-legacy-cleanup.sh --yes   (non-interactive / CI)
 #
 # Requirements on PATH: mongodump, mongosh, redis-cli, curl. Optional: jq (prettier /health).
 #
@@ -69,7 +70,7 @@ usage() {
 
 Options:
   --dry-run              Print steps; do not run mongodump/mongosh/redis/start/smoke.
-  --yes                  Required for destructive steps (non-dry-run).
+  --yes                  Skip interactive prompt (required if stdin is not a TTY, e.g. CI).
   --skip-stop-start      Do not run PROD_CLEANUP_STOP_CMD / PROD_CLEANUP_START_CMD.
   --skip-backup          Skip mongodump (dangerous; still drops collections if --yes).
   --redis-pattern        Delete all keys matching market:* via SCAN (review in prod first).
@@ -100,8 +101,21 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+# Destructive steps need explicit confirmation: --yes, or interactive "yes" on a TTY.
 if [[ "$DRY_RUN" -eq 0 && "$YES" -eq 0 ]]; then
-  die "refusing to run destructive steps without --yes (use --dry-run to preview)"
+  if [[ -t 0 ]] && [[ -t 1 ]]; then
+    echo "" >&2
+    echo "This will mongodump legacy collections (unless --skip-backup), DROP them in MongoDB," >&2
+    echo "and DELETE the listed Redis market keys. Backend should be stoppable via PROD_CLEANUP_STOP_CMD." >&2
+    echo "" >&2
+    read -r -p "Type 'yes' to continue: " reply
+    if [[ "${reply,,}" != "yes" ]]; then
+      die "aborted. For non-interactive runs use: $(basename "$0") --yes   (preview: --dry-run)"
+    fi
+    YES=1
+  else
+    die "non-interactive shell: pass --yes to confirm destructive steps. Example: $(basename "$0") --yes"
+  fi
 fi
 
 if [[ "$SKIP_BACKUP" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
