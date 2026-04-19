@@ -14,7 +14,9 @@
 # Requirements on PATH: mongodump, mongosh, redis-cli, curl. Optional: jq (prettier /health).
 #
 # Environment (optional):
-#   MONGO_URI, REDIS_URL     — loaded from .env in repo root if not already set.
+#   MONGO_URI, REDIS_URL     — export them, or use .env / ENV_FILE (see below).
+#   ENV_FILE                 — if set, only this file is sourced (absolute path on the server).
+#   Otherwise: .env then .env.production under repo root (later overrides earlier).
 #   MONGO_DB_NAME            — default crypto_db
 #   PROD_CLEANUP_STOP_CMD    — e.g. 'sudo systemctl stop crypto-backend'
 #   PROD_CLEANUP_START_CMD   — e.g. 'sudo systemctl start crypto-backend'
@@ -101,6 +103,57 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+load_env_files() {
+  if [[ -n "${ENV_FILE:-}" ]]; then
+    [[ -f "$ENV_FILE" ]] || die "ENV_FILE is set but file not found: $ENV_FILE"
+    set -a
+    # shellcheck disable=SC1091
+    source "$ENV_FILE"
+    set +a
+    echo "Loaded: $ENV_FILE" >&2
+    return
+  fi
+  if [[ -f "$ROOT/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT/.env"
+    set +a
+    echo "Loaded: $ROOT/.env" >&2
+  fi
+  if [[ -f "$ROOT/.env.production" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT/.env.production"
+    set +a
+    echo "Loaded: $ROOT/.env.production" >&2
+  fi
+  if [[ ! -f "$ROOT/.env" ]] && [[ ! -f "$ROOT/.env.production" ]] && [[ -z "${MONGO_URI:-}${REDIS_URL:-}" ]]; then
+    echo "note: no $ROOT/.env or .env.production; relying on exported MONGO_URI / REDIS_URL." >&2
+  fi
+}
+
+require_mongo_redis() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ -z "${MONGO_URI:-}" ]] || [[ -z "${REDIS_URL:-}" ]]; then
+    echo "error: MONGO_URI and REDIS_URL must be set for this run (repo root: $ROOT)." >&2
+    echo "" >&2
+    echo "  Option A — export in your shell:" >&2
+    echo "    export MONGO_URI='mongodb://user:pass@host:27017/crypto_db'" >&2
+    echo "    export REDIS_URL='redis://127.0.0.1:6379'" >&2
+    echo "" >&2
+    echo "  Option B — create $ROOT/.env with those keys (not committed on CI runners)." >&2
+    echo "" >&2
+    echo "  Option C — point at an env file on the server:" >&2
+    echo "    ENV_FILE=/path/to/prod.env ./scripts/$(basename "$0") --yes" >&2
+    exit 1
+  fi
+}
+
+load_env_files
+require_mongo_redis
+
 # Destructive steps need explicit confirmation: --yes, or interactive "yes" on a TTY.
 if [[ "$DRY_RUN" -eq 0 && "$YES" -eq 0 ]]; then
   if [[ -t 0 ]] && [[ -t 1 ]]; then
@@ -125,16 +178,6 @@ fi
 if [[ "$REDIS_MODE" == "flushdb" && "$DRY_RUN" -eq 0 ]]; then
   echo "warning: --redis-flushdb will erase the entire logical Redis DB for this REDIS_URL." >&2
 fi
-
-if [[ -f "$ROOT/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT/.env"
-  set +a
-fi
-
-: "${MONGO_URI:?Set MONGO_URI in .env or environment}"
-: "${REDIS_URL:?Set REDIS_URL in .env or environment}"
 
 MONGO_DB_NAME="${MONGO_DB_NAME:-crypto_db}"
 
@@ -165,6 +208,10 @@ stop_services() {
     return 0
   fi
   if [[ -z "${PROD_CLEANUP_STOP_CMD:-}" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "[dry-run] PROD_CLEANUP_STOP_CMD not set (required on real run unless --skip-stop-start)" >&2
+      return 0
+    fi
     die "Set PROD_CLEANUP_STOP_CMD to stop backend/workers before DB changes, or pass --skip-stop-start if already stopped."
   fi
   run_cmd "$PROD_CLEANUP_STOP_CMD"
@@ -176,6 +223,10 @@ start_services() {
     return 0
   fi
   if [[ -z "${PROD_CLEANUP_START_CMD:-}" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "[dry-run] PROD_CLEANUP_START_CMD not set (required on real run unless --skip-stop-start)" >&2
+      return 0
+    fi
     die "Set PROD_CLEANUP_START_CMD to start backend after cleanup, or pass --skip-stop-start and start manually."
   fi
   run_cmd "$PROD_CLEANUP_START_CMD"
