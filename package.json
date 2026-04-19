@@ -15,7 +15,8 @@
     "script:create-indexes": "ts-node --transpile-only scripts/create-indexes.ts",
     "script:set-admin-key": "ts-node --transpile-only scripts/set-admin-key-mongo.ts",
     "script:get-admin-key": "ts-node --transpile-only scripts/get-admin-key-mongo.ts",
-    "script:compare-market-trend": "ts-node --transpile-only scripts/compare-market-trend.ts"
+    "script:compare-market-trend": "ts-node --transpile-only scripts/compare-market-trend.ts",
+    "script:prod-legacy-cleanup": "bash scripts/prod-legacy-cleanup.sh"
   },
   "keywords": [
     "crypto",
