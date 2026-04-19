@@ -7,8 +7,8 @@ import { CoinMaster } from '../../news/models';
 export interface IngestResult {
   success: boolean;
   providers: Record<ProviderType, number>;
-  filtered_coins_count: number;
-  coinmasters_upserted: number;
+  exchange_listed_assets_count: number;
+  coin_news_tagging_map_upserted: number;
   errors: { provider: string; error: string }[];
 }
 
@@ -99,8 +99,8 @@ export const ingestionService = {
     return {
       success: hasSuccess,
       providers: counts,
-      filtered_coins_count: filteredCount,
-      coinmasters_upserted: coinMastersUpserted,
+      exchange_listed_assets_count: filteredCount,
+      coin_news_tagging_map_upserted: coinMastersUpserted,
       errors,
     };
   },

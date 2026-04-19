@@ -11,6 +11,7 @@ export type SparklinePayload =
   | { encoding: 'flat'; value: number };
 
 export interface SnapshotRow {
+  internalCoinId?: string;
   coinId: string;
   symbol: string;
   baseAsset: string;

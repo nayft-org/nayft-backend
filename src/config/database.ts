@@ -3,16 +3,21 @@ import { config } from './env';
 
 export const connectDatabase = async (): Promise<void> => {
   try {
-    const mongoUri = config.mongoUri;
+    const { mongoUri } = config;
     await mongoose.connect(mongoUri, {
-      maxPoolSize: 50,           // Max connections in pool
-      minPoolSize: 10,           // Min connections to keep warm
-      socketTimeoutMS: 45000,    // Close sockets after 45s of inactivity
-      serverSelectionTimeoutMS: 5000,  // Timeout for server selection
-      compressors: ['zlib'],     // Enable compression to reduce network I/O
+      maxPoolSize: 50,
+      minPoolSize: 5,
+      socketTimeoutMS: config.mongoSocketTimeoutMs,
+      serverSelectionTimeoutMS: config.mongoServerSelectionTimeoutMs,
+      connectTimeoutMS: config.mongoConnectTimeoutMs,
+      compressors: ['zlib'],
+      retryReads: true,
+      retryWrites: true,
     });
     console.log('✅ MongoDB connected successfully');
-    console.log(`📊 Connection pool: min=${10}, max=${50}`);
+    console.log(
+      `📊 Connection pool: min=5, max=50; socketTimeoutMS=${config.mongoSocketTimeoutMs} serverSelectionMS=${config.mongoServerSelectionTimeoutMs}`
+    );
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
     process.exit(1);

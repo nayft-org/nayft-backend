@@ -1,5 +1,5 @@
 #!/bin/bash
-# Populates labeled_active_coins collection by calling the endpoint for each page (1-35).
+# Populates coin_market_snapshots (active markets) by calling the endpoint for each page (1-35).
 # Requires the backend server to be running. Uses 3-second pause between calls.
 #
 # Usage: ./scripts/populate-active-coins.sh

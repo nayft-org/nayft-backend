@@ -1,5 +1,6 @@
 import { Coin } from '../coin/model';
 import { ICoin } from '../../types';
+import { randomUUID } from 'crypto';
 
 export const marketRepository = {
   findById: async (coinId: string): Promise<ICoin | null> => {
@@ -7,6 +8,7 @@ export const marketRepository = {
   },
 
   upsertCoin: async (coinData: {
+    internalCoinId?: string;
     coinId: string;
     symbol: string;
     name: string;
@@ -16,8 +18,12 @@ export const marketRepository = {
   }): Promise<ICoin> => {
     return Coin.findOneAndUpdate(
       { coinId: coinData.coinId },
-      { ...coinData, lastUpdated: new Date() },
-      { upsert: true, new: true }
+      {
+        ...coinData,
+        internalCoinId: coinData.internalCoinId ?? randomUUID(),
+        lastUpdated: new Date(),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
   },
 
@@ -39,4 +45,3 @@ export const marketRepository = {
       .limit(limit);
   },
 };
-

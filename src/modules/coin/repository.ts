@@ -5,6 +5,10 @@ import { ICoin, INews } from '../../types';
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const coinRepository = {
+  findByInternalId: async (internalCoinId: string): Promise<ICoin | null> => {
+    return Coin.findOne({ internalCoinId });
+  },
+
   findById: async (coinId: string): Promise<ICoin | null> => {
     return Coin.findOne({ coinId });
   },
@@ -27,9 +31,9 @@ export const coinRepository = {
   searchByQuery: async (query: string, limit: number = 24): Promise<ICoin[]> => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    
+
     // Use prefix match on indexed lowercase fields for better performance
-    const coins = await Coin.find({
+    return Coin.find({
       $or: [
         { symbolLower: { $regex: `^${escapeRegex(q)}` } },
         { nameLower: { $regex: `^${escapeRegex(q)}` } },
@@ -38,7 +42,6 @@ export const coinRepository = {
       .sort({ rank: 1 })
       .limit(limit)
       .lean<ICoin[]>();
-    return coins;
   },
 
   findNewsByCoinId: async (coinId: string, limit: number = 10): Promise<INews[]> => {
@@ -47,4 +50,3 @@ export const coinRepository = {
       .limit(limit);
   },
 };
-

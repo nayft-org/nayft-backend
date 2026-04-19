@@ -175,5 +175,6 @@ newsArticleSchema.index({ 'coins.symbol': 1 });
 newsArticleSchema.index({ 'source.key': 1 });
 newsArticleSchema.index({ status: 1 });
 newsArticleSchema.index({ sentiment: 1 });
+newsArticleSchema.index({ title: 'text', subtitle: 'text' }, { background: true, name: 'news_text_search' });
 
 export const NewsArticle = mongoose.model<INewsArticle>('NewsArticle', newsArticleSchema);

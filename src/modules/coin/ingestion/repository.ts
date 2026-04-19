@@ -89,26 +89,14 @@ async function bulkUpsertFilteredCoinsFromAggDocs(
 ): Promise<void> {
   if (docs.length === 0) return;
   const ops = docs.map((d) => {
-    const base_asset = d.base_asset as string;
-    const provider = d.provider as ProviderType;
+    const { _id, __v, ...updateData } = d;
     return {
       updateOne: {
-        filter: { base_asset, provider },
-        update: {
-          $set: {
-            provider,
-            provider_coin_id: d.provider_coin_id as string,
-            symbol: d.symbol as string,
-            base_asset,
-            quote_asset: d.quote_asset as string,
-            status: d.status as string,
-            raw_payload: d.raw_payload as Record<string, unknown>,
-            fetched_at: d.fetched_at as Date,
-            ...(d.provider_timestamp != null
-              ? { provider_timestamp: d.provider_timestamp as Date }
-              : {}),
-          },
+        filter: {
+          base_asset: d.base_asset as string,
+          provider: d.provider as ProviderType,
         },
+        update: { $set: updateData },
         upsert: true,
       },
     };
@@ -164,8 +152,7 @@ export const ingestionRepository = {
         },
       },
       { $replaceRoot: { newRoot: '$doc' } },
-      // Exclude _id so we never carry coin_raw_data ids into filtered_coins (avoids any merge/replace _id issues).
-      { $project: { _id: 0, __v: 0 } },
+      { $project: { provider: 1, provider_coin_id: 1, symbol: 1, base_asset: 1, quote_asset: 1, status: 1, raw_payload: 1, fetched_at: 1, provider_timestamp: 1 } },
     ];
 
     const cursor = CoinRawData.aggregate(pipeline as any[]).cursor({ batchSize: 500 });

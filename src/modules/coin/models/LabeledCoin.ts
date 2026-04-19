@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 import type { ProviderType } from './CoinRawData';
 
 export interface ILabeledCoin extends Document {
+  internalCoinId?: string;
   id: string;
   symbol: string;
   name: string;
@@ -10,6 +11,7 @@ export interface ILabeledCoin extends Document {
 
 const labeledCoinSchema = new Schema<ILabeledCoin>(
   {
+    internalCoinId: { type: String, index: true },
     id: { type: String, required: true, unique: true },
     symbol: { type: String, required: true },
     name: { type: String, required: true },
@@ -20,9 +22,10 @@ const labeledCoinSchema = new Schema<ILabeledCoin>(
 
 labeledCoinSchema.index({ id: 1 }, { unique: true });
 labeledCoinSchema.index({ symbol: 1 });
+labeledCoinSchema.index({ internalCoinId: 1 });
 
 export const LabeledCoin = mongoose.model<ILabeledCoin>(
   'LabeledCoin',
   labeledCoinSchema,
-  'labeled_coins'
+  'coingecko_coin_mappings'
 );

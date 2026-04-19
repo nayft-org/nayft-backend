@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { MongoNetworkTimeoutError } from 'mongodb';
 import { chartService } from './service';
 import type { KlineInterval } from './model';
 
@@ -42,6 +43,13 @@ export const chartController = {
       res.json(klines);
     } catch (err) {
       console.error('[chartController.getKlines]', err);
+      if (err instanceof MongoNetworkTimeoutError) {
+        res.status(503).json({
+          error:
+            'Database timeout fetching klines. Ensure MongoDB is running (e.g. docker compose up mongodb) and reachable at MONGO_URI.',
+        });
+        return;
+      }
       res.status(500).json({ error: 'Failed to fetch klines' });
     }
   },

@@ -1,7 +1,9 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import zlib from 'zlib';
+import pLimit from 'p-limit';
 import { redis } from '../../config/redis';
 import { streamConfig } from '../../config/streamConfig';
+import { config } from '../../config/env';
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { chartRepository } from '../chart/repository';
 import { Coin } from '../coin/model';
@@ -20,6 +22,7 @@ const MAX_GZIP_BYTES = 20 * 1024; // budget: ≤20KB gzip typical
 const MAX_JSON_BYTES = 50 * 1024; // hard cap uncompressed
 
 interface RawCoin {
+  internalCoinId?: string;
   coinId: string;
   symbol: string;
   name: string;
@@ -56,7 +59,10 @@ async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(
   if (coins.length === 0) return coins;
   const lowerSymbols = coins.map((c) => c.symbol.toLowerCase());
   const docs = await LabeledActiveCoin.find(
-    { symbol: { $in: lowerSymbols } },
+    {
+      provider: config.coinDataPrimarySnapshotProvider,
+      symbol: { $in: lowerSymbols },
+    },
     { symbol: 1, image: 1, _id: 0 }
   )
     .lean()
@@ -66,6 +72,28 @@ async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(
     if (doc.image) imageMap.set(doc.symbol.toLowerCase(), doc.image);
   }
   return coins.map((c) => ({ ...c, image: imageMap.get(c.symbol.toLowerCase()) }));
+}
+
+async function attachInternalCoinIds<T extends { coinId: string }>(
+  coins: T[]
+): Promise<(T & { internalCoinId?: string })[]> {
+  if (coins.length === 0) return coins;
+  const uniqueCoinIds = [...new Set(coins.map((coin) => String(coin.coinId).trim()).filter(Boolean))];
+  if (uniqueCoinIds.length === 0) return coins;
+  const rows = await Coin.find({ coinId: { $in: uniqueCoinIds } })
+    .select('coinId internalCoinId')
+    .lean()
+    .exec();
+  const map = new Map<string, string>();
+  for (const row of rows as Array<{ coinId: string; internalCoinId?: string }>) {
+    if (row.internalCoinId) {
+      map.set(row.coinId, row.internalCoinId);
+    }
+  }
+  return coins.map((coin) => ({
+    ...coin,
+    internalCoinId: (coin as { internalCoinId?: string }).internalCoinId ?? map.get(coin.coinId),
+  }));
 }
 
 function downsampleCloses(closes: number[], n: number): number[] {
@@ -129,6 +157,9 @@ async function bulkUpsertCoins(coins: RawCoin[]): Promise<void> {
           symbolLower: coin.symbol.toLowerCase(),
           nameLower: coin.name.toLowerCase(),
         },
+        $setOnInsert: {
+          internalCoinId: coin.internalCoinId ?? randomUUID(),
+        },
       },
       upsert: true,
     },
@@ -145,6 +176,7 @@ async function fetchTrendingRows(): Promise<RawCoin[]> {
     const dbCoins = await marketRepository.findTrending(20);
     return dbCoins.map((coin) => ({
       coinId: coin.coinId,
+      internalCoinId: coin.internalCoinId,
       symbol: coin.symbol,
       name: coin.name,
       rank: coin.rank,
@@ -174,6 +206,7 @@ async function fetchGainersLosers(): Promise<{ gainers: RawCoin[]; losers: RawCo
     const [g, l] = await Promise.all([marketRepository.findTopGainers(10), marketRepository.findTopLosers(10)]);
     const mapDb = (coin: (typeof g)[0]): RawCoin => ({
       coinId: coin.coinId,
+      internalCoinId: coin.internalCoinId,
       symbol: coin.symbol,
       name: coin.name,
       rank: coin.rank,
@@ -190,17 +223,18 @@ async function prefetchSparklines(
   coins: { symbol: string; price: number }[],
   cache: Map<string, SparklinePayload>
 ): Promise<void> {
+  const limit = pLimit(4);
   const uniqueBases = [...new Set(coins.map((c) => c.symbol.toUpperCase()))];
   for (let i = 0; i < uniqueBases.length; i += 8) {
     const chunk = uniqueBases.slice(i, i + 8);
     await Promise.all(
-      chunk.map(async (base) => {
+      chunk.map((base) => limit(async () => {
         if (cache.has(base)) return;
         const coin = coins.find((c) => c.symbol.toUpperCase() === base);
         const fallback = coin?.price ?? 0;
         const sp = await buildSparklineForSymbol(base, fallback);
         cache.set(base, sp);
-      })
+      }))
     );
   }
 }
@@ -213,6 +247,7 @@ function toSnapshotRows(
   return coins.map((c) => {
     const base = c.symbol.toUpperCase();
     return {
+      internalCoinId: c.internalCoinId,
       coinId: c.coinId,
       symbol: c.symbol,
       baseAsset: base,
@@ -255,9 +290,9 @@ export async function runMarketSnapshotBuild(): Promise<{ ok: boolean; error?: s
     await bulkUpsertCoins([...byId.values()]);
 
     const [trendingEnriched, gainersEnriched, losersEnriched] = await Promise.all([
-      attachImages(trendingRaw),
-      attachImages(gl.gainers),
-      attachImages(gl.losers),
+      attachImages(await attachInternalCoinIds(trendingRaw)),
+      attachImages(await attachInternalCoinIds(gl.gainers)),
+      attachImages(await attachInternalCoinIds(gl.losers)),
     ]);
 
     const sparklineCache = new Map<string, SparklinePayload>();

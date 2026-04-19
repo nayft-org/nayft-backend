@@ -58,22 +58,22 @@ const INDEX_SPECS: IndexSpec[] = [
 
   // Chart queries
   {
-    collection: 'ohlcvklines',
+    collection: 'market_ohlcv_candles',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: -1 },
     options: { name: 'kline_market_lookup' },
   },
   {
-    collection: 'ohlcvklines',
+    collection: 'market_ohlcv_candles',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.interval': 1, openTime: 1 },
     options: { unique: true, name: 'kline_market_open_unique' },
   },
   {
-    collection: 'markettrades',
+    collection: 'exchange_trade_ticks',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, time: -1 },
     options: { name: 'trade_market_lookup' },
   },
   {
-    collection: 'markettrades',
+    collection: 'exchange_trade_ticks',
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, tradeId: 1 },
     options: { sparse: true, unique: true, name: 'trade_market_id_unique' },
   },
@@ -89,15 +89,36 @@ async function connectFromEnv(): Promise<void> {
 
 async function ensureIndexes(): Promise<void> {
   await connectFromEnv();
+  let succeeded = 0;
+  const failures: Array<{ collection: string; name?: string; key: Record<string, 1 | -1>; error: string }> = [];
   try {
     for (const spec of INDEX_SPECS) {
-      const collection = mongoose.connection.collection(spec.collection);
-      await collection.createIndex(spec.key, { background: true, ...(spec.options || {}) });
-      console.log(
-        `index ensured: ${spec.collection} -> ${JSON.stringify(spec.key)}${spec.options?.name ? ` (${spec.options.name})` : ''}`
-      );
+      const label = `${spec.collection} -> ${JSON.stringify(spec.key)}${spec.options?.name ? ` (${spec.options.name})` : ''}`;
+      try {
+        const collection = mongoose.connection.collection(spec.collection);
+        await collection.createIndex(spec.key, { background: true, ...(spec.options || {}) });
+        succeeded += 1;
+        console.log(`index ensured: ${label}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push({
+          collection: spec.collection,
+          name: spec.options?.name as string | undefined,
+          key: spec.key,
+          error: message,
+        });
+        console.error(`index FAILED: ${label} :: ${message}`);
+      }
     }
-    console.log(`Index synchronization complete. total=${INDEX_SPECS.length}`);
+    console.log(
+      `Index synchronization complete. total=${INDEX_SPECS.length} succeeded=${succeeded} failed=${failures.length}`
+    );
+    if (failures.length > 0) {
+      console.error('Failed indexes summary:');
+      for (const f of failures) {
+        console.error(`  - ${f.collection} ${f.name ?? ''} ${JSON.stringify(f.key)} :: ${f.error}`);
+      }
+    }
   } finally {
     await mongoose.connection.close();
   }

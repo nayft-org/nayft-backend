@@ -9,6 +9,14 @@ export const config = {
   host: hostFromEnv && hostFromEnv.length > 0 ? hostFromEnv : 'localhost',
   nodeEnv: process.env.NODE_ENV || 'development',
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27020/crypto_db',
+  /** Per-operation socket read/write timeout (ms). Increase if chart/aggregation queries hit MongoNetworkTimeoutError. */
+  mongoSocketTimeoutMs: parseInt(process.env.MONGO_SOCKET_TIMEOUT_MS || '120000', 10),
+  /** Wait for a server when connecting or after recovery (ms). */
+  mongoServerSelectionTimeoutMs: parseInt(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS || '30000', 10),
+  /** Initial TCP connection handshake timeout (ms). */
+  mongoConnectTimeoutMs: parseInt(process.env.MONGO_CONNECT_TIMEOUT_MS || '10000', 10),
+  /** Default max server-side query time for heavy chart reads (`market_ohlcv_candles` / `exchange_trade_ticks`). */
+  mongoMaxQueryTimeMs: parseInt(process.env.MONGO_MAX_QUERY_TIME_MS || '10000', 10),
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   jwtSecret: process.env.JWT_SECRET || 'super_secret_key_change_later',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -69,5 +77,9 @@ export const config = {
     if (process.env.TRANSLATION_FALLBACK_MYMEMORY === 'true') return true;
     return (process.env.NODE_ENV || 'development') !== 'production';
   })(),
+  /** Coin profile `/coins/:id/news`: when Mongo has no articles, allow CoinDesk HTTP fallback (2s race). Default false. */
+  enableCoindeskNewsFallback: (process.env.ENABLE_COINDESK_NEWS_FALLBACK || '').toLowerCase() === 'true',
+  coinDataPrimarySnapshotProvider:
+    (process.env.COIN_DATA_PRIMARY_SNAPSHOT_PROVIDER || 'coingecko').toLowerCase(),
 };
 

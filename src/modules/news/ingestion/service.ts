@@ -15,7 +15,7 @@ export type StoreNewsResult = {
   updated: number;
 };
 
-/** Built from `filtered_coins` distinct base_asset (see storeNews). */
+/** Built from `exchange_listed_assets` distinct base_asset (see storeNews). */
 type TrackedCoinLean = { symbol: string; name: string; keywords: string[] };
 
 type CompiledKeyword = {
@@ -202,8 +202,8 @@ function coindeskToNewsArticle(
 }
 
 /**
- * Build tracked coin rows from exchange `filtered_coins` (distinct base_asset).
- * Run POST /create-collections first so this collection is populated.
+ * Build tracked coin rows from `exchange_listed_assets` (distinct base_asset).
+ * Run POST /api/coins/create-collections first so this collection is populated.
  */
 function trackedCoinsFromFilteredBaseAssets(baseAssets: string[]): TrackedCoinLean[] {
   const out: TrackedCoinLean[] = [];

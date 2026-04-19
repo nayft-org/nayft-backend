@@ -1,5 +1,9 @@
+import pLimit from 'p-limit';
+import { config } from '../../config/env';
 import { OhlcvKline, MarketTrade } from './model';
 import type { KlineInterval } from './model';
+
+const chartQueryMaxMs = () => config.mongoMaxQueryTimeMs;
 
 const INTERVAL_MS: Record<KlineInterval, number> = {
   '1m': 60 * 1000,
@@ -93,12 +97,14 @@ export const chartRepository = {
     limit?: number;
   }): Promise<KlineRecord[]> {
     const { exchange, symbol, interval, from, to, limit = 1000 } = params;
-    const docs = await OhlcvKline.find({
+    const query = {
       'meta.exchange': exchange,
       'meta.symbol': symbol.toUpperCase(),
       'meta.interval': interval,
       openTime: { $gte: from, $lte: to },
-    })
+    };
+    const docs = await OhlcvKline.find(query)
+      .maxTimeMS(chartQueryMaxMs())
       // Pull latest candles first so limit returns most recent window.
       .sort({ openTime: -1 })
       .limit(limit)
@@ -127,12 +133,14 @@ export const chartRepository = {
     sortAsc?: boolean;
   }): Promise<TradeRecord[]> {
     const { exchange, symbol, from, to, limit = 1000, dataType = 'aggTrade', sortAsc = false } = params;
-    const docs = await MarketTrade.find({
+    const query = {
       'meta.exchange': exchange,
       'meta.symbol': symbol.toUpperCase(),
       'meta.dataType': dataType,
       time: { $gte: from, $lte: to },
-    })
+    };
+    const docs = await MarketTrade.find(query)
+      .maxTimeMS(chartQueryMaxMs())
       .sort({ time: sortAsc ? 1 : -1 })
       .limit(Math.min(limit, 50000))
       .lean();
@@ -219,14 +227,17 @@ export const chartRepository = {
     const { exchange, interval, from, to, limit, constituents } = params;
     if (constituents.length === 0) return [];
 
+    const limit8 = pLimit(8);
     const klineSets = await Promise.all(
-      constituents.map(async (coin) => {
-        const raw = await OhlcvKline.find({
+      constituents.map((coin) => limit8(async () => {
+        const query = {
           'meta.exchange': exchange,
           'meta.symbol': coin.symbol.toUpperCase(),
           'meta.interval': interval,
           openTime: { $gte: from, $lte: to },
-        })
+        };
+        const raw = await OhlcvKline.find(query)
+          .maxTimeMS(chartQueryMaxMs())
           .sort({ openTime: -1 })
           .limit(limit)
           .lean();
@@ -249,7 +260,7 @@ export const chartRepository = {
           marketCap: coin.marketCap,
           docs,
         };
-      })
+      }))
     );
 
     return computeMarketTrendPoints(constituents, klineSets);
@@ -296,14 +307,15 @@ export const chartRepository = {
           docs: { $slice: ['$docs', limit] },
         },
       },
-    ])) as Array<{ symbol: string; docs: KlineDoc[] }>;
+    ]).option({ maxTimeMS: chartQueryMaxMs() })) as Array<{ symbol: string; docs: KlineDoc[] }>;
 
     const groupedBySym = new Map(
       grouped.map((g) => [String(g.symbol).toUpperCase(), g] as const)
     );
 
+    const limit8 = pLimit(8);
     const klineSets = await Promise.all(
-      constituents.map(async (c) => {
+      constituents.map((c) => limit8(async () => {
         const sym = c.symbol.toUpperCase();
         const g = groupedBySym.get(sym);
         let docs: KlineDoc[] = g
@@ -325,7 +337,7 @@ export const chartRepository = {
           marketCap: capBySymbol.get(sym) ?? 0,
           docs,
         };
-      })
+      }))
     );
 
     return computeMarketTrendPoints(constituents, klineSets);

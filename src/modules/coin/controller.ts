@@ -2,6 +2,12 @@ import { Request, Response } from 'express';
 import { coinService } from './service';
 import { ingestionService } from './ingestion/service';
 import { sendSuccess, sendError } from '../../utils/response';
+import {
+  withResponseCache,
+  buildCoinProfileKey,
+  buildCoinStatsKey,
+  buildCoinNewsKey,
+} from '../../utils/responseCache';
 
 export const coinController = {
   getCoinsBatch: async (req: Request, res: Response): Promise<void> => {
@@ -28,8 +34,8 @@ export const coinController = {
       sendSuccess(res, {
         success: result.success,
         providers: result.providers,
-        filtered_coins_count: result.filtered_coins_count,
-        coinmasters_upserted: result.coinmasters_upserted,
+        exchange_listed_assets_count: result.exchange_listed_assets_count,
+        coin_news_tagging_map_upserted: result.coin_news_tagging_map_upserted,
         errors: result.errors.length > 0 ? result.errors : undefined,
       });
     } catch (error: any) {
@@ -85,36 +91,71 @@ export const coinController = {
   },
 
   getCoinStats: async (req: Request, res: Response): Promise<void> => {
+    const { coinId } = req.params;
+    const t = Date.now();
     try {
-      const { coinId } = req.params;
-      const stats = await coinService.getCoinStats(coinId);
-      if (!stats) {
-        sendError(res, 'Stats not found for this coin', 404);
-        return;
-      }
+      // ROLLBACK: remove withResponseCache wrapper + buildCoinStatsKey call to revert
+      // to direct service call with no caching
+      const { data: stats } = await withResponseCache({
+        cacheKey: buildCoinStatsKey(coinId),
+        ttlSeconds: 45,
+        metricsKind: 'coin:stats',
+        fetcher: async () => {
+          const s = await coinService.getCoinStats(coinId);
+          if (!s) {
+            const err = new Error('Stats not found for this coin') as Error & { statusCode?: number };
+            err.statusCode = 404;
+            throw err;
+          }
+          return s;
+        },
+      });
       sendSuccess(res, { stats });
     } catch (error: any) {
-      sendError(res, error.message ?? 'Failed to fetch coin stats', 500);
+      const code = error?.statusCode === 404 ? 404 : 500;
+      sendError(res, error.message ?? 'Failed to fetch coin stats', code);
+    } finally {
+      console.log('[perf] getCoinStats resolved in', Date.now() - t, 'ms');
     }
   },
 
   getCoinProfile: async (req: Request, res: Response): Promise<void> => {
+    const { coinId } = req.params;
+    const t = Date.now();
     try {
-      const { coinId } = req.params;
-      const coin = await coinService.getCoinProfile(coinId);
+      // ROLLBACK: remove withResponseCache wrapper + buildCoinProfileKey call to revert
+      // to direct service call with no caching
+      const { data: coin } = await withResponseCache({
+        cacheKey: buildCoinProfileKey(coinId),
+        ttlSeconds: 45,
+        metricsKind: 'coin:profile',
+        fetcher: () => coinService.getCoinProfile(coinId),
+      });
       sendSuccess(res, { coin });
     } catch (error: any) {
       sendError(res, error.message, 404);
+    } finally {
+      console.log('[perf] getCoinProfile resolved in', Date.now() - t, 'ms');
     }
   },
 
   getCoinNews: async (req: Request, res: Response): Promise<void> => {
+    const { coinId } = req.params;
+    const t = Date.now();
     try {
-      const { coinId } = req.params;
-      const news = await coinService.getCoinNews(coinId);
+      // ROLLBACK: remove withResponseCache wrapper + buildCoinNewsKey call to revert
+      // to direct service call with no caching
+      const { data: news } = await withResponseCache({
+        cacheKey: buildCoinNewsKey(coinId),
+        ttlSeconds: 105,
+        metricsKind: 'coin:news',
+        fetcher: () => coinService.getCoinNews(coinId),
+      });
       sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
+    } finally {
+      console.log('[perf] getCoinNews resolved in', Date.now() - t, 'ms');
     }
   },
 };

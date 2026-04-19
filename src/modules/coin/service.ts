@@ -1,4 +1,6 @@
 import { coingeckoApi } from '../../utils/coingecko';
+import { config } from '../../config/env';
+import { withResponseCache } from '../../utils/responseCache';
 import { coinRepository } from './repository';
 import { filteredCoinRepository } from './filteredCoinRepository';
 import { labeledCoinRepository } from './labeledCoinRepository';
@@ -7,6 +9,7 @@ import { cmcLabeledCoinRepository } from './cmcLabeledCoinRepository';
 import { marketRepository } from '../market/repository';
 import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
+import { identityResolver } from './identityResolver';
 
 function looksLikeCoinGeckoId(id: string): boolean {
   if (!id || id.length < 2) return false;
@@ -15,7 +18,40 @@ function looksLikeCoinGeckoId(id: string): boolean {
   return /^[a-z0-9-]+$/.test(trimmed);
 }
 
-async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
+const RESOLVE_MEMO_TTL_MS = 90_000;
+const RESOLVE_MEMO_MAX = 500;
+
+type ResolveMemoEntry = {
+  promise: Promise<string | null>;
+  expiresAt: number;
+  insertedAt: number;
+};
+
+const resolveToCoinGeckoIdMemo = new Map<string, ResolveMemoEntry>();
+
+function sweepResolveMemoOnWrite(): void {
+  const now = Date.now();
+  for (const [k, e] of resolveToCoinGeckoIdMemo) {
+    if (now > e.expiresAt) {
+      resolveToCoinGeckoIdMemo.delete(k);
+    }
+  }
+  while (resolveToCoinGeckoIdMemo.size > RESOLVE_MEMO_MAX) {
+    let oldestKey: string | null = null;
+    let oldestIns = Infinity;
+    for (const [k, e] of resolveToCoinGeckoIdMemo) {
+      if (e.insertedAt < oldestIns) {
+        oldestIns = e.insertedAt;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) resolveToCoinGeckoIdMemo.delete(oldestKey);
+    else break;
+  }
+}
+
+/** Uncached CoinGecko id resolution (list scan + optional validation). */
+async function resolveToCoinGeckoIdUncached(coinId: string): Promise<string | null> {
   const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
   const numericId = actualCoinId.replace(/[^0-9]/g, '');
   const isNumericId = numericId.length > 0 && !isNaN(Number(numericId));
@@ -50,6 +86,28 @@ async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
   return null;
 }
 
+/** Memoized wrapper: shared in-flight promise + TTL memo for repeated lookups (same file as Map). */
+async function resolveToCoinGeckoId(coinId: string): Promise<string | null> {
+  const key = (coinId.includes('=') ? coinId.split('=')[1] : coinId).trim();
+  if (!key) {
+    return resolveToCoinGeckoIdUncached(coinId);
+  }
+  sweepResolveMemoOnWrite();
+  const hit = resolveToCoinGeckoIdMemo.get(key);
+  if (hit && Date.now() <= hit.expiresAt) {
+    return hit.promise;
+  }
+  const now = Date.now();
+  const promise = resolveToCoinGeckoIdUncached(coinId);
+  resolveToCoinGeckoIdMemo.set(key, {
+    promise,
+    expiresAt: now + RESOLVE_MEMO_TTL_MS,
+    insertedAt: now,
+  });
+  sweepResolveMemoOnWrite();
+  return promise;
+}
+
 async function resolveToSymbol(coinId: string): Promise<string | null> {
   const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
   const numericId = actualCoinId.replace(/[^0-9]/g, '');
@@ -79,9 +137,13 @@ async function resolveToSymbol(coinId: string): Promise<string | null> {
   return actualCoinId.toUpperCase();
 }
 
-function mapFilteredCoinToDto(filtered: { base_asset: string; symbol: string; provider: string }) {
+function mapFilteredCoinToDto(
+  filtered: { base_asset: string; symbol: string; provider: string },
+  internalCoinId: string | null
+) {
   const symbol = filtered.base_asset.toUpperCase();
   return {
+    internalCoinId,
     coinId: symbol,
     symbol,
     name: symbol,
@@ -94,7 +156,10 @@ function mapFilteredCoinToDto(filtered: { base_asset: string; symbol: string; pr
   };
 }
 
-function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>) {
+function mapCoinGeckoToDto(
+  coin: Awaited<ReturnType<typeof coingeckoApi.getCoinById>>,
+  internalCoinId: string | null
+) {
   const price = coin.market_data?.current_price?.usd ?? 0;
   const percentChange24h = coin.market_data?.price_change_percentage_24h ?? 0;
   const marketCap = coin.market_data?.market_cap?.usd ?? 0;
@@ -102,6 +167,7 @@ function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinB
   const image =
     coin.image?.large || coin.image?.small || coin.image?.thumb || undefined;
   return {
+    internalCoinId,
     coinId: coin.id,
     symbol: (coin.symbol || '').toUpperCase(),
     name: coin.name || '',
@@ -117,6 +183,7 @@ function mapCoinGeckoToDto(coin: Awaited<ReturnType<typeof coingeckoApi.getCoinB
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
     const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
+    const resolution = await identityResolver.resolve(actualCoinId);
 
     // Parallelize DB lookups first - fast path
     const [filteredCoin, dbCoinById, dbCoinBySymbol] = await Promise.all([
@@ -126,7 +193,7 @@ export const coinService = {
     ]);
 
     if (filteredCoin) {
-      return mapFilteredCoinToDto(filteredCoin);
+      return mapFilteredCoinToDto(filteredCoin, resolution.internalCoinId);
     }
 
     // Check if we found it in local DB
@@ -134,6 +201,7 @@ export const coinService = {
     if (dbCoin && looksLikeCoinGeckoId(actualCoinId)) {
       // Return DB data immediately if we have it
       return {
+        internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
         coinId: dbCoin.coinId,
         symbol: dbCoin.symbol,
         name: dbCoin.name,
@@ -149,8 +217,9 @@ export const coinService = {
     if (looksLikeCoinGeckoId(actualCoinId)) {
       try {
         const coin = await coingeckoApi.getCoinById(actualCoinId);
-        const coinDto = mapCoinGeckoToDto(coin);
+        const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
         await marketRepository.upsertCoin({
+          internalCoinId: coinDto.internalCoinId ?? undefined,
           coinId: coinDto.coinId,
           symbol: coinDto.symbol,
           name: coinDto.name,
@@ -173,6 +242,7 @@ export const coinService = {
     if (!coinGeckoId) {
       if (dbCoin) {
         return {
+          internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
           coinId: dbCoin.coinId,
           symbol: dbCoin.symbol,
           name: dbCoin.name,
@@ -187,9 +257,10 @@ export const coinService = {
 
     // Final API call with resolved CoinGecko ID
     const coin = await coingeckoApi.getCoinById(coinGeckoId);
-    const coinDto = mapCoinGeckoToDto(coin);
+    const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
 
     await marketRepository.upsertCoin({
+      internalCoinId: coinDto.internalCoinId ?? undefined,
       coinId: coinDto.coinId,
       symbol: coinDto.symbol,
       name: coinDto.name,
@@ -207,6 +278,7 @@ export const coinService = {
     if (unique.length === 0) return [];
     const coins = await coinRepository.findByIds(unique);
     return coins.map((c) => ({
+      internalCoinId: c.internalCoinId,
       coinId: c.coinId,
       symbol: c.symbol,
       name: c.name,
@@ -242,17 +314,33 @@ export const coinService = {
 
     let contract_address: string | null = null;
     try {
-      const fullCoin = await coingeckoApi.getCoinById(doc.id);
-      const platform = (fullCoin as any).platform;
-      if (platform && typeof platform === 'object') {
-        const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v !== '');
-        contract_address = addrs[0] ?? null;
-      }
+      const { data } = await withResponseCache({
+        cacheKey: `cg:coin:platform:${doc.id}`,
+        ttlSeconds: 86400,
+        metricsKind: 'coin:cgPlatform',
+        fetcher: async () => {
+          const fullCoin = await Promise.race([
+            coingeckoApi.getCoinById(doc.id),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('coingecko_timeout')), 5000)
+            ),
+          ]);
+          const platform = (fullCoin as any).platform;
+          if (platform && typeof platform === 'object') {
+            const addrs = Object.values(platform).filter((v): v is string => typeof v === 'string' && v !== '');
+            return addrs[0] ?? null;
+          }
+          return null;
+        },
+      });
+      contract_address = data;
     } catch {
-      // ignore
+      contract_address = null;
     }
 
     return {
+      internalCoinId: (doc as any).internalCoinId ?? coinGeckoId ?? lookupId,
+      coinId: doc.id,
       image: doc.image,
       current_price: doc.current_price,
       market_cap: doc.market_cap,
@@ -281,7 +369,20 @@ export const coinService = {
       return fromNewsArticles;
     }
 
-    const articles = await coindeskApi.getNewsByTickers([symbol], 1, 20);
+    if (!config.enableCoindeskNewsFallback) {
+      return [];
+    }
+
+    let articles: Awaited<ReturnType<typeof coindeskApi.getNewsByTickers>>;
+    try {
+      articles = await Promise.race([
+        coindeskApi.getNewsByTickers([symbol], 1, 20),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('coindesk_timeout')), 2000)),
+      ]);
+    } catch {
+      return [];
+    }
+
     return articles.map((raw) => {
       const article = normalizeArticle(raw);
       return {

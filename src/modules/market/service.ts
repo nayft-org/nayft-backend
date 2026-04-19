@@ -1,9 +1,11 @@
 import { coinmarketcapApi } from '../../utils/coinmarketcap';
+import { randomUUID } from 'crypto';
 import { marketRepository } from './repository';
 import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
 import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 import { Coin } from '../coin/model';
 import { cacheHelpers } from '../../config/redis';
+import { config } from '../../config/env';
 
 const MARKET_CACHE_TTL = 120; // 2 minutes
 
@@ -41,15 +43,18 @@ const mapCoinMarketCapData = (cmcData: any): any[] => {
   }));
 };
 
-/** Enrich a list of coins with image URLs from labeled_active_coins, keyed by symbol.
- *  labeled_active_coins stores symbols in lowercase (CoinGecko convention), so we
+/** Enrich a list of coins with image URLs from coin_market_snapshots, keyed by symbol.
+ *  coin_market_snapshots stores symbols in lowercase (CoinGecko convention), so we
  *  normalise both sides to lowercase for a fast $in index hit.
  */
 async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(T & { image?: string })[]> {
   if (coins.length === 0) return coins;
   const lowerSymbols = coins.map((c) => c.symbol.toLowerCase());
   const docs = await LabeledActiveCoin.find(
-    { symbol: { $in: lowerSymbols } },
+    {
+      provider: config.coinDataPrimarySnapshotProvider,
+      symbol: { $in: lowerSymbols },
+    },
     { symbol: 1, image: 1, _id: 0 }
   ).lean().exec() as { symbol: string; image?: string }[];
 
@@ -59,6 +64,28 @@ async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(
   }
 
   return coins.map((c) => ({ ...c, image: imageMap.get(c.symbol.toLowerCase()) }));
+}
+
+async function attachInternalCoinIds<T extends { coinId: string }>(
+  coins: T[]
+): Promise<(T & { internalCoinId?: string })[]> {
+  if (coins.length === 0) return coins;
+  const uniqueCoinIds = [...new Set(coins.map((coin) => String(coin.coinId).trim()).filter(Boolean))];
+  if (uniqueCoinIds.length === 0) return coins;
+  const docs = await Coin.find({ coinId: { $in: uniqueCoinIds } })
+    .select('coinId internalCoinId')
+    .lean()
+    .exec();
+  const map = new Map<string, string>();
+  for (const doc of docs as Array<{ coinId: string; internalCoinId?: string }>) {
+    if (doc.internalCoinId) {
+      map.set(doc.coinId, doc.internalCoinId);
+    }
+  }
+  return coins.map((coin) => ({
+    ...coin,
+    internalCoinId: (coin as { internalCoinId?: string }).internalCoinId ?? map.get(coin.coinId),
+  }));
 }
 
 export const marketService = {
@@ -90,6 +117,9 @@ export const marketService = {
                 symbolLower: coin.symbol.toLowerCase(),
                 nameLower: coin.name.toLowerCase(),
               },
+              $setOnInsert: {
+                internalCoinId: randomUUID(),
+              },
             },
             upsert: true,
           },
@@ -98,13 +128,15 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      const enriched = await attachImages(coins);
+      const withInternalIds = await attachInternalCoinIds(coins);
+      const enriched = await attachImages(withInternalIds);
       await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
       return enriched;
     } catch (error: any) {
       // Fallback to database if API fails
       const dbCoins = await marketRepository.findTrending(20);
       const mapped = dbCoins.map((coin) => ({
+        internalCoinId: coin.internalCoinId,
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -112,7 +144,8 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
-      return attachImages(mapped);
+      const withInternalIds = await attachInternalCoinIds(mapped);
+      return attachImages(withInternalIds);
     }
   },
 
@@ -150,6 +183,9 @@ export const marketService = {
                 symbolLower: coin.symbol.toLowerCase(),
                 nameLower: coin.name.toLowerCase(),
               },
+              $setOnInsert: {
+                internalCoinId: randomUUID(),
+              },
             },
             upsert: true,
           },
@@ -158,13 +194,15 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      const enriched = await attachImages(gainers);
+      const withInternalIds = await attachInternalCoinIds(gainers);
+      const enriched = await attachImages(withInternalIds);
       await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
       return enriched;
     } catch (error: any) {
       // Fallback to database
       const dbCoins = await marketRepository.findTopGainers(10);
       const mapped = dbCoins.map((coin) => ({
+        internalCoinId: coin.internalCoinId,
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -172,7 +210,8 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
-      return attachImages(mapped);
+      const withInternalIds = await attachInternalCoinIds(mapped);
+      return attachImages(withInternalIds);
     }
   },
 
@@ -210,6 +249,9 @@ export const marketService = {
                 symbolLower: coin.symbol.toLowerCase(),
                 nameLower: coin.name.toLowerCase(),
               },
+              $setOnInsert: {
+                internalCoinId: randomUUID(),
+              },
             },
             upsert: true,
           },
@@ -218,13 +260,15 @@ export const marketService = {
         await Coin.bulkWrite(bulkOps, { ordered: false });
       }
 
-      const enriched = await attachImages(losers);
+      const withInternalIds = await attachInternalCoinIds(losers);
+      const enriched = await attachImages(withInternalIds);
       await cacheHelpers.set(cacheKey, enriched, MARKET_CACHE_TTL);
       return enriched;
     } catch (error: any) {
       // Fallback to database
       const dbCoins = await marketRepository.findTopLosers(10);
       const mapped = dbCoins.map((coin) => ({
+        internalCoinId: coin.internalCoinId,
         coinId: coin.coinId,
         symbol: coin.symbol,
         name: coin.name,
@@ -232,7 +276,8 @@ export const marketService = {
         price: coin.price,
         percentChange24h: coin.percentChange24h,
       }));
-      return attachImages(mapped);
+      const withInternalIds = await attachInternalCoinIds(mapped);
+      return attachImages(withInternalIds);
     }
   },
 
@@ -244,6 +289,7 @@ export const marketService = {
     });
     return {
       coins: coins.map((c) => ({
+        internalCoinId: (c as any).internalCoinId,
         coinId: c.id,
         symbol: c.symbol,
         name: c.name,

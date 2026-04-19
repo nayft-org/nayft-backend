@@ -12,6 +12,7 @@ export interface ICmcQuoteUsd {
 }
 
 export interface ICmcLabeledCoin extends Document {
+  internalCoinId?: string;
   id: number;
   name: string;
   symbol: string;
@@ -42,6 +43,7 @@ const cmcQuoteUsdSchema = new Schema(
 
 const cmcLabeledCoinSchema = new Schema<ICmcLabeledCoin>(
   {
+    internalCoinId: { type: String, index: true },
     id: { type: Number, required: true, unique: true },
     name: { type: String, required: true },
     symbol: { type: String, required: true },
@@ -60,11 +62,12 @@ const cmcLabeledCoinSchema = new Schema<ICmcLabeledCoin>(
 );
 
 cmcLabeledCoinSchema.index({ id: 1 }, { unique: true });
+cmcLabeledCoinSchema.index({ internalCoinId: 1 });
 cmcLabeledCoinSchema.index({ symbol: 1 });
 cmcLabeledCoinSchema.index({ cmc_rank: 1 });
 
 export const CmcLabeledCoin = mongoose.model<ICmcLabeledCoin>(
   'CmcLabeledCoin',
   cmcLabeledCoinSchema,
-  'cmc_labeled_coins'
+  'cmc_coin_mappings'
 );

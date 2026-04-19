@@ -1,5 +1,5 @@
 #!/bin/bash
-# Populates cmc_labeled_coins collection by calling the endpoint for each page (start=1, 101, ..., 8701).
+# Populates cmc_coin_mappings by calling the endpoint for each page (start=1, 101, ..., 8701).
 # Requires the backend server to be running. Uses 3-second pause between calls (CMC free tier ~30 calls/min).
 #
 # Usage: ./scripts/populate-cmc-labeled-coins.sh

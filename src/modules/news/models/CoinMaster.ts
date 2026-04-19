@@ -1,6 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 
 export interface ICoinMaster {
+  internalCoinId?: string;
   symbol: string;
   name: string;
   keywords: string[];
@@ -8,6 +9,7 @@ export interface ICoinMaster {
 
 const coinMasterSchema = new Schema<ICoinMaster>(
   {
+    internalCoinId: { type: String, index: true },
     symbol: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     keywords: { type: [String], default: [] },
@@ -15,4 +17,8 @@ const coinMasterSchema = new Schema<ICoinMaster>(
   { timestamps: true }
 );
 
-export const CoinMaster = mongoose.model<ICoinMaster>('CoinMaster', coinMasterSchema);
+export const CoinMaster = mongoose.model<ICoinMaster>(
+  'CoinMaster',
+  coinMasterSchema,
+  'coin_news_tagging_map'
+);

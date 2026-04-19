@@ -1,8 +1,10 @@
 import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 import { newsService } from '../news/service';
 import { userService } from '../user/service';
+import { config } from '../../config/env';
 
 export interface SearchCoinResult {
+  internalCoinId?: string;
   coinId: string;
   symbol: string;
   name: string;
@@ -60,6 +62,7 @@ const toCoinResult = (coin: any): SearchCoinResult | null => {
   if (!coinId || !symbol || !name) return null;
 
   return {
+    internalCoinId: coin?.internalCoinId ? String(coin.internalCoinId) : undefined,
     coinId,
     symbol,
     name,
@@ -81,24 +84,35 @@ async function enrichCoinsWithImages(results: SearchCoinResult[]): Promise<Searc
     const symbols = [...new Set(results.map((r) => r.symbol.toLowerCase()))];
 
     const labeled = await LabeledActiveCoin.find({
+      provider: config.coinDataPrimarySnapshotProvider,
       $or: [{ id: { $in: coinIds } }, { symbol: { $in: symbols } }],
     })
-      .select('id symbol image')
-      .lean<Array<{ id: string; symbol: string; image?: string }>>();
+      .select('id symbol image internalCoinId')
+      .lean<Array<{ id: string; symbol: string; image?: string; internalCoinId?: string }>>();
 
     const byId = new Map<string, string>();
     const bySymbol = new Map<string, string>();
+    const internalById = new Map<string, string>();
+    const internalBySymbol = new Map<string, string>();
     for (const doc of labeled) {
       if (doc.image) {
         byId.set(doc.id.toLowerCase(), doc.image);
         bySymbol.set(doc.symbol.toLowerCase(), doc.image);
+      }
+      if (doc.internalCoinId) {
+        internalById.set(doc.id.toLowerCase(), doc.internalCoinId);
+        internalBySymbol.set(doc.symbol.toLowerCase(), doc.internalCoinId);
       }
     }
 
     return results.map((r) => {
       const image =
         byId.get(r.coinId.toLowerCase()) ?? bySymbol.get(r.symbol.toLowerCase()) ?? r.image;
-      return { ...r, image: image || r.image };
+      const internalCoinId =
+        r.internalCoinId ??
+        internalById.get(r.coinId.toLowerCase()) ??
+        internalBySymbol.get(r.symbol.toLowerCase());
+      return { ...r, image: image || r.image, internalCoinId };
     });
   } catch {
     return results;

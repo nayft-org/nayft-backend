@@ -110,3 +110,19 @@ export function buildNewsFollowingKey(params: {
 }): string {
   return `news:following:v1:${params.userId}:${params.page}:${params.limit}:${params.mode}:${params.categoriesSig}`;
 }
+
+function normalizeCoinIdForCacheKey(coinId: string): string {
+  return encodeURIComponent(String(coinId).trim());
+}
+
+export function buildCoinProfileKey(coinId: string): string {
+  return `coin:profile:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+}
+
+export function buildCoinStatsKey(coinId: string): string {
+  return `coin:stats:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+}
+
+export function buildCoinNewsKey(coinId: string): string {
+  return `coin:news:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+}

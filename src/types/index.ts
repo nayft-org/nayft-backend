@@ -13,6 +13,7 @@ export interface IUser extends Document {
 }
 
 export interface ICoin extends Document {
+  internalCoinId: string;
   coinId: string;
   symbol: string;
   name: string;
