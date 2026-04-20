@@ -27,6 +27,18 @@ jobs:
     needs: build
 
     steps:
+      # checkout@v4 tries to git clean the workspace; root-owned dirs (e.g. .backups from
+      # scripts/prod-legacy-cleanup.sh or docker cp) cause EACCES and fail the deploy.
+      - name: Fix workspace permissions (self-hosted)
+        run: |
+          set -e
+          if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+            if [ -d "${GITHUB_WORKSPACE}/.backups" ]; then
+              sudo rm -rf "${GITHUB_WORKSPACE}/.backups"
+            fi
+            sudo chown -R "$(whoami):$(whoami)" "${GITHUB_WORKSPACE}" || true
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
