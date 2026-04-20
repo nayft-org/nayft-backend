@@ -1,3 +1,4 @@
+import { ICoin } from '../../types';
 import { authRepository } from '../auth/repository';
 import { coinRepository } from '../coin/repository';
 import { userRepository } from '../user/repository';
@@ -11,26 +12,62 @@ const clampPagination = (page?: number, limit?: number): { page: number; limit: 
   limit: Math.max(1, Math.min(limit || DEFAULT_LIMIT, MAX_LIMIT)),
 });
 
+/**
+ * Normalize route/query coin keys the same way clients use `/coins/:coinId`
+ * (canonical id, symbol, or internalCoinId). Returns null if no Mongo coin row exists.
+ */
+async function lookupStoredCoin(coinKey: string): Promise<ICoin | null> {
+  const raw = coinKey.includes('=') ? coinKey.split('=')[1] : coinKey;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let coin = await coinRepository.findById(trimmed);
+  if (!coin) {
+    coin = await coinRepository.findBySymbol(trimmed);
+  }
+  if (!coin) {
+    coin = await coinRepository.findByInternalId(trimmed);
+  }
+  return coin;
+}
+
+async function requireStoredCoin(coinKey: string): Promise<ICoin> {
+  const coin = await lookupStoredCoin(coinKey);
+  if (!coin) {
+    throw new Error('Coin not found');
+  }
+  return coin;
+}
+
 export const followService = {
   followCoin: async (followerId: string, coinId: string) => {
-    const coin = await coinRepository.findById(coinId);
-    if (!coin) {
-      throw new Error('Coin not found');
-    }
+    const coin = await requireStoredCoin(coinId);
+    const canonicalId = coin.coinId;
 
-    const alreadyFollowing = await followRepository.exists(followerId, 'coin', coinId);
+    const alreadyFollowing = await followRepository.exists(followerId, 'coin', canonicalId);
     if (!alreadyFollowing) {
-      await followRepository.upsert(followerId, 'coin', coinId);
+      await followRepository.upsert(followerId, 'coin', canonicalId);
     }
 
-    const followersCount = await followRepository.countByTarget('coin', coinId);
-    return { followed: true, targetType: 'coin', targetId: coinId, followersCount };
+    const followersCount = await followRepository.countByTarget('coin', canonicalId);
+    return { followed: true, targetType: 'coin', targetId: canonicalId, followersCount };
   },
 
   unfollowCoin: async (followerId: string, coinId: string) => {
-    await followRepository.delete(followerId, 'coin', coinId);
-    const followersCount = await followRepository.countByTarget('coin', coinId);
-    return { followed: false, targetType: 'coin', targetId: coinId, followersCount };
+    const coin = await lookupStoredCoin(coinId);
+    const trimmed = (coinId.includes('=') ? coinId.split('=')[1] : coinId).trim();
+
+    const idsToClear = new Set<string>();
+    if (coin?.coinId) idsToClear.add(coin.coinId);
+    if (trimmed) idsToClear.add(trimmed);
+
+    for (const id of idsToClear) {
+      await followRepository.delete(followerId, 'coin', id);
+    }
+
+    const primaryId = coin?.coinId ?? trimmed;
+    const followersCount = await followRepository.countByTarget('coin', primaryId);
+    return { followed: false, targetType: 'coin', targetId: primaryId, followersCount };
   },
 
   followUser: async (followerId: string, targetUserId: string) => {
@@ -125,13 +162,11 @@ export const followService = {
   },
 
   getCoinFollowers: async (coinId: string, page?: number, limit?: number) => {
-    const coin = await coinRepository.findById(coinId);
-    if (!coin) {
-      throw new Error('Coin not found');
-    }
+    const coin = await requireStoredCoin(coinId);
+    const canonicalId = coin.coinId;
 
     const { page: safePage, limit: safeLimit } = clampPagination(page, limit);
-    const rows = await followRepository.findFollowers('coin', coinId, safePage, safeLimit);
+    const rows = await followRepository.findFollowers('coin', canonicalId, safePage, safeLimit);
 
     const followers = await Promise.all(
       rows.map(async (row) => {
@@ -169,17 +204,24 @@ export const followService = {
   },
 
   getCoinFollowStats: async (coinId: string) => {
-    const coin = await coinRepository.findById(coinId);
+    const coin = await lookupStoredCoin(coinId);
     if (!coin) {
-      throw new Error('Coin not found');
+      const trimmed = (coinId.includes('=') ? coinId.split('=')[1] : coinId).trim();
+      return { coinId: trimmed || coinId, followersCount: 0 };
     }
 
-    const followersCount = await followRepository.countByTarget('coin', coinId);
-    return { coinId, followersCount };
+    const canonicalId = coin.coinId;
+    const followersCount = await followRepository.countByTarget('coin', canonicalId);
+    return { coinId: canonicalId, followersCount };
   },
 
   isFollowingCoin: async (userId: string, coinId: string): Promise<boolean> => {
-    return followRepository.exists(userId, 'coin', coinId);
+    const coin = await lookupStoredCoin(coinId);
+    if (coin) {
+      return followRepository.exists(userId, 'coin', coin.coinId);
+    }
+    const trimmed = (coinId.includes('=') ? coinId.split('=')[1] : coinId).trim();
+    return followRepository.exists(userId, 'coin', trimmed);
   },
 
   syncLegacyFollowingCoins: async (userId: string): Promise<void> => {
