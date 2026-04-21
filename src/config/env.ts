@@ -52,6 +52,12 @@ export const config = {
   alchemyWebhookSigningKeys: process.env.ALCHEMY_WEBHOOK_SIGNING_KEYS || '{}',
   // Zerion tx-subscriptions
   zerionSubscriptionId:     process.env.ZERION_SUBSCRIPTION_ID  || '',
+  /**
+   * When false, addWallet/removeWallet skip Alchemy Notify and Zerion subscription HTTP calls.
+   * Default true (unchanged behavior). Portfolio module only.
+   */
+  allowProviderSubscriptionWrites:
+    (process.env.ALLOW_PROVIDER_SUBSCRIPTION_WRITES || 'true').toLowerCase() !== 'false',
   // Public webhook URL (Cloudflare tunnel)
   webhookBaseUrl:           process.env.WEBHOOK_BASE_URL         || '',
   /** 0–1: fraction of requests to log in production (Phase 0 observability). Default 1 in dev, 0.05 in prod. */

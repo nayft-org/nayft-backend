@@ -1,6 +1,10 @@
 import { WalletAddress, IWalletAddress } from './models/WalletAddress';
 import { WalletEvent, IWalletEvent, WalletEventActivityFields } from './models/WalletEvent';
 import { Holding, IHolding, HoldingPositionFields } from './models/Holding';
+import {
+  PortfolioWebhookIdempotency,
+  WebhookIdempotencyProvider,
+} from './models/PortfolioWebhookIdempotency';
 
 export const portfolioRepository = {
   // ── WalletAddress ────────────────────────────────────────────────
@@ -153,5 +157,26 @@ export const portfolioRepository = {
   deleteHoldingsByUser: async (userId: string): Promise<boolean> => {
     const result = await Holding.deleteOne({ userId });
     return result.deletedCount > 0;
+  },
+
+  /**
+   * Insert idempotency row before processing a webhook line. Returns false if duplicate (Mongo 11000).
+   */
+  claimWebhookIdempotencyKey: async (
+    dedupeKey: string,
+    provider: WebhookIdempotencyProvider
+  ): Promise<boolean> => {
+    try {
+      await PortfolioWebhookIdempotency.create({
+        dedupeKey,
+        provider,
+        createdAt: new Date(),
+      });
+      return true;
+    } catch (e: unknown) {
+      const code = typeof e === 'object' && e !== null ? (e as { code?: number }).code : undefined;
+      if (code === 11000) return false;
+      throw e;
+    }
   },
 };

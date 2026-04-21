@@ -4,6 +4,7 @@ import { alchemyNotify } from '../../utils/alchemyNotify';
 import { portfolioRepository } from './repository';
 import { ingestWalletEvent, WalletRawEvent } from '../../services/walletEventAggregator';
 import { WalletEventType, WalletEventActivityFields } from './models/WalletEvent';
+import { verifyZerionWebhook } from './zerionSignature';
 
 // ── Alchemy HMAC-SHA256 signature verification ───────────────────────────────
 
@@ -47,6 +48,12 @@ function mapZerionOpType(opType: string): WalletEventType {
     default:
       return 'native_transfer';
   }
+}
+
+function alchemyActivityTxHash(activity: Record<string, unknown>): string {
+  const h = activity.hash as string | undefined;
+  if (h && String(h).trim()) return String(h).trim();
+  return crypto.createHash('sha256').update(JSON.stringify(activity)).digest('hex').slice(0, 16);
 }
 
 // ── Controllers ───────────────────────────────────────────────────────────────
@@ -134,11 +141,17 @@ export const webhookController = {
         tokenDecimals:  activity.rawContract?.decimal,
       };
 
+      const txHash = alchemyActivityTxHash(activity as Record<string, unknown>);
+      const netLabel = network ?? 'unknown';
+      const dedupeKey = `alchemy:${netLabel}:${txHash}:${addr.toLowerCase()}`;
+      const claimed = await portfolioRepository.claimWebhookIdempotencyKey(dedupeKey, 'alchemy');
+      if (!claimed) continue;
+
       const rawEvent: WalletRawEvent = {
         userId:   wallet.userId,
         address:  addr,
         chain:    resolvedChain,
-        txHash:   activity.hash ?? '',
+        txHash:   activity.hash ?? txHash,
         type:     mapAlchemyCategory(activity.category),
         activity: activityData,
       };
@@ -149,11 +162,7 @@ export const webhookController = {
   /**
    * Receives Zerion tx-subscription webhook events.
    * POST /api/portfolio/webhooks/zerion
-   * Unauthenticated — Zerion uses certificate-based signatures
-   * (X-Certificate-URL, X-Timestamp, X-Signature).
-   *
-   * Full asymmetric cert verification requires fetching the public cert from
-   * X-Certificate-URL at runtime. TODO: add full verification before production deployment.
+   * Unauthenticated — verified via X-Certificate-URL, X-Timestamp, X-Signature (`zerionSignature.ts`).
    */
   zerionWebhook: async (req: Request, res: Response): Promise<void> => {
     // Respond 200 immediately — Zerion stops after 3 failed attempts
@@ -162,6 +171,12 @@ export const webhookController = {
     const rawBody = (req as any).rawBody as Buffer | undefined;
     if (!rawBody) {
       console.warn('[WebhookController] Zerion: missing rawBody');
+      return;
+    }
+
+    const okSig = await verifyZerionWebhook(rawBody, req.headers as NodeJS.Dict<string | string[] | undefined>);
+    if (!okSig) {
+      console.warn('[WebhookController] Zerion: signature verification failed — discarding');
       return;
     }
 
@@ -197,6 +212,11 @@ export const webhookController = {
       tokenContract:  attrs.fungible_info?.asset_code,
       tokenDecimals:  attrs.fungible_info?.decimals?.toString(),
     };
+
+    const txHash = (attrs.hash ?? '').toString().trim() || 'unknown';
+    const dedupeKey = `zerion:${chainId}:${txHash}:${address.toLowerCase()}`;
+    const claimed = await portfolioRepository.claimWebhookIdempotencyKey(dedupeKey, 'zerion');
+    if (!claimed) return;
 
     const rawEvent: WalletRawEvent = {
       userId:   wallet.userId,
