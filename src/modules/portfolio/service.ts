@@ -38,27 +38,33 @@ export const portfolioService = {
     const wallet = await portfolioRepository.createWallet(userId, address, chains, label);
     await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
 
-    // Register address with Alchemy Address Activity webhooks (one per chain)
-    for (const chain of chains) {
-      const webhookId = alchemyNotify.getWebhookIdForChain(chain);
-      if (webhookId) {
-        await alchemyNotify.updateWebhookAddresses(webhookId, [address], []).catch((err) =>
-          console.error(`[PortfolioService] Alchemy webhook register failed for chain=${chain}:`, err)
-        );
-      } else {
-        console.warn(`[PortfolioService] No Alchemy webhook ID for chain="${chain}" — set ALCHEMY_WEBHOOK_IDS in .env`);
+    if (config.allowProviderSubscriptionWrites) {
+      // Register address with Alchemy Address Activity webhooks (one per chain)
+      for (const chain of chains) {
+        const webhookId = alchemyNotify.getWebhookIdForChain(chain);
+        if (webhookId) {
+          await alchemyNotify.updateWebhookAddresses(webhookId, [address], []).catch((err) =>
+            console.error(`[PortfolioService] Alchemy webhook register failed for chain=${chain}:`, err)
+          );
+        } else {
+          console.warn(`[PortfolioService] No Alchemy webhook ID for chain="${chain}" — set ALCHEMY_WEBHOOK_IDS in .env`);
+        }
       }
-    }
 
-    // Register address with Zerion tx-subscription (creates subscription if not yet set)
-    try {
-      const subId = await zerionSubscriptions.ensureSubscription([address], chains);
-      const createdNewSubscription = subId && subId !== config.zerionSubscriptionId;
-      if (!createdNewSubscription && config.zerionSubscriptionId) {
-        await zerionSubscriptions.patchWallets(config.zerionSubscriptionId, [address], []);
+      // Register address with Zerion tx-subscription (creates subscription if not yet set)
+      try {
+        const subId = await zerionSubscriptions.ensureSubscription([address], chains);
+        const createdNewSubscription = subId && subId !== config.zerionSubscriptionId;
+        if (!createdNewSubscription && config.zerionSubscriptionId) {
+          await zerionSubscriptions.patchWallets(config.zerionSubscriptionId, [address], []);
+        }
+      } catch (err) {
+        console.error('[PortfolioService] Zerion subscription update failed:', err);
       }
-    } catch (err) {
-      console.error('[PortfolioService] Zerion subscription update failed:', err);
+    } else {
+      console.warn(
+        '[PortfolioService] allowProviderSubscriptionWrites=false — skipping Alchemy Notify and Zerion subscription updates'
+      );
     }
 
     eventService.emitEvent({
@@ -76,21 +82,27 @@ export const portfolioService = {
     if (!wallet) throw new Error('Wallet not found');
     if (wallet.userId !== userId) throw new Error('Wallet not found');
 
-    // Deregister address from Alchemy webhooks before deleting
-    for (const chain of wallet.chains) {
-      const webhookId = alchemyNotify.getWebhookIdForChain(chain);
-      if (webhookId) {
-        await alchemyNotify.updateWebhookAddresses(webhookId, [], [wallet.address]).catch((err) =>
-          console.error(`[PortfolioService] Alchemy webhook deregister failed for chain=${chain}:`, err)
-        );
+    if (config.allowProviderSubscriptionWrites) {
+      // Deregister address from Alchemy webhooks before deleting
+      for (const chain of wallet.chains) {
+        const webhookId = alchemyNotify.getWebhookIdForChain(chain);
+        if (webhookId) {
+          await alchemyNotify.updateWebhookAddresses(webhookId, [], [wallet.address]).catch((err) =>
+            console.error(`[PortfolioService] Alchemy webhook deregister failed for chain=${chain}:`, err)
+          );
+        }
       }
-    }
 
-    // Deregister address from Zerion subscription
-    if (config.zerionSubscriptionId) {
-      await zerionSubscriptions
-        .patchWallets(config.zerionSubscriptionId, [], [wallet.address])
-        .catch((err) => console.error('[PortfolioService] Zerion subscription update failed:', err));
+      // Deregister address from Zerion subscription
+      if (config.zerionSubscriptionId) {
+        await zerionSubscriptions
+          .patchWallets(config.zerionSubscriptionId, [], [wallet.address])
+          .catch((err) => console.error('[PortfolioService] Zerion subscription update failed:', err));
+      }
+    } else {
+      console.warn(
+        '[PortfolioService] allowProviderSubscriptionWrites=false — skipping Alchemy Notify and Zerion subscription deregistration'
+      );
     }
 
     const deleted = await portfolioRepository.deleteWallet(walletId, userId);

@@ -22,6 +22,16 @@ The two webhook endpoints are:
 | Alchemy  | `{WEBHOOK_BASE_URL}/api/portfolio/webhooks/alchemy` |
 | Zerion   | `{WEBHOOK_BASE_URL}/api/portfolio/webhooks/zerion`  |
 
+### Environment: `ALLOW_PROVIDER_SUBSCRIPTION_WRITES`
+
+- Default **`true`**: adding/removing a wallet updates Alchemy Notify address lists and Zerion subscription wallets (same as before).
+- Set **`false`** in local `.env` when you must **not** call provider APIs (e.g. shared Zerion subscription or production webhook targets) but still want to create/delete `WalletAddress` rows in your dev database.
+
+### Production vs local topology
+
+- **Production/staging:** The portfolio rollout assumes **one API replica** until Redis-backed portfolio fan-out ships; see `docs/runbooks/portfolio-webhook-ingress-azure.md`.
+- **Local:** Tunnel URL changes when `cloudflared` restarts; update Alchemy/Zerion dashboards only for **dev** projects, never production webhook URLs.
+
 ---
 
 ## Step 1 — Start the Tunnel
