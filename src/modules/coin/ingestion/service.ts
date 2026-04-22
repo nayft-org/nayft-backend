@@ -37,8 +37,8 @@ async function syncCoinMastersFromFilteredCoins(): Promise<number> {
     const res = await CoinMaster.updateOne(
       { symbol: sym },
       {
-        $setOnInsert: { symbol: sym },
-        $set: {
+        $setOnInsert: {
+          symbol: sym,
           name: sym,
           keywords,
         },
