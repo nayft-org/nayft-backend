@@ -222,13 +222,13 @@ export const searchRepository = {
   ): Promise<SearchPortfolioAssetResult[]> {
     if (!userId) return [];
     try {
-      const dynamicModule = require('../portfolio/service');
-      const portfolioService = dynamicModule?.portfolioService;
-      if (!portfolioService) return [];
+      const dynamicModule = require('../portfolio/repository');
+      const portfolioRepository = dynamicModule?.portfolioRepository;
+      if (!portfolioRepository || typeof portfolioRepository.findHoldingsByUser !== 'function') {
+        return [];
+      }
 
-      const holdings = typeof portfolioService.getHoldings === 'function'
-        ? await portfolioService.getHoldings(userId)
-        : null;
+      const holdings = await portfolioRepository.findHoldingsByUser(userId);
       const positions = Array.isArray(holdings?.positions) ? holdings.positions : [];
       const normalizedQuery = normalizeText(query);
 
