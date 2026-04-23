@@ -17,20 +17,16 @@ export function performanceLogMiddleware(req: Request, res: Response, next: Next
   }
 
   const start = Date.now();
-  const origJson = res.json.bind(res);
-  let responseBytes = 0;
-
-  res.json = function logJson(body: unknown) {
-    try {
-      responseBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
-    } catch {
-      responseBytes = 0;
-    }
-    return origJson(body);
-  };
 
   res.on('finish', () => {
     if (!shouldSample()) return;
+    const rawContentLength = res.getHeader('content-length');
+    const responseBytes =
+      typeof rawContentLength === 'number'
+        ? rawContentLength
+        : typeof rawContentLength === 'string'
+          ? Number.parseInt(rawContentLength, 10) || 0
+          : 0;
     const path = (req as Request & { route?: { path?: string } }).route?.path
       ? `${req.baseUrl}${(req as Request & { route: { path: string } }).route.path}`
       : req.originalUrl.split('?')[0];

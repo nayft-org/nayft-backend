@@ -39,6 +39,14 @@ async function requireStoredCoin(coinKey: string): Promise<ICoin> {
   return coin;
 }
 
+async function mapUsersById(ids: string[]): Promise<Map<string, { username: string }>> {
+  if (ids.length === 0) return new Map();
+  const users = await authRepository.findByIds(ids);
+  return new Map(
+    users.map((user) => [String(user._id), { username: user.username }])
+  );
+}
+
 export const followService = {
   followCoin: async (followerId: string, coinId: string) => {
     const coin = await requireStoredCoin(coinId);
@@ -131,24 +139,34 @@ export const followService = {
 
   getFollowedUsers: async (userId: string) => {
     const userIds = await followRepository.findTargetIdsByFollower(userId, 'user');
-    const users = await Promise.all(
-      userIds.map(async (id) => {
-        const user = await authRepository.findById(id);
+    if (userIds.length === 0) return [];
+
+    const [usersById, followerCounts] = await Promise.all([
+      mapUsersById(userIds),
+      followRepository.countByTargets('user', userIds),
+    ]);
+
+    return userIds
+      .map((id) => {
+        const user = usersById.get(id);
         if (!user) return null;
-        const followersCount = await followRepository.countByTarget('user', id);
-        return { id, username: user.username, followersCount };
+        return {
+          id,
+          username: user.username,
+          followersCount: followerCounts.get(id) || 0,
+        };
       })
-    );
-    return users.filter((user) => user !== null);
+      .filter((user): user is NonNullable<typeof user> => user !== null);
   },
 
   getUserFollowers: async (targetUserId: string, page?: number, limit?: number) => {
     const { page: safePage, limit: safeLimit } = clampPagination(page, limit);
     const rows = await followRepository.findFollowers('user', targetUserId, safePage, safeLimit);
+    const usersById = await mapUsersById(rows.map((row) => row.followerId));
 
-    const followers = await Promise.all(
-      rows.map(async (row) => {
-        const user = await authRepository.findById(row.followerId);
+    return rows
+      .map((row) => {
+        const user = usersById.get(row.followerId);
         if (!user) return null;
         return {
           id: row.followerId,
@@ -156,9 +174,7 @@ export const followService = {
           followedAt: row.createdAt,
         };
       })
-    );
-
-    return followers.filter((follower) => follower !== null);
+      .filter((follower): follower is NonNullable<typeof follower> => follower !== null);
   },
 
   getCoinFollowers: async (coinId: string, page?: number, limit?: number) => {
@@ -167,10 +183,11 @@ export const followService = {
 
     const { page: safePage, limit: safeLimit } = clampPagination(page, limit);
     const rows = await followRepository.findFollowers('coin', canonicalId, safePage, safeLimit);
+    const usersById = await mapUsersById(rows.map((row) => row.followerId));
 
-    const followers = await Promise.all(
-      rows.map(async (row) => {
-        const user = await authRepository.findById(row.followerId);
+    return rows
+      .map((row) => {
+        const user = usersById.get(row.followerId);
         if (!user) return null;
         return {
           id: row.followerId,
@@ -178,9 +195,7 @@ export const followService = {
           followedAt: row.createdAt,
         };
       })
-    );
-
-    return followers.filter((follower) => follower !== null);
+      .filter((follower): follower is NonNullable<typeof follower> => follower !== null);
   },
 
   getUserFollowStats: async (userId: string) => {

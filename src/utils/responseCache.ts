@@ -8,6 +8,7 @@ import { recordCacheEvent } from './httpPerformanceStats';
 
 /** Single-flight map: one DB compute per key while in flight */
 const inflight = new Map<string, Promise<unknown>>();
+const RESPONSE_CACHE_VERSION = 'v1';
 
 export type ResponseCacheOptions<T> = {
   cacheKey: string;
@@ -66,7 +67,7 @@ export function buildChartMarketTrendKey(params: {
   fromIso: string;
   toIso: string;
 }): string {
-  return `chart:mt:v1:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
+  return `chart:mt:${RESPONSE_CACHE_VERSION}:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
 }
 
 export function buildChartKlinesKey(params: {
@@ -77,7 +78,7 @@ export function buildChartKlinesKey(params: {
   fromIso: string;
   toIso: string;
 }): string {
-  return `chart:kl:v1:${params.exchange}:${params.symbol}:${params.interval}:${params.limit}:${params.fromIso}:${params.toIso}`;
+  return `chart:kl:${RESPONSE_CACHE_VERSION}:${params.exchange}:${params.symbol}:${params.interval}:${params.limit}:${params.fromIso}:${params.toIso}`;
 }
 
 /** Batched implementation (market-trend-v2); separate key until parity is proven in prod. */
@@ -89,7 +90,7 @@ export function buildChartMarketTrendV2Key(params: {
   fromIso: string;
   toIso: string;
 }): string {
-  return `chart:mtv2:v1:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
+  return `chart:mtv2:${RESPONSE_CACHE_VERSION}:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
 }
 
 export function buildNewsListKey(params: {
@@ -98,7 +99,7 @@ export function buildNewsListKey(params: {
   limit: number;
   categoriesSig: string;
 }): string {
-  return `news:list:v1:${params.userScope}:${params.page}:${params.limit}:${params.categoriesSig}`;
+  return `news:list:${RESPONSE_CACHE_VERSION}:${params.userScope}:${params.page}:${params.limit}:${params.categoriesSig}`;
 }
 
 export function buildNewsFollowingKey(params: {
@@ -108,7 +109,7 @@ export function buildNewsFollowingKey(params: {
   mode: string;
   categoriesSig: string;
 }): string {
-  return `news:following:v1:${params.userId}:${params.page}:${params.limit}:${params.mode}:${params.categoriesSig}`;
+  return `news:following:${RESPONSE_CACHE_VERSION}:${params.userId}:${params.page}:${params.limit}:${params.mode}:${params.categoriesSig}`;
 }
 
 function normalizeCoinIdForCacheKey(coinId: string): string {
@@ -116,13 +117,13 @@ function normalizeCoinIdForCacheKey(coinId: string): string {
 }
 
 export function buildCoinProfileKey(coinId: string): string {
-  return `coin:profile:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+  return `coin:profile:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
 }
 
 export function buildCoinStatsKey(coinId: string): string {
-  return `coin:stats:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+  return `coin:stats:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
 }
 
 export function buildCoinNewsKey(coinId: string): string {
-  return `coin:news:v1:${normalizeCoinIdForCacheKey(coinId)}`;
+  return `coin:news:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
 }
