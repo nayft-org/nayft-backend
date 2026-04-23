@@ -126,6 +126,15 @@ export const portfolioService = {
 
   getHoldings: async (userId: string, forceRefresh = false) => {
     const cached = await portfolioRepository.findHoldingsByUser(userId);
+    if (config.holdingsReadModelPrimaryEnabled && cached && !forceRefresh) {
+      return {
+        totalValue: cached.totalValue,
+        absoluteChange24h: cached.absoluteChange24h,
+        relativeChange24h: cached.relativeChange24h,
+        positions: cached.positions ?? [],
+      };
+    }
+
     const now = Date.now();
     const cacheAge = cached?.syncedAt ? now - new Date(cached.syncedAt).getTime() : Infinity;
     const useCache = cached && cached.syncedAt && cacheAge < config.holdingsCacheTtlMs;

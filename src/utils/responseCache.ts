@@ -120,6 +120,10 @@ export function buildCoinProfileKey(coinId: string): string {
   return `coin:profile:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
 }
 
+export function buildCoinProfileLocalFirstKey(coinId: string): string {
+  return `coin:profile-local:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
+}
+
 export function buildCoinStatsKey(coinId: string): string {
   return `coin:stats:${RESPONSE_CACHE_VERSION}:${normalizeCoinIdForCacheKey(coinId)}`;
 }

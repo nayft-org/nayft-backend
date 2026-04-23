@@ -180,6 +180,49 @@ function mapCoinGeckoToDto(
   };
 }
 
+function mapLocalCoinToDto(params: {
+  dbCoin?: {
+    internalCoinId?: string;
+    coinId: string;
+    symbol: string;
+    name: string;
+    rank?: number;
+    price?: number;
+    percentChange24h?: number;
+  } | null;
+  snapshot?: {
+    id: string;
+    image?: string;
+    current_price?: number;
+    market_cap?: number;
+    market_cap_rank?: number;
+    total_volume?: number;
+  } | null;
+  internalCoinId: string | null;
+}) {
+  const { dbCoin, snapshot, internalCoinId } = params;
+  const resolvedCoinId = dbCoin?.coinId ?? snapshot?.id ?? '';
+  const resolvedSymbol = dbCoin?.symbol ?? '';
+  const resolvedName = dbCoin?.name ?? resolvedSymbol;
+
+  if (!resolvedCoinId || !resolvedSymbol || !resolvedName) {
+    return null;
+  }
+
+  return {
+    internalCoinId: dbCoin?.internalCoinId ?? internalCoinId,
+    coinId: resolvedCoinId,
+    symbol: resolvedSymbol,
+    name: resolvedName,
+    rank: dbCoin?.rank ?? snapshot?.market_cap_rank ?? 0,
+    price: dbCoin?.price ?? snapshot?.current_price ?? 0,
+    percentChange24h: dbCoin?.percentChange24h ?? 0,
+    marketCap: snapshot?.market_cap,
+    volume24h: snapshot?.total_volume,
+    image: snapshot?.image,
+  };
+}
+
 export const coinService = {
   getCoinProfile: async (coinId: string) => {
     const actualCoinId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
@@ -198,6 +241,18 @@ export const coinService = {
 
     // Check if we found it in local DB
     const dbCoin = dbCoinById || dbCoinBySymbol;
+    if (config.coinProfileLocalFirstEnabled) {
+      const snapshot = await labeledActiveCoinRepository.findByCoinId(actualCoinId);
+      const localDto = mapLocalCoinToDto({
+        dbCoin,
+        snapshot,
+        internalCoinId: resolution.internalCoinId,
+      });
+      if (localDto) {
+        return localDto;
+      }
+    }
+
     if (dbCoin && looksLikeCoinGeckoId(actualCoinId)) {
       // Return DB data immediately if we have it
       return {

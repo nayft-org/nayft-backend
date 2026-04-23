@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { MongoNetworkTimeoutError } from 'mongodb';
 import { chartService } from './service';
 import type { KlineInterval } from './model';
+import { config } from '../../config/env';
 
 const VALID_INTERVALS: KlineInterval[] = ['1m', '5m', '1h', '1d', '1w'];
 
@@ -110,14 +111,23 @@ export const chartController = {
         return;
       }
 
-      const marketTrend = await chartService.getMarketTrend({
-        interval,
-        from,
-        to,
-        exchange,
-        limit,
-        maxCoins,
-      });
+      const marketTrend = config.marketTrendDefaultToV2Enabled
+        ? await chartService.getMarketTrendV2({
+            interval,
+            from,
+            to,
+            exchange,
+            limit,
+            maxCoins,
+          })
+        : await chartService.getMarketTrend({
+            interval,
+            from,
+            to,
+            exchange,
+            limit,
+            maxCoins,
+          });
 
       res.json(marketTrend);
     } catch (err) {
