@@ -51,6 +51,7 @@ const DEFAULT_SEGMENTS: Exclude<SearchSegment, 'all'>[] = [
 const CACHE_TTL_SECONDS = 30;
 const MAX_QUERY_LEN = 64;
 const MIN_QUERY_LEN = 2;
+const SEARCH_CACHE_VERSION = 'v1';
 
 const SEGMENT_BUDGET_MS: Record<ActiveSearchSegment, number> = {
   coins: 200,
@@ -102,7 +103,7 @@ function buildCacheKey(
   userId?: string
 ): string {
   const userKey = userId || 'guest';
-  return `search:${query}|${segments.join(',')}|${limit}|${userKey}`;
+  return `search:${SEARCH_CACHE_VERSION}:${query}|${segments.join(',')}|${limit}|${userKey}`;
 }
 
 function queryHash(q: string): string {

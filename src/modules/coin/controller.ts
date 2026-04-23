@@ -5,9 +5,11 @@ import { sendSuccess, sendError } from '../../utils/response';
 import {
   withResponseCache,
   buildCoinProfileKey,
+  buildCoinProfileLocalFirstKey,
   buildCoinStatsKey,
   buildCoinNewsKey,
 } from '../../utils/responseCache';
+import { config } from '../../config/env';
 
 export const coinController = {
   getCoinsBatch: async (req: Request, res: Response): Promise<void> => {
@@ -126,7 +128,9 @@ export const coinController = {
       // ROLLBACK: remove withResponseCache wrapper + buildCoinProfileKey call to revert
       // to direct service call with no caching
       const { data: coin } = await withResponseCache({
-        cacheKey: buildCoinProfileKey(coinId),
+        cacheKey: config.coinProfileLocalFirstEnabled
+          ? buildCoinProfileLocalFirstKey(coinId)
+          : buildCoinProfileKey(coinId),
         ttlSeconds: 45,
         metricsKind: 'coin:profile',
         fetcher: () => coinService.getCoinProfile(coinId),
@@ -159,4 +163,3 @@ export const coinController = {
     }
   },
 };
-

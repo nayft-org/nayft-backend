@@ -45,6 +45,12 @@ export const config = {
   walletPollIntervalMs:     parseInt(process.env.WALLET_POLL_INTERVAL_MS     || '60000',  10),
   supportedChains:          process.env.SUPPORTED_CHAINS || 'eth,polygon,bnb',
   holdingsCacheTtlMs:       parseInt(process.env.HOLDINGS_CACHE_TTL_MS       || '300000', 10),
+  /**
+   * When true, portfolio holdings prefer the persisted read model whenever a cached row exists.
+   * `refresh=1` still forces the current live/provider-backed path. Default false for safe rollout.
+   */
+  holdingsReadModelPrimaryEnabled:
+    (process.env.HOLDINGS_READ_MODEL_PRIMARY_ENABLED || 'false').toLowerCase() === 'true',
   // Alchemy Notify – webhook management
   alchemyAuthToken:         process.env.ALCHEMY_AUTH_TOKEN      || '',
   alchemyNotifyBaseUrl:     process.env.ALCHEMY_NOTIFY_BASE_URL || 'https://dashboard.alchemy.com/api',
@@ -68,6 +74,12 @@ export const config = {
   })(),
   /** Use batched DB path for GET /api/charts/market-trend-v2 when true (same numeric output as v1). */
   marketTrendV2Enabled: (process.env.MARKET_TREND_V2_ENABLED || 'true').toLowerCase() === 'true',
+  /**
+   * When true, GET /api/charts/market-trend defaults to the guarded v2 path.
+   * Default false so the existing endpoint keeps current behavior unless explicitly enabled.
+   */
+  marketTrendDefaultToV2Enabled:
+    (process.env.MARKET_TREND_DEFAULT_TO_V2_ENABLED || 'false').toLowerCase() === 'true',
   /** Google Cloud Translation API v2 — enables backend news/search/comment translation when set. */
   googleTranslateApiKey: (process.env.GOOGLE_TRANSLATE_API_KEY || '').trim(),
   /**
@@ -85,7 +97,12 @@ export const config = {
   })(),
   /** Coin profile `/coins/:id/news`: when Mongo has no articles, allow CoinDesk HTTP fallback (2s race). Default false. */
   enableCoindeskNewsFallback: (process.env.ENABLE_COINDESK_NEWS_FALLBACK || '').toLowerCase() === 'true',
+  /**
+   * When true, coin profile reads prefer local DB/snapshot data before external CoinGecko fetches.
+   * Default false for guarded rollout because output drift must be validated first.
+   */
+  coinProfileLocalFirstEnabled:
+    (process.env.COIN_PROFILE_LOCAL_FIRST_ENABLED || 'false').toLowerCase() === 'true',
   coinDataPrimarySnapshotProvider:
     (process.env.COIN_DATA_PRIMARY_SNAPSHOT_PROVIDER || 'coingecko').toLowerCase(),
 };
-

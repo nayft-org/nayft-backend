@@ -14,6 +14,11 @@ export const authRepository = {
     return User.findById(id).select('-passwordHash');
   },
 
+  findByIds: async (ids: string[]): Promise<IUser[]> => {
+    if (ids.length === 0) return [];
+    return User.find({ _id: { $in: ids } }).select('-passwordHash');
+  },
+
   create: async (userData: {
     email: string;
     passwordHash: string;
@@ -23,4 +28,3 @@ export const authRepository = {
     return user.save();
   },
 };
-
