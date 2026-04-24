@@ -4,7 +4,6 @@ import pLimit from 'p-limit';
 import { redis } from '../../config/redis';
 import { streamConfig } from '../../config/streamConfig';
 import { config } from '../../config/env';
-import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { chartRepository } from '../chart/repository';
 import { Coin } from '../coin/model';
 import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
@@ -31,28 +30,6 @@ interface RawCoin {
   percentChange24h: number;
   marketCap: number;
   volume24h: number;
-}
-
-type MapCmcRow = Record<string, unknown>;
-
-function mapCoinMarketCapData(cmcData: unknown): RawCoin[] {
-  const data = cmcData as { data?: unknown };
-  if (!data?.data) return [];
-
-  const rows: MapCmcRow[] = Array.isArray(data.data)
-    ? (data.data as MapCmcRow[])
-    : (Object.values(data.data as Record<string, MapCmcRow>) as MapCmcRow[]);
-
-  return rows.map((item) => ({
-    coinId: String(item.id ?? ''),
-    symbol: String(item.symbol ?? ''),
-    name: String(item.name ?? ''),
-    rank: Number(item.cmc_rank ?? 0),
-    price: Number((item.quote as { USD?: { price?: number } })?.USD?.price ?? 0),
-    percentChange24h: Number((item.quote as { USD?: { percent_change_24h?: number } })?.USD?.percent_change_24h ?? 0),
-    marketCap: Number((item.quote as { USD?: { market_cap?: number } })?.USD?.market_cap ?? 0),
-    volume24h: Number((item.quote as { USD?: { volume_24h?: number } })?.USD?.volume_24h ?? 0),
-  }));
 }
 
 async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(T & { image?: string })[]> {
@@ -168,55 +145,34 @@ async function bulkUpsertCoins(coins: RawCoin[]): Promise<void> {
 }
 
 async function fetchTrendingRows(): Promise<RawCoin[]> {
-  try {
-    const cmcResponse = await coinmarketcapApi.getListingsLatest(20);
-    return mapCoinMarketCapData(cmcResponse);
-  } catch (e) {
-    console.warn('[snapshotBuilder] CMC listings failed, using DB fallback', e);
-    const dbCoins = await marketRepository.findTrending(20);
-    return dbCoins.map((coin) => ({
-      coinId: coin.coinId,
-      internalCoinId: coin.internalCoinId,
-      symbol: coin.symbol,
-      name: coin.name,
-      rank: coin.rank,
-      price: coin.price,
-      percentChange24h: coin.percentChange24h,
-      marketCap: 0,
-      volume24h: 0,
-    }));
-  }
+  const dbCoins = await marketRepository.findTrending(20);
+  return dbCoins.map((coin) => ({
+    coinId: coin.coinId,
+    internalCoinId: coin.internalCoinId,
+    symbol: coin.symbol,
+    name: coin.name,
+    rank: coin.rank,
+    price: coin.price,
+    percentChange24h: coin.percentChange24h,
+    marketCap: 0,
+    volume24h: 0,
+  }));
 }
 
 async function fetchGainersLosers(): Promise<{ gainers: RawCoin[]; losers: RawCoin[] }> {
-  try {
-    const cmcResponse = await coinmarketcapApi.getTrendingGainersLosers();
-    const coins = mapCoinMarketCapData(cmcResponse);
-    const gainers = coins
-      .filter((c) => c.percentChange24h > 0)
-      .sort((a, b) => b.percentChange24h - a.percentChange24h)
-      .slice(0, 10);
-    const losers = coins
-      .filter((c) => c.percentChange24h < 0)
-      .sort((a, b) => a.percentChange24h - b.percentChange24h)
-      .slice(0, 10);
-    return { gainers, losers };
-  } catch (e) {
-    console.warn('[snapshotBuilder] CMC gainers/losers failed, using DB', e);
-    const [g, l] = await Promise.all([marketRepository.findTopGainers(10), marketRepository.findTopLosers(10)]);
-    const mapDb = (coin: (typeof g)[0]): RawCoin => ({
-      coinId: coin.coinId,
-      internalCoinId: coin.internalCoinId,
-      symbol: coin.symbol,
-      name: coin.name,
-      rank: coin.rank,
-      price: coin.price,
-      percentChange24h: coin.percentChange24h,
-      marketCap: 0,
-      volume24h: 0,
-    });
-    return { gainers: g.map(mapDb), losers: l.map(mapDb) };
-  }
+  const [g, l] = await Promise.all([marketRepository.findTopGainers(10), marketRepository.findTopLosers(10)]);
+  const mapDb = (coin: (typeof g)[0]): RawCoin => ({
+    coinId: coin.coinId,
+    internalCoinId: coin.internalCoinId,
+    symbol: coin.symbol,
+    name: coin.name,
+    rank: coin.rank,
+    price: coin.price,
+    percentChange24h: coin.percentChange24h,
+    marketCap: 0,
+    volume24h: 0,
+  });
+  return { gainers: g.map(mapDb), losers: l.map(mapDb) };
 }
 
 async function prefetchSparklines(
