@@ -71,15 +71,14 @@ export function subscribeToWalletEvents(cb: EventCallback): () => void {
 export function ingestWalletEvent(event: WalletRawEvent): void {
   const cooldownExpiry = cooldownMap.get(event.address);
   if (cooldownExpiry && Date.now() < cooldownExpiry) {
-    // Wallet is in cooldown — suppress until cooldown expires
-    console.log('[WalletAggregator] Cooldown skip', {
+    // Keep the signal in logs, but do not drop the event before persistence.
+    console.log('[WalletAggregator] Cooldown active; buffering event anyway', {
       userId: event.userId,
       chain: event.chain,
       address: shortAddress(event.address),
       txHash: shortHash(event.txHash),
       cooldownMsRemaining: cooldownExpiry - Date.now(),
     });
-    return;
   }
 
   const key = `${event.address}:${event.chain}`;

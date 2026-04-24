@@ -50,6 +50,7 @@ app.use(compression());
 app.use(performanceLogMiddleware);
 // Attach raw body buffer to req so webhook controllers can verify HMAC signatures
 app.use(express.json({
+  limit: '5mb',
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 app.use(express.urlencoded({ extended: true }));
@@ -87,4 +88,3 @@ app.use(notFound);
 app.use(errorHandler);
 
 export default app;
-
