@@ -42,13 +42,6 @@ export const newsController = {
         metricsKind: 'news:list',
         fetcher: () => newsService.getAllNews(page, limit, categories, req.userId),
       });
-      // #region agent log
-      {
-        const _dbg = { sessionId: '10418d', location: 'news/controller.ts:getAllNews', message: 'before translateNewsArticleDtos', data: { resolvedLanguage: req.resolvedLanguage, languageSource: req.languageSource, count: newsEn?.length ?? 0, title0: typeof newsEn?.[0]?.title === 'string' ? newsEn[0].title.slice(0, 50) : null }, timestamp: Date.now(), hypothesisId: 'H-B' };
-        console.log('[i18n-debug]', _dbg);
-        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-      }
-      // #endregion
       const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
       sendSuccess(res, { news });
     } catch (error: any) {
@@ -135,4 +128,3 @@ export const newsController = {
     }
   },
 };
-

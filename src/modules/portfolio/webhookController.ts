@@ -6,6 +6,20 @@ import { ingestWalletEvent, WalletRawEvent } from '../../services/walletEventAgg
 import { WalletEventType, WalletEventActivityFields } from './models/WalletEvent';
 import { verifyZerionWebhook } from './zerionSignature';
 
+function shortAddress(address: string | undefined | null): string {
+  if (!address) return 'n/a';
+  const value = String(address).toLowerCase();
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function shortHash(hash: string | undefined | null): string {
+  if (!hash) return 'n/a';
+  const value = String(hash);
+  if (value.length <= 14) return value;
+  return `${value.slice(0, 10)}...${value.slice(-4)}`;
+}
+
 // ── Alchemy HMAC-SHA256 signature verification ───────────────────────────────
 
 function verifyAlchemySignature(
@@ -69,6 +83,11 @@ export const webhookController = {
     res.status(200).send('ok');
     const rawBody   = (req as any).rawBody as Buffer | undefined;
     const signature = req.headers['x-alchemy-signature'] as string | undefined;
+    console.log('[PortfolioWebhook] Alchemy received', {
+      hasRawBody: Boolean(rawBody),
+      hasSignature: Boolean(signature),
+      contentLength: rawBody?.length ?? 0,
+    });
 
     if (!rawBody || !signature) {
       console.warn('[WebhookController] Alchemy: missing rawBody or signature header');
@@ -104,6 +123,11 @@ export const webhookController = {
 
     const resolvedChain = chain ?? network ?? 'unknown';
     const activities: any[] = body.event?.activity ?? [];
+    console.log('[PortfolioWebhook] Alchemy parsed', {
+      network: network ?? 'unknown',
+      chain: resolvedChain,
+      activities: activities.length,
+    });
 
     for (const activity of activities) {
       const toAddr   = activity.toAddress?.toLowerCase() as string | undefined;
@@ -129,6 +153,13 @@ export const webhookController = {
         );
         continue;
       }
+      console.log('[PortfolioWebhook] Alchemy matched wallet', {
+        chain: resolvedChain,
+        userId: wallet.userId,
+        matchedAddress: shortAddress(addr),
+        txHash: shortHash(activity.hash),
+        category: activity.category ?? 'unknown',
+      });
 
       const activityData: WalletEventActivityFields = {
         txHash:         activity.hash ?? '',
@@ -145,7 +176,14 @@ export const webhookController = {
       const netLabel = network ?? 'unknown';
       const dedupeKey = `alchemy:${netLabel}:${txHash}:${addr.toLowerCase()}`;
       const claimed = await portfolioRepository.claimWebhookIdempotencyKey(dedupeKey, 'alchemy');
-      if (!claimed) continue;
+      if (!claimed) {
+        console.log('[PortfolioWebhook] Alchemy dedupe skipped', {
+          chain: resolvedChain,
+          address: shortAddress(addr),
+          txHash: shortHash(txHash),
+        });
+        continue;
+      }
 
       const rawEvent: WalletRawEvent = {
         userId:   wallet.userId,
@@ -155,6 +193,13 @@ export const webhookController = {
         type:     mapAlchemyCategory(activity.category),
         activity: activityData,
       };
+      console.log('[PortfolioWebhook] Alchemy ingesting raw event', {
+        userId: wallet.userId,
+        chain: resolvedChain,
+        address: shortAddress(addr),
+        txHash: shortHash(rawEvent.txHash),
+        type: rawEvent.type,
+      });
       ingestWalletEvent(rawEvent);
     }
   },
@@ -169,6 +214,10 @@ export const webhookController = {
     res.status(200).send('ok');
 
     const rawBody = (req as any).rawBody as Buffer | undefined;
+    console.log('[PortfolioWebhook] Zerion received', {
+      hasRawBody: Boolean(rawBody),
+      contentLength: rawBody?.length ?? 0,
+    });
     if (!rawBody) {
       console.warn('[WebhookController] Zerion: missing rawBody');
       return;
@@ -195,12 +244,28 @@ export const webhookController = {
     const tx      = body.included?.[0];
 
     if (!address || !tx) return;
+    console.log('[PortfolioWebhook] Zerion parsed', {
+      address: shortAddress(address),
+      hasTransaction: Boolean(tx),
+    });
 
     const wallet = await portfolioRepository.findWalletByAddress(address).catch(() => null);
-    if (!wallet) return;
+    if (!wallet) {
+      console.warn('[PortfolioWebhook] Zerion no monitored wallet', {
+        address: shortAddress(address),
+      });
+      return;
+    }
 
     const chainId = (tx.relationships?.chain?.id as string | undefined) ?? 'unknown';
     const attrs   = tx.attributes ?? {};
+    console.log('[PortfolioWebhook] Zerion matched wallet', {
+      userId: wallet.userId,
+      chain: chainId,
+      address: shortAddress(address),
+      txHash: shortHash(attrs.hash),
+      operationType: attrs.operation_type ?? 'unknown',
+    });
 
     const activityData: WalletEventActivityFields = {
       txHash:         attrs.hash ?? '',
@@ -216,7 +281,14 @@ export const webhookController = {
     const txHash = (attrs.hash ?? '').toString().trim() || 'unknown';
     const dedupeKey = `zerion:${chainId}:${txHash}:${address.toLowerCase()}`;
     const claimed = await portfolioRepository.claimWebhookIdempotencyKey(dedupeKey, 'zerion');
-    if (!claimed) return;
+    if (!claimed) {
+      console.log('[PortfolioWebhook] Zerion dedupe skipped', {
+        chain: chainId,
+        address: shortAddress(address),
+        txHash: shortHash(txHash),
+      });
+      return;
+    }
 
     const rawEvent: WalletRawEvent = {
       userId:   wallet.userId,
@@ -226,6 +298,13 @@ export const webhookController = {
       type:     mapZerionOpType(attrs.operation_type ?? ''),
       activity: activityData,
     };
+    console.log('[PortfolioWebhook] Zerion ingesting raw event', {
+      userId: wallet.userId,
+      chain: chainId,
+      address: shortAddress(address),
+      txHash: shortHash(rawEvent.txHash),
+      type: rawEvent.type,
+    });
     ingestWalletEvent(rawEvent);
   },
 };

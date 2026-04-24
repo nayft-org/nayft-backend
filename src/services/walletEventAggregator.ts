@@ -23,6 +23,20 @@ import {
   WalletEventActivityFields,
 } from '../modules/portfolio/models/WalletEvent';
 
+function shortAddress(address: string | undefined | null): string {
+  if (!address) return 'n/a';
+  const value = String(address).toLowerCase();
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function shortHash(hash: string | undefined | null): string {
+  if (!hash) return 'n/a';
+  const value = String(hash);
+  if (value.length <= 14) return value;
+  return `${value.slice(0, 10)}...${value.slice(-4)}`;
+}
+
 export interface WalletRawEvent {
   userId:   string;
   address:  string;
@@ -58,6 +72,13 @@ export function ingestWalletEvent(event: WalletRawEvent): void {
   const cooldownExpiry = cooldownMap.get(event.address);
   if (cooldownExpiry && Date.now() < cooldownExpiry) {
     // Wallet is in cooldown — suppress until cooldown expires
+    console.log('[WalletAggregator] Cooldown skip', {
+      userId: event.userId,
+      chain: event.chain,
+      address: shortAddress(event.address),
+      txHash: shortHash(event.txHash),
+      cooldownMsRemaining: cooldownExpiry - Date.now(),
+    });
     return;
   }
 
@@ -65,6 +86,14 @@ export function ingestWalletEvent(event: WalletRawEvent): void {
   const existing = eventBuffer.get(key) ?? [];
   existing.push(event);
   eventBuffer.set(key, existing);
+  console.log('[WalletAggregator] Buffered raw event', {
+    userId: event.userId,
+    chain: event.chain,
+    address: shortAddress(event.address),
+    txHash: shortHash(event.txHash),
+    type: event.type,
+    bufferedCount: existing.length,
+  });
 
   scheduleFlush(key);
 }
@@ -73,6 +102,10 @@ export function ingestWalletEvent(event: WalletRawEvent): void {
 
 function scheduleFlush(key: string): void {
   if (flushTimers.has(key)) return; // already scheduled
+  console.log('[WalletAggregator] Scheduled flush', {
+    key,
+    windowMs: config.eventAggregationWindowMs,
+  });
 
   const timer = setTimeout(async () => {
     flushTimers.delete(key);
@@ -103,6 +136,13 @@ async function flushBuffer(key: string): Promise<void> {
       chainsWithActivity.add(buffChain);
     }
   }
+  console.log('[WalletAggregator] Flushing buffer', {
+    userId,
+    chain,
+    address: shortAddress(address),
+    bufferedEvents: events.length,
+    chainsWithActivity: [...chainsWithActivity],
+  });
 
   let enrichedData: Record<string, unknown> | null = null;
   let eventType: WalletEventType = events[0].type;
@@ -110,9 +150,20 @@ async function flushBuffer(key: string): Promise<void> {
     if (chainsWithActivity.size > 1) {
       // Case A: same wallet across multiple chains → Zerion
       eventType = 'multi_chain_activity';
+      console.log('[WalletAggregator] Enrichment start', {
+        source: 'zerion',
+        userId,
+        address: shortAddress(address),
+        chains: [...chainsWithActivity],
+      });
       const portfolio = await zerionApi.getWalletPortfolio(address);
       const positions = await zerionApi.getWalletPositions(address);
       enrichedData = { source: 'zerion', portfolio, positions };
+      console.log('[WalletAggregator] Enrichment success', {
+        source: 'zerion',
+        address: shortAddress(address),
+        positions: positions.length,
+      });
 
       // Opportunistic holdings cache update: only when user has exactly 1 wallet (complete data)
       try {
@@ -138,8 +189,20 @@ async function flushBuffer(key: string): Promise<void> {
       }
     } else {
       // Case B: single chain → Alchemy
+      console.log('[WalletAggregator] Enrichment start', {
+        source: 'alchemy',
+        userId,
+        chain,
+        address: shortAddress(address),
+      });
       const transfers = await alchemyApi.getAssetTransfers(address, chain);
       enrichedData = { source: 'alchemy', transfers };
+      console.log('[WalletAggregator] Enrichment success', {
+        source: 'alchemy',
+        chain,
+        address: shortAddress(address),
+        transfers: transfers.length,
+      });
     }
   } catch (err) {
     console.error(`[WalletAggregator] Enrichment failed for ${key}:`, err);
@@ -162,6 +225,11 @@ async function flushBuffer(key: string): Promise<void> {
     // Fetch tx status via eth_getTransactionReceipt and build explorer URL
     const txHash = primaryActivity.txHash?.trim();
     if (txHash) {
+      console.log('[WalletAggregator] Fetching tx receipt', {
+        chain,
+        address: shortAddress(address),
+        txHash: shortHash(txHash),
+      });
       const receipt = await alchemyApi.getTransactionReceipt(txHash, chain);
       if (receipt) {
         primaryActivity.txStatus =
@@ -188,6 +256,19 @@ async function flushBuffer(key: string): Promise<void> {
       eventSummaries,
       enrichedData,
       activity:          primaryActivity,
+    });
+    console.log('[WalletAggregator] Event saved', {
+      eventId: typeof saved._id === 'string' ? saved._id : saved._id?.toString?.(),
+      userId,
+      chain,
+      address: shortAddress(address),
+      txHash: shortHash(primaryActivity.txHash),
+      eventType,
+      rawEventCount: events.length,
+      transactionCount,
+      summaries: eventSummaries.length,
+      enrichedSource: (enrichedData?.source as string | undefined) ?? 'none',
+      txStatus: primaryActivity.txStatus ?? 'unknown',
     });
 
     // Set cooldown for this address

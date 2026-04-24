@@ -39,11 +39,10 @@ function getChainForFallback(chain: string): string {
 
 function buildClient(chain: string) {
   const network = getNetworkPath(chain);
+  console.log('[AlchemyApi] buildClient', { chain, network });
   return axios.create({
-    baseURL: `${config.alchemyBaseUrl}/v2/${config.alchemyApiKey}`,
+    baseURL: `https://${network}.g.alchemy.com/v2/${config.alchemyApiKey}`,
     headers: { accept: 'application/json', 'content-type': 'application/json' },
-    // Alchemy's REST v3 uses network as a path segment; we embed it in the request
-    params: { network },
   });
 }
 
@@ -77,6 +76,12 @@ export const alchemyApi = {
     fromBlock: string = '0x0'
   ): Promise<AlchemyTransfer[]> => {
     const client = buildClient(chain);
+    console.log('[AlchemyApi] getAssetTransfers start', {
+      chain,
+      network: getNetworkPath(chain),
+      address: address.toLowerCase(),
+      fromBlock,
+    });
     const response = await client.post<{
       result: { transfers: AlchemyTransfer[] };
     }>('', {
@@ -95,7 +100,13 @@ export const alchemyApi = {
         },
       ],
     });
-    return response.data?.result?.transfers ?? [];
+    const transfers = response.data?.result?.transfers ?? [];
+    console.log('[AlchemyApi] getAssetTransfers success', {
+      chain,
+      address: address.toLowerCase(),
+      transfers: transfers.length,
+    });
+    return transfers;
   },
 
   /**
@@ -141,6 +152,11 @@ export const alchemyApi = {
     // Try Alchemy first (when API key is set)
     if (config.alchemyApiKey) {
       try {
+        console.log('[AlchemyApi] getTransactionReceipt start', {
+          chain: normalizedChain,
+          txHash: normalizedHash,
+          source: 'alchemy',
+        });
         const result = await fetchReceipt(
           `https://${getNetworkPath(normalizedChain)}.g.alchemy.com/v2/${config.alchemyApiKey}`
         );
@@ -154,6 +170,11 @@ export const alchemyApi = {
     const fallbackUrl = PUBLIC_RPC_FALLBACK[normalizedChain];
     if (fallbackUrl) {
       try {
+        console.log('[AlchemyApi] getTransactionReceipt fallback start', {
+          chain: normalizedChain,
+          txHash: normalizedHash,
+          source: fallbackUrl,
+        });
         const result = await fetchReceipt(fallbackUrl);
         if (result !== null) return result;
       } catch (err) {
@@ -172,6 +193,11 @@ export const alchemyApi = {
     chain: string
   ): Promise<AlchemyTokenBalance[]> => {
     const client = buildClient(chain);
+    console.log('[AlchemyApi] getTokenBalances start', {
+      chain,
+      network: getNetworkPath(chain),
+      address: address.toLowerCase(),
+    });
     const response = await client.post<{
       result: { tokenBalances: AlchemyTokenBalance[] };
     }>('', {
@@ -180,6 +206,12 @@ export const alchemyApi = {
       method:  'alchemy_getTokenBalances',
       params:  [address, 'erc20'],
     });
-    return response.data?.result?.tokenBalances ?? [];
+    const balances = response.data?.result?.tokenBalances ?? [];
+    console.log('[AlchemyApi] getTokenBalances success', {
+      chain,
+      address: address.toLowerCase(),
+      balances: balances.length,
+    });
+    return balances;
   },
 };

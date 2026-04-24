@@ -170,46 +170,18 @@ async function callTranslationProvider(
   try {
     if (useGoogle && apiKey) {
       const out = await googleTranslateV2Batch(texts, targetLang, apiKey);
-      // #region agent log
-      {
-        const _dbg = { sessionId: '10418d', location: 'translationService.ts:googleOk', message: 'Google Translate applied', data: { count: out.length, sampleOut: (out[0] ?? '').slice(0, 56), target: targetLang }, timestamp: Date.now(), hypothesisId: 'H-C', runId: 'post-fix' };
-        console.log('[i18n-debug]', _dbg);
-        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-      }
-      // #endregion
       return out;
     }
 
     if (useMymemoryFallback) {
       const out = await myMemoryTranslateBatch(texts, targetLang);
-      // #region agent log
-      {
-        const _dbg = { sessionId: '10418d', location: 'translationService.ts:mymemoryOk', message: 'MyMemory fallback applied', data: { count: out.length, sampleOut: (out[0] ?? '').slice(0, 56), target: targetLang }, timestamp: Date.now(), hypothesisId: 'H-C', runId: 'post-fix' };
-        console.log('[i18n-debug]', _dbg);
-        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-      }
-      // #endregion
       return out;
     }
 
     recordTranslationEvent('fallback_english', texts.length);
-    // #region agent log
-    {
-      const _dbg = { sessionId: '10418d', location: 'translationService.ts:providerNoop', message: 'no Google/MyMemory — English passthrough', data: { target: targetLang, chunkCount: texts.length, explicitProvider: explicit || 'default' }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
-      console.log('[i18n-debug]', _dbg);
-      fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-    }
-    // #endregion
     return texts;
   } catch (e) {
     recordTranslationEvent('provider_errors', texts.length);
-    // #region agent log
-    {
-      const _dbg = { sessionId: '10418d', location: 'translationService.ts:providerErr', message: (e instanceof Error ? e.message : String(e)).slice(0, 220), data: { target: targetLang }, timestamp: Date.now(), hypothesisId: 'H-C', runId: 'post-fix' };
-      console.log('[i18n-debug]', _dbg);
-      fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-    }
-    // #endregion
     throw e;
   } finally {
     recordProviderLatency(Date.now() - started);
@@ -236,23 +208,8 @@ export async function translateBatch(
   }
   if (!multiLang) {
     recordTranslationEvent('fallback_english', inputs.length);
-    // #region agent log
-    {
-      const _dbg = { sessionId: '10418d', location: 'translationService.ts:featureOff', message: 'translateBatch skipped — multi_language inactive', data: { lang, inputCount: inputs.length }, timestamp: Date.now(), hypothesisId: 'H-E' };
-      console.log('[i18n-debug]', _dbg);
-      fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-    }
-    // #endregion
     return inputs.map((s) => (typeof s === 'string' ? s : String(s)));
   }
-
-  // #region agent log
-  {
-    const _dbg = { sessionId: '10418d', location: 'translationService.ts:translateBatch', message: 'translateBatch active', data: { lang, multiLang, translationProvider: config.translationProvider || 'default', willUseGoogle: Boolean(config.googleTranslateApiKey), allowMymemoryFallback: config.translationAllowMymemoryFallback, inputCount: inputs.length, samplePreview: inputs[0]?.slice(0, 40) ?? '' }, timestamp: Date.now(), hypothesisId: 'H-C' };
-    console.log('[i18n-debug]', _dbg);
-    fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-  }
-  // #endregion
 
   recordTranslationEvent('requests', 1);
   await ensureDictionaryLoaded();
@@ -357,16 +314,6 @@ export async function translateBatch(
       outputs[row.idx] = tr;
     }
   }
-
-  // #region agent log
-  {
-    const hitCount = uniqueHashes.length - misses.length;
-    const firstIdx = work[0]?.idx ?? 0;
-    const _dbg = { sessionId: '10418d', location: 'translationService.ts:translateBatchDone', message: 'translateBatch finished', data: { lang, dictVer, uniqueKeys: uniqueHashes.length, redisHits: hitCount, redisMisses: misses.length, firstOutputSample: (outputs[firstIdx] ?? '').slice(0, 72) }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
-    console.log('[i18n-debug]', _dbg);
-    fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-  }
-  // #endregion
 
   return outputs;
 }
