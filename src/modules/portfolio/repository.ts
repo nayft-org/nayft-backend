@@ -6,6 +6,13 @@ import {
   WebhookIdempotencyProvider,
 } from './models/PortfolioWebhookIdempotency';
 
+function shortAddress(address: string | undefined | null): string {
+  if (!address) return 'n/a';
+  const value = String(address).toLowerCase();
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
 export const portfolioRepository = {
   // ── WalletAddress ────────────────────────────────────────────────
 
@@ -26,7 +33,14 @@ export const portfolioRepository = {
 
   /** Used by webhook controller to resolve userId from an incoming address. */
   findWalletByAddress: async (address: string): Promise<IWalletAddress | null> => {
-    return WalletAddress.findOne({ address: address.toLowerCase() });
+    const normalized = address.toLowerCase();
+    const wallet = await WalletAddress.findOne({ address: normalized });
+    console.log('[PortfolioRepository] findWalletByAddress', {
+      address: shortAddress(normalized),
+      found: Boolean(wallet),
+      userId: wallet?.userId ?? null,
+    });
+    return wallet;
   },
 
   findAllActiveWallets: async (): Promise<IWalletAddress[]> => {
@@ -63,7 +77,17 @@ export const portfolioRepository = {
     activity?:         WalletEventActivityFields;
   }): Promise<IWalletEvent> => {
     const event = new WalletEvent({ ...data, aggregatedAt: new Date() });
-    return event.save();
+    const saved = await event.save();
+    console.log('[PortfolioRepository] createEvent', {
+      eventId: typeof saved._id === 'string' ? saved._id : saved._id?.toString?.(),
+      userId: data.userId,
+      chain: data.chain,
+      address: shortAddress(data.address),
+      summaries: data.eventSummaries?.length ?? 0,
+      hasActivity: Boolean(data.activity),
+      enrichedSource: (data.enrichedData?.source as string | undefined) ?? 'none',
+    });
+    return saved;
   },
 
   findEventsByUser: async (
@@ -72,11 +96,18 @@ export const portfolioRepository = {
     limit:  number = 20
   ): Promise<IWalletEvent[]> => {
     const skip = (page - 1) * limit;
-    return WalletEvent.find({ userId })
+    const events = await WalletEvent.find({ userId })
       .sort({ aggregatedAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean() as unknown as IWalletEvent[];
+    console.log('[PortfolioRepository] findEventsByUser', {
+      userId,
+      page,
+      limit,
+      returned: events.length,
+    });
+    return events;
   },
 
   findEventByIdAndUser: async (eventId: string, userId: string): Promise<IWalletEvent | null> => {
@@ -164,10 +195,20 @@ export const portfolioRepository = {
         provider,
         createdAt: new Date(),
       });
+      console.log('[PortfolioRepository] claimWebhookIdempotencyKey accepted', {
+        provider,
+        dedupeKey,
+      });
       return true;
     } catch (e: unknown) {
       const code = typeof e === 'object' && e !== null ? (e as { code?: number }).code : undefined;
-      if (code === 11000) return false;
+      if (code === 11000) {
+        console.log('[PortfolioRepository] claimWebhookIdempotencyKey duplicate', {
+          provider,
+          dedupeKey,
+        });
+        return false;
+      }
       throw e;
     }
   },

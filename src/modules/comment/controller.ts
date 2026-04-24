@@ -12,13 +12,6 @@ export const commentController = {
       const limit = parseInt(req.query.limit as string) || 20;
       const commentsEn = await commentService.getComments(newsId, page, limit);
       const comments = await translateCommentDtos(commentsEn, req.resolvedLanguage);
-      // #region agent log
-      {
-        const _dbg = { sessionId: '10418d', location: 'comment/controller.ts:getComments', message: 'comments translated for response', data: { newsId, resolvedLanguage: req.resolvedLanguage, count: comments.length }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
-        console.log('[i18n-debug]', _dbg);
-        fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-      }
-      // #endregion
       sendSuccess(res, { comments });
     } catch (error: any) {
       sendError(res, error.message, 500);

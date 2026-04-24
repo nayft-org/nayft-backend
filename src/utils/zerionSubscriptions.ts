@@ -40,6 +40,11 @@ export const zerionSubscriptions = {
     const zerionChainIds = chainIds
       .map((c) => CHAIN_TO_ZERION[c.toLowerCase()])
       .filter(Boolean);
+    console.log('[ZerionSubscriptions] createSubscription start', {
+      addresses,
+      callbackUrl,
+      chainIds: zerionChainIds,
+    });
 
     const response = await client.post<{ data: { id: string } }>('/tx-subscriptions/', {
       addresses,
@@ -49,6 +54,7 @@ export const zerionSubscriptions = {
 
     const id = response.data?.data?.id;
     if (!id) throw new Error('[ZerionSubscriptions] createSubscription: missing ID in response');
+    console.log('[ZerionSubscriptions] createSubscription success', { id });
 
     return id;
   },
@@ -71,7 +77,16 @@ export const zerionSubscriptions = {
       ...toRemove.map((addr) => ({ op: 'remove', value: addr })),
     ];
     if (ops.length === 0) return;
+    console.log('[ZerionSubscriptions] patchWallets start', {
+      subscriptionId,
+      toAdd,
+      toRemove,
+    });
     await client.patch(`/tx-subscriptions/${subscriptionId}/wallets`, { data: ops });
+    console.log('[ZerionSubscriptions] patchWallets success', {
+      subscriptionId,
+      ops: ops.length,
+    });
   },
 
   /**
@@ -81,8 +96,16 @@ export const zerionSubscriptions = {
    */
   async updateCallbackUrl(subscriptionId: string, callbackUrl: string): Promise<void> {
     if (!subscriptionId) return;
+    console.log('[ZerionSubscriptions] updateCallbackUrl start', {
+      subscriptionId,
+      callbackUrl,
+    });
     await client.patch(`/tx-subscriptions/${subscriptionId}/callback_url`, {
       data: { callback_url: callbackUrl },
+    });
+    console.log('[ZerionSubscriptions] updateCallbackUrl success', {
+      subscriptionId,
+      callbackUrl,
     });
   },
 
@@ -91,9 +114,21 @@ export const zerionSubscriptions = {
    * creates one and logs the ID. Returns the subscription ID.
    */
   async ensureSubscription(addresses: string[], chainIds: string[] = []): Promise<string> {
-    if (config.zerionSubscriptionId) return config.zerionSubscriptionId;
+    if (config.zerionSubscriptionId) {
+      console.log('[ZerionSubscriptions] ensureSubscription using existing subscription', {
+        subscriptionId: config.zerionSubscriptionId,
+        addresses,
+        chainIds,
+      });
+      return config.zerionSubscriptionId;
+    }
 
     const callbackUrl = `${config.webhookBaseUrl}/api/portfolio/webhooks/zerion`;
+    console.log('[ZerionSubscriptions] ensureSubscription creating new subscription', {
+      addresses,
+      chainIds,
+      callbackUrl,
+    });
     return this.createSubscription(addresses, callbackUrl, chainIds);
   },
 };

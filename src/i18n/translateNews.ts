@@ -72,15 +72,6 @@ export async function translateNewsArticleDtos<T extends TranslatableNewsArticle
     }
   });
 
-  // #region agent log
-  {
-    const firstTitle = clones[0] && typeof clones[0].title === 'string' ? clones[0].title.slice(0, 72) : null;
-    const _dbg = { sessionId: '10418d', location: 'translateNews.ts:done', message: 'translateNewsArticleDtos applied', data: { lang, articles: clones.length, stringFieldsTranslated: strings.length, firstTitleSample: firstTitle }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
-    console.log('[i18n-debug]', _dbg);
-    fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-  }
-  // #endregion
-
   return clones as T[];
 }
 

@@ -78,15 +78,6 @@ export async function translateUnifiedSearchResponse(
     }
   });
 
-  // #region agent log
-  {
-    const nt = news[0]?.title;
-    const _dbg = { sessionId: '10418d', location: 'translateSearch.ts:done', message: 'unified search strings translated', data: { lang, slotCount: slots.length, newsRows: news.length, boardsRows: boards.length, firstNewsTitleSample: typeof nt === 'string' ? nt.slice(0, 72) : null }, timestamp: Date.now(), hypothesisId: 'flow-i18n' };
-    console.log('[i18n-debug]', _dbg);
-    fetch('http://127.0.0.1:7723/ingest/46df119a-fef3-4d2e-b178-17829c05f667', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '10418d' }, body: JSON.stringify(_dbg) }).catch(() => {});
-  }
-  // #endregion
-
   return {
     ...response,
     results: {
