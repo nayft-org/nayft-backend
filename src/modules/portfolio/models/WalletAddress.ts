@@ -20,7 +20,6 @@ const walletAddressSchema = new Schema<IWalletAddress>(
 );
 
 walletAddressSchema.index({ userId: 1 });
-walletAddressSchema.index({ address: 1 });
-walletAddressSchema.index({ userId: 1, address: 1 }, { unique: true });
+walletAddressSchema.index({ address: 1 }, { unique: true });
 
 export const WalletAddress = mongoose.model<IWalletAddress>('WalletAddress', walletAddressSchema);

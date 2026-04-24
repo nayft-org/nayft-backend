@@ -28,14 +28,29 @@ export const portfolioService = {
     chains:  string[],
     label?:  string
   ) => {
-    const existing = await portfolioRepository.findWalletByUserAndAddress(userId, address);
-    if (existing) throw new Error('Wallet already added');
+    const normalizedAddress = address.trim().toLowerCase();
+    const existing = await portfolioRepository.findWalletByAddress(normalizedAddress);
+    if (existing) {
+      if (existing.userId === userId) {
+        throw new Error('Wallet already added');
+      }
+      throw new Error('This wallet is already monitored by another user');
+    }
 
     const supportedIds = config.supportedChains.split(',').map((c) => c.trim());
     const invalid = chains.filter((c) => !supportedIds.includes(c));
     if (invalid.length > 0) throw new Error(`Unsupported chains: ${invalid.join(', ')}`);
 
-    const wallet = await portfolioRepository.createWallet(userId, address, chains, label);
+    let wallet: IWalletAddress;
+    try {
+      wallet = await portfolioRepository.createWallet(userId, normalizedAddress, chains, label);
+    } catch (error: unknown) {
+      const code = typeof error === 'object' && error !== null ? (error as { code?: number }).code : undefined;
+      if (code === 11000) {
+        throw new Error('This wallet is already monitored by another user');
+      }
+      throw error;
+    }
     await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
 
     if (config.allowProviderSubscriptionWrites) {
@@ -43,7 +58,7 @@ export const portfolioService = {
       for (const chain of chains) {
         const webhookId = alchemyNotify.getWebhookIdForChain(chain);
         if (webhookId) {
-          await alchemyNotify.updateWebhookAddresses(webhookId, [address], []).catch((err) =>
+          await alchemyNotify.updateWebhookAddresses(webhookId, [normalizedAddress], []).catch((err) =>
             console.error(`[PortfolioService] Alchemy webhook register failed for chain=${chain}:`, err)
           );
         } else {
@@ -53,10 +68,10 @@ export const portfolioService = {
 
       // Register address with Zerion tx-subscription (creates subscription if not yet set)
       try {
-        const subId = await zerionSubscriptions.ensureSubscription([address], chains);
+        const subId = await zerionSubscriptions.ensureSubscription([normalizedAddress], chains);
         const createdNewSubscription = subId && subId !== config.zerionSubscriptionId;
         if (!createdNewSubscription && config.zerionSubscriptionId) {
-          await zerionSubscriptions.patchWallets(config.zerionSubscriptionId, [address], []);
+          await zerionSubscriptions.patchWallets(config.zerionSubscriptionId, [normalizedAddress], []);
         }
       } catch (err) {
         console.error('[PortfolioService] Zerion subscription update failed:', err);
@@ -71,7 +86,7 @@ export const portfolioService = {
       featureKey: 'portfolio_tracking',
       eventType: 'wallet_added',
       userId,
-      metadata: { address, chains: chains.length },
+      metadata: { address: normalizedAddress, chains: chains.length },
     }).catch(() => {});
 
     return wallet;
