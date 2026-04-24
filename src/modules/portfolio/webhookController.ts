@@ -70,6 +70,36 @@ function alchemyActivityTxHash(activity: Record<string, unknown>): string {
   return crypto.createHash('sha256').update(JSON.stringify(activity)).digest('hex').slice(0, 16);
 }
 
+function normalizeActivityPart(value: unknown): string {
+  if (value == null) return '';
+  return String(value).trim().toLowerCase();
+}
+
+/**
+ * Build a stable per-activity fingerprint for Alchemy ADDRESS_ACTIVITY payloads.
+ *
+ * A single transaction can emit multiple activity rows for the same monitored wallet
+ * (for example a native movement plus one or more ERC-20 transfers). Deduping only by
+ * tx hash drops those later rows and makes Polygon token activity look like "POL only".
+ */
+function alchemyActivityFingerprint(activity: Record<string, any>): string {
+  const rawContract = activity.rawContract ?? {};
+  const parts = [
+    normalizeActivityPart(activity.hash),
+    normalizeActivityPart(activity.category),
+    normalizeActivityPart(activity.asset),
+    normalizeActivityPart(activity.fromAddress),
+    normalizeActivityPart(activity.toAddress),
+    normalizeActivityPart(activity.value),
+    normalizeActivityPart(activity.blockNum),
+    normalizeActivityPart(rawContract.address),
+    normalizeActivityPart(rawContract.decimal),
+    normalizeActivityPart(activity.logIndex),
+    normalizeActivityPart(activity.uniqueId),
+  ];
+  return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24);
+}
+
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 export const webhookController = {
@@ -173,14 +203,16 @@ export const webhookController = {
       };
 
       const txHash = alchemyActivityTxHash(activity as Record<string, unknown>);
+      const activityFingerprint = alchemyActivityFingerprint(activity as Record<string, any>);
       const netLabel = network ?? 'unknown';
-      const dedupeKey = `alchemy:${netLabel}:${txHash}:${addr.toLowerCase()}`;
+      const dedupeKey = `alchemy:${netLabel}:${activityFingerprint}:${addr.toLowerCase()}`;
       const claimed = await portfolioRepository.claimWebhookIdempotencyKey(dedupeKey, 'alchemy');
       if (!claimed) {
         console.log('[PortfolioWebhook] Alchemy dedupe skipped', {
           chain: resolvedChain,
           address: shortAddress(addr),
           txHash: shortHash(txHash),
+          category: activity.category ?? 'unknown',
         });
         continue;
       }

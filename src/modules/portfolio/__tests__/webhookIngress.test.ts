@@ -62,3 +62,75 @@ describe('Alchemy HMAC (same contract as webhookController)', () => {
     expect(verifyAlchemySignature(raw, good, key)).toBe(true);
   });
 });
+
+describe('Alchemy activity dedupe fingerprint', () => {
+  function normalizeActivityPart(value: unknown): string {
+    if (value == null) return '';
+    return String(value).trim().toLowerCase();
+  }
+
+  function alchemyActivityFingerprint(activity: Record<string, any>): string {
+    const rawContract = activity.rawContract ?? {};
+    const parts = [
+      normalizeActivityPart(activity.hash),
+      normalizeActivityPart(activity.category),
+      normalizeActivityPart(activity.asset),
+      normalizeActivityPart(activity.fromAddress),
+      normalizeActivityPart(activity.toAddress),
+      normalizeActivityPart(activity.value),
+      normalizeActivityPart(activity.blockNum),
+      normalizeActivityPart(rawContract.address),
+      normalizeActivityPart(rawContract.decimal),
+      normalizeActivityPart(activity.logIndex),
+      normalizeActivityPart(activity.uniqueId),
+    ];
+    return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24);
+  }
+
+  it('keeps distinct native and ERC-20 activities from the same tx hash separate', () => {
+    const base = {
+      hash: '0xtx1',
+      fromAddress: '0xaaa',
+      toAddress: '0xbbb',
+      blockNum: '0x123',
+    };
+
+    const nativeFingerprint = alchemyActivityFingerprint({
+      ...base,
+      category: 'external',
+      asset: 'MATIC',
+      value: '0.01',
+    });
+
+    const erc20Fingerprint = alchemyActivityFingerprint({
+      ...base,
+      category: 'erc20',
+      asset: 'USDC',
+      value: '25',
+      rawContract: {
+        address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+        decimal: '6',
+      },
+    });
+
+    expect(nativeFingerprint).not.toBe(erc20Fingerprint);
+  });
+
+  it('produces the same fingerprint for duplicate webhook retries of the same activity', () => {
+    const activity = {
+      hash: '0xtx2',
+      category: 'erc20',
+      asset: 'USDC',
+      value: '10',
+      blockNum: '0x456',
+      fromAddress: '0x111',
+      toAddress: '0x222',
+      rawContract: {
+        address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+        decimal: '6',
+      },
+    };
+
+    expect(alchemyActivityFingerprint(activity)).toBe(alchemyActivityFingerprint({ ...activity }));
+  });
+});
