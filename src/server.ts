@@ -57,11 +57,7 @@ const startServer = async (): Promise<void> => {
     });
     console.log(`📊 KlineDownsampler scheduled: ${streamConfig.kline.downsamplerCron}`);
 
-    const snapshotCron = process.env.MARKET_SNAPSHOT_CRON || '*/2 * * * *';
-    cron.schedule(snapshotCron, () => {
-      runMarketSnapshotBuild().catch((err) => console.error('[MarketSnapshot]', err));
-    });
-    console.log(`📸 Market snapshot builder scheduled: ${snapshotCron}`);
+    console.log('📸 Market snapshot builder running in manual/boot mode (recurring cron disabled)');
 
     setImmediate(() => {
       runMarketSnapshotBuild().catch((err) => console.error('[MarketSnapshot] initial build:', err));
