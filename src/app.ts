@@ -41,7 +41,14 @@ const corsOptions = {
     : config.frontendUrls,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'Accept-Language'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-admin-key',
+    'Accept-Language',
+    'X-Portfolio-Session-Mode',
+    'X-Portfolio-Trigger-Reason',
+  ],
 };
 
 // Middleware
