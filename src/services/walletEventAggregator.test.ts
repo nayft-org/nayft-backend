@@ -34,7 +34,10 @@ describe('walletEventAggregator guarded chain paths', () => {
     jest.useRealTimers();
   });
 
-  it('persists Solana activity with explorer URL without EVM enrichment or receipt refresh', async () => {
+  it('persists Solana activity with explorer URL when enrichment and receipt calls return empty', async () => {
+    (alchemyApi.getAssetTransfers as jest.Mock).mockResolvedValue([]);
+    (alchemyApi.getTransactionReceipt as jest.Mock).mockResolvedValue(null);
+
     ingestWalletEvent({
       userId: 'user_1',
       address: '7zQ3Rk9qN6LxVb2tP8sYaBcDeFgHiJkLmNoPqRsTuVw',
@@ -51,18 +54,62 @@ describe('walletEventAggregator guarded chain paths', () => {
 
     await jest.runOnlyPendingTimersAsync();
 
-    expect(alchemyApi.getAssetTransfers).not.toHaveBeenCalled();
-    expect(alchemyApi.getTransactionReceipt).not.toHaveBeenCalled();
+    expect(alchemyApi.getAssetTransfers).toHaveBeenCalledTimes(1);
+    expect(alchemyApi.getTransactionReceipt).toHaveBeenCalledTimes(1);
     expect(portfolioRepository.createEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         chain: 'sol',
-        enrichedData: null,
+        enrichedData: {
+          source: 'alchemy',
+          transfers: [],
+        },
         activity: expect.objectContaining({
           txHash: '5nSig',
-          explorerUrl: 'https://solscan.io/tx/5nSig',
+          txStatus: 'pending',
         }),
       })
     );
-    expect((portfolioRepository.createEvent as jest.Mock).mock.calls[0][0].activity).not.toHaveProperty('txStatus');
+  });
+
+  it('persists webhook events even when EVM enrichment and receipt lookups return empty', async () => {
+    (alchemyApi.getAssetTransfers as jest.Mock).mockResolvedValue([]);
+    (alchemyApi.getTransactionReceipt as jest.Mock).mockResolvedValue(null);
+
+    ingestWalletEvent({
+      userId: 'user_2',
+      address: '0x0a058183874ac70a0aaf91fcdc824112ad2445e0',
+      chain: 'polygon',
+      txHash: '0x1234',
+      type: 'token_transfer',
+      activity: {
+        txHash: '0x1234',
+        blockNum: '0x5203d7e',
+        asset: 'USDC',
+        value: 129.93,
+        fromAddress: '0x1111111111111111111111111111111111111111',
+        toAddress: '0x0a058183874ac70a0aaf91fcdc824112ad2445e0',
+      },
+    });
+
+    await jest.runOnlyPendingTimersAsync();
+
+    expect(alchemyApi.getAssetTransfers).toHaveBeenCalledTimes(1);
+    expect(alchemyApi.getTransactionReceipt).toHaveBeenCalledTimes(1);
+    expect(portfolioRepository.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user_2',
+        chain: 'polygon',
+        type: 'token_transfer',
+        enrichedData: {
+          source: 'alchemy',
+          transfers: [],
+        },
+        activity: expect.objectContaining({
+          txHash: '0x1234',
+          txStatus: 'pending',
+          explorerUrl: 'https://polygonscan.com/tx/0x1234',
+        }),
+      })
+    );
   });
 });

@@ -38,6 +38,9 @@ export const config = {
   // Wallet monitoring – RPC
   alchemyBaseUrl:           process.env.ALCHEMY_BASE_URL || '',
   alchemyApiKey:            process.env.ALCHEMY_API_KEY  || '',
+  alchemyRpcBudgetEnabled:
+    (process.env.ALCHEMY_RPC_BUDGET_ENABLED || 'true').toLowerCase() !== 'false',
+  alchemyRpcDailyBudget:    Math.max(0, parseInt(process.env.ALCHEMY_RPC_DAILY_BUDGET || '100', 10)),
   zerionBaseUrl:            process.env.ZERION_BASE_URL  || '',
   zerionApiKey:             process.env.ZERION_API_KEY   || '',
   eventAggregationWindowMs: parseInt(process.env.EVENT_AGGREGATION_WINDOW_MS || '120000', 10),
