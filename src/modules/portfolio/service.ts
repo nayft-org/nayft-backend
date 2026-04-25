@@ -8,12 +8,46 @@ import { getExplorerTxUrl } from '../../utils/explorerUrls';
 import { fetchAndAggregateHoldings } from '../../utils/holdingsAggregator';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
+import {
+  PortfolioApiBlockedError,
+  PortfolioRequestContext,
+  PortfolioTriggerReason,
+  isFreshnessApiAllowed,
+  normalizePortfolioContext,
+} from './sessionPolicy';
+import { emitHoldingsDeltaUpdate, emitWalletStatusUpdate } from '../../services/walletEventAggregator';
 
 function shortAddress(address: string | undefined | null): string {
   if (!address) return 'n/a';
   const value = String(address).toLowerCase();
   if (value.length <= 12) return value;
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function toHoldingsDto(data: {
+  totalValue: number;
+  absoluteChange24h: number;
+  relativeChange24h: number;
+  positions: Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }>;
+}) {
+  return {
+    totalValue: data.totalValue,
+    absoluteChange24h: data.absoluteChange24h,
+    relativeChange24h: data.relativeChange24h,
+    positions: data.positions ?? [],
+  };
+}
+
+function assertFreshnessApiAllowed(
+  context: PortfolioRequestContext,
+  liveModeAllowedTriggers: PortfolioTriggerReason[],
+  endpointLabel: string
+): void {
+  if (!isFreshnessApiAllowed(context, liveModeAllowedTriggers)) {
+    throw new PortfolioApiBlockedError(
+      `Blocked ${endpointLabel}: live session is stream-owned unless trigger is ${liveModeAllowedTriggers.join(', ')}`
+    );
+  }
 }
 
 export const portfolioService = {
@@ -188,14 +222,24 @@ export const portfolioService = {
   getEvents: async (
     userId: string,
     page:   number,
-    limit:  number
+    limit:  number,
+    context?: Partial<PortfolioRequestContext>
   ): Promise<IWalletEvent[]> => {
-    console.log('[PortfolioService] getEvents', { userId, page, limit });
+    const ctx = normalizePortfolioContext(context);
+    if (page <= 1) {
+      assertFreshnessApiAllowed(ctx, ['manual_refresh', 'reconnect_recovery', 'stale_reconciliation'], 'GET /events');
+    }
+    console.log('[PortfolioService] getEvents', { userId, page, limit, context: ctx });
     return portfolioRepository.findEventsByUser(userId, page, limit);
   },
 
-  getHoldings: async (userId: string, forceRefresh = false) => {
-    console.log('[PortfolioService] getHoldings start', { userId, forceRefresh });
+  getHoldings: async (
+    userId: string,
+    forceRefresh = false,
+    context?: Partial<PortfolioRequestContext>
+  ) => {
+    const ctx = normalizePortfolioContext(context);
+    console.log('[PortfolioService] getHoldings start', { userId, forceRefresh, context: ctx });
     const cached = await portfolioRepository.findHoldingsByUser(userId);
     if (config.holdingsReadModelPrimaryEnabled && cached && !forceRefresh) {
       console.log('[PortfolioService] getHoldings cache hit (read model primary)', {
@@ -203,12 +247,7 @@ export const portfolioService = {
         positions: cached.positions?.length ?? 0,
         totalValue: cached.totalValue,
       });
-      return {
-        totalValue: cached.totalValue,
-        absoluteChange24h: cached.absoluteChange24h,
-        relativeChange24h: cached.relativeChange24h,
-        positions: cached.positions ?? [],
-      };
+      return toHoldingsDto(cached);
     }
 
     const now = Date.now();
@@ -222,12 +261,7 @@ export const portfolioService = {
         positions: cached.positions?.length ?? 0,
         totalValue: cached.totalValue,
       });
-      return {
-        totalValue:        cached.totalValue,
-        absoluteChange24h: cached.absoluteChange24h,
-        relativeChange24h: cached.relativeChange24h,
-        positions:         cached.positions ?? [],
-      };
+      return toHoldingsDto(cached);
     }
 
     const wallets = await portfolioRepository.findWalletsByUser(userId);
@@ -235,6 +269,12 @@ export const portfolioService = {
       console.log('[PortfolioService] getHoldings no wallets', { userId });
       return { totalValue: 0, absoluteChange24h: 0, relativeChange24h: 0, positions: [] };
     }
+
+    assertFreshnessApiAllowed(
+      ctx,
+      ['manual_refresh', 'reconnect_recovery', 'stale_reconciliation'],
+      'GET /holdings'
+    );
 
     const addresses = wallets.map((w) => w.address);
     console.log('[PortfolioService] getHoldings provider fetch', {
@@ -244,15 +284,32 @@ export const portfolioService = {
     });
     const aggregated = await fetchAndAggregateHoldings(addresses);
     await portfolioRepository.upsertHoldings(userId, aggregated);
+    emitHoldingsDeltaUpdate({
+      userId,
+      addresses,
+      source: 'api_snapshot',
+      updatedAt: new Date().toISOString(),
+      holdings: aggregated,
+    });
     console.log('[PortfolioService] getHoldings provider fetch success', {
       userId,
       positions: aggregated.positions.length,
       totalValue: aggregated.totalValue,
     });
-    return aggregated;
+    return toHoldingsDto(aggregated);
   },
 
-  refreshEventStatuses: async (userId: string): Promise<{ updated: number }> => {
+  refreshEventStatuses: async (
+    userId: string,
+    context?: Partial<PortfolioRequestContext>
+  ): Promise<{ updated: number }> => {
+    const ctx = normalizePortfolioContext(context);
+    assertFreshnessApiAllowed(
+      ctx,
+      ['manual_refresh', 'reconnect_recovery', 'stale_reconciliation'],
+      'POST /events/refresh-status'
+    );
+
     const events = await portfolioRepository.findEventsNeedingStatusRefresh(userId, 20);
     let updated = 0;
     for (const event of events) {
@@ -266,11 +323,28 @@ export const portfolioService = {
         : receipt.status === '0x0' ? 'failed'
         : 'pending';
       const explorerUrl = getExplorerTxUrl(chain, txHash);
+      const previousStatus = event.activity?.txStatus ?? null;
+      const previousExplorer = event.activity?.explorerUrl ?? null;
+      if (previousStatus === txStatus && previousExplorer === (explorerUrl || null)) {
+        continue;
+      }
       const eventId = typeof event._id === 'string' ? event._id : (event._id as { toString(): string }).toString();
-      await portfolioRepository.updateEventActivity(eventId, userId, {
+      const updatedEvent = await portfolioRepository.updateEventActivity(eventId, userId, {
         txStatus,
         explorerUrl: explorerUrl || undefined,
       });
+      if (updatedEvent?.activity?.txHash) {
+        emitWalletStatusUpdate({
+          userId,
+          address: updatedEvent.address,
+          chain: updatedEvent.chain,
+          eventId,
+          txHash: updatedEvent.activity.txHash,
+          txStatus,
+          explorerUrl: updatedEvent.activity.explorerUrl,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       updated++;
     }
     return { updated };
