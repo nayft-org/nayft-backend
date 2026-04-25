@@ -21,6 +21,7 @@ import {
   IWalletEvent,
   WalletEventType,
   WalletEventActivityFields,
+  TxStatus,
 } from '../modules/portfolio/models/WalletEvent';
 
 function shortAddress(address: string | undefined | null): string {
@@ -46,6 +47,37 @@ export interface WalletRawEvent {
   activity: WalletEventActivityFields;
 }
 
+export interface PortfolioHoldingsSnapshot {
+  totalValue: number;
+  absoluteChange24h: number;
+  relativeChange24h: number;
+  positions: Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }>;
+}
+
+export interface PortfolioStatusUpdate {
+  userId: string;
+  address: string;
+  chain: string;
+  eventId: string;
+  txHash: string;
+  txStatus: TxStatus;
+  explorerUrl?: string;
+  updatedAt: string;
+}
+
+export interface PortfolioHoldingsDelta {
+  userId: string;
+  addresses: string[];
+  holdings: PortfolioHoldingsSnapshot;
+  source: 'zerion_live' | 'api_snapshot';
+  updatedAt: string;
+}
+
+export type PortfolioRealtimeMessage =
+  | { type: 'wallet_event'; event: IWalletEvent }
+  | { type: 'wallet_status'; update: PortfolioStatusUpdate }
+  | { type: 'holdings_delta'; delta: PortfolioHoldingsDelta };
+
 // ── In-memory state (same pattern as klineIngester) ─────────────────────────
 
 // key: "address:chain" → queued raw events
@@ -57,15 +89,34 @@ const cooldownMap = new Map<string, number>();
 // key: "address:chain" → pending flush timer
 const flushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-// Subscribers notified after each aggregated event is stored
-type EventCallback = (event: IWalletEvent) => void;
-const subscribers = new Set<EventCallback>();
+// Subscribers notified after each canonical realtime message is emitted
+type PortfolioRealtimeCallback = (message: PortfolioRealtimeMessage) => void;
+const realtimeSubscribers = new Set<PortfolioRealtimeCallback>();
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export function subscribeToWalletEvents(cb: EventCallback): () => void {
-  subscribers.add(cb);
-  return () => subscribers.delete(cb);
+export function subscribeToPortfolioRealtime(cb: PortfolioRealtimeCallback): () => void {
+  realtimeSubscribers.add(cb);
+  return () => realtimeSubscribers.delete(cb);
+}
+
+/**
+ * Backward-compatible helper for consumers that only care about wallet_event.
+ */
+export function subscribeToWalletEvents(cb: (event: IWalletEvent) => void): () => void {
+  const wrapped = (message: PortfolioRealtimeMessage): void => {
+    if (message.type === 'wallet_event') cb(message.event);
+  };
+  realtimeSubscribers.add(wrapped);
+  return () => realtimeSubscribers.delete(wrapped);
+}
+
+export function emitWalletStatusUpdate(update: PortfolioStatusUpdate): void {
+  notifyRealtimeSubscribers({ type: 'wallet_status', update });
+}
+
+export function emitHoldingsDeltaUpdate(delta: PortfolioHoldingsDelta): void {
+  notifyRealtimeSubscribers({ type: 'holdings_delta', delta });
 }
 
 export function ingestWalletEvent(event: WalletRawEvent): void {
@@ -145,6 +196,7 @@ async function flushBuffer(key: string): Promise<void> {
 
   let enrichedData: Record<string, unknown> | null = null;
   let eventType: WalletEventType = events[0].type;
+  let holdingsDelta: PortfolioHoldingsDelta | null = null;
   try {
     if (chainsWithActivity.size > 1) {
       // Case A: same wallet across multiple chains → Zerion
@@ -182,6 +234,18 @@ async function flushBuffer(key: string): Promise<void> {
             relativeChange24h:  portfolio.relativeChange24h,
             positions,
           });
+          holdingsDelta = {
+            userId,
+            addresses: [normalizedAddr],
+            source: 'zerion_live',
+            updatedAt: new Date().toISOString(),
+            holdings: {
+              totalValue,
+              absoluteChange24h: portfolio.absoluteChange24h,
+              relativeChange24h: portfolio.relativeChange24h,
+              positions,
+            },
+          };
         }
       } catch (holdErr) {
         console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);
@@ -273,15 +337,37 @@ async function flushBuffer(key: string): Promise<void> {
     // Set cooldown for this address
     cooldownMap.set(address, Date.now() + config.walletEventCooldownMs);
 
-    // Notify WebSocket subscribers
-    for (const cb of subscribers) {
-      try {
-        cb(saved);
-      } catch (e) {
-        console.error('[WalletAggregator] Subscriber error:', e);
-      }
+    notifyRealtimeSubscribers({ type: 'wallet_event', event: saved });
+
+    const statusTxHash = primaryActivity.txHash?.trim();
+    const txStatus = primaryActivity.txStatus;
+    if (statusTxHash && txStatus) {
+      emitWalletStatusUpdate({
+        userId,
+        address,
+        chain,
+        eventId: typeof saved._id === 'string' ? saved._id : saved._id?.toString?.() ?? '',
+        txHash: statusTxHash,
+        txStatus,
+        explorerUrl: primaryActivity.explorerUrl,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    if (holdingsDelta) {
+      emitHoldingsDeltaUpdate(holdingsDelta);
     }
   } catch (err) {
     console.error(`[WalletAggregator] DB write failed for ${key}:`, err);
+  }
+}
+
+function notifyRealtimeSubscribers(message: PortfolioRealtimeMessage): void {
+  for (const cb of realtimeSubscribers) {
+    try {
+      cb(message);
+    } catch (e) {
+      console.error('[WalletAggregator] Subscriber error:', e);
+    }
   }
 }

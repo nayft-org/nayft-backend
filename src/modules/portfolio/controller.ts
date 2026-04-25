@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
+import { parsePortfolioContextFromHeaders, PortfolioApiBlockedError } from './sessionPolicy';
 
 function walletToDto(w: IWalletAddress) {
   return {
@@ -82,31 +83,46 @@ export const portfolioController = {
   },
 
   getEvents: async (req: AuthRequest, res: Response): Promise<void> => {
+    const context = parsePortfolioContextFromHeaders(req.headers);
     try {
       const page  = parseInt((req.query.page  as string) || '1',  10);
       const limit = parseInt((req.query.limit as string) || '20', 10);
-      const events = await portfolioService.getEvents(req.userId!, page, limit);
+      const events = await portfolioService.getEvents(req.userId!, page, limit, context);
       sendSuccess(res, { events: events.map(eventToDto) });
     } catch (error: any) {
+      if (error instanceof PortfolioApiBlockedError) {
+        sendError(res, error.message, error.statusCode);
+        return;
+      }
       sendError(res, error.message, 500);
     }
   },
 
   refreshEventStatuses: async (req: AuthRequest, res: Response): Promise<void> => {
+    const context = parsePortfolioContextFromHeaders(req.headers);
     try {
-      const result = await portfolioService.refreshEventStatuses(req.userId!);
+      const result = await portfolioService.refreshEventStatuses(req.userId!, context);
       sendSuccess(res, result);
     } catch (error: any) {
+      if (error instanceof PortfolioApiBlockedError) {
+        sendError(res, error.message, error.statusCode);
+        return;
+      }
       sendError(res, error.message, 500);
     }
   },
 
   getHoldings: async (req: AuthRequest, res: Response): Promise<void> => {
     const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const context = parsePortfolioContextFromHeaders(req.headers);
     try {
-      const holdings = await portfolioService.getHoldings(req.userId!, forceRefresh);
+      const holdings = await portfolioService.getHoldings(req.userId!, forceRefresh, context);
       sendSuccess(res, { holdings });
     } catch (error: any) {
+      if (error instanceof PortfolioApiBlockedError) {
+        sendError(res, error.message, error.statusCode);
+        return;
+      }
       console.error('[Holdings] controller.getHoldings: error', error?.message);
       sendError(res, error.message, 500);
     }

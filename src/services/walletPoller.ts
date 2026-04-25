@@ -25,6 +25,11 @@ interface ActiveWallet {
   chains:   string[];
 }
 
+interface RecoveryWindowOptions {
+  intervalMs?: number;
+  durationMs?: number;
+}
+
 // key: "walletId:chain" → last seen block hex (e.g. "0x123abc")
 const lastSeenBlock = new Map<string, string>();
 
@@ -32,6 +37,8 @@ const lastSeenBlock = new Map<string, string>();
 const activeWallets = new Map<string, ActiveWallet>();
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let recoveryStopTimer: ReturnType<typeof setTimeout> | null = null;
+let recoveryMode = false;
 
 // ── Polling tick ─────────────────────────────────────────────────────────────
 
@@ -95,30 +102,57 @@ async function pollWallet(wallet: ActiveWallet, chain: string): Promise<void> {
 
 export const walletPoller = {
   /**
-   * Loads all persisted wallets from the DB and starts the polling loop.
-   * Called once from server.ts after connectDatabase() resolves.
+   * Compatibility wrapper; poller is recovery-only and bounded by a recovery window.
    */
   async start(): Promise<void> {
-    if (pollTimer) return;
+    await this.startRecoveryWindow();
+  },
+
+  /**
+   * Starts a bounded recovery polling window to catch up missed wallet activity.
+   * Polling is intentionally disabled as a steady-state updater.
+   */
+  async startRecoveryWindow(options: RecoveryWindowOptions = {}): Promise<void> {
+    const intervalMs = Math.max(5000, options.intervalMs ?? config.walletPollIntervalMs);
+    const durationMs = Math.max(intervalMs, options.durationMs ?? intervalMs * 3);
+
+    recoveryMode = true;
 
     try {
       const wallets = await portfolioRepository.findAllActiveWallets();
       for (const w of wallets) {
-        activeWallets.set(w.id as string, walletFromDoc(w));
+        const id = (w._id as { toString(): string }).toString();
+        activeWallets.set(id, walletFromDoc(w));
       }
     } catch (err) {
       console.error('[WalletPoller] Failed to load wallets from DB:', err);
     }
 
+    if (pollTimer) {
+      clearInterval(pollTimer);
+    }
     pollTimer = setInterval(() => {
+      if (!recoveryMode) return;
       tick().catch((err) => console.error('[WalletPoller] Tick error:', err));
-    }, config.walletPollIntervalMs);
+    }, intervalMs);
+
+    if (recoveryStopTimer) {
+      clearTimeout(recoveryStopTimer);
+    }
+    recoveryStopTimer = setTimeout(() => {
+      this.stop();
+    }, durationMs);
   },
 
   stop(): void {
+    recoveryMode = false;
     if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
+    }
+    if (recoveryStopTimer) {
+      clearTimeout(recoveryStopTimer);
+      recoveryStopTimer = null;
     }
     activeWallets.clear();
     lastSeenBlock.clear();
