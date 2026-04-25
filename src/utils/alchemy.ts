@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/env';
+import { claimAlchemyRpcBudget } from '../services/alchemyRpcBudget';
 
 // Alchemy network identifiers mapped from chain config IDs
 const CHAIN_NETWORK_MAP: Record<string, string> = {
@@ -75,6 +76,19 @@ export const alchemyApi = {
     chain: string,
     fromBlock: string = '0x0'
   ): Promise<AlchemyTransfer[]> => {
+    const budget = await claimAlchemyRpcBudget('alchemy_getAssetTransfers');
+    if (!budget.allowed) {
+      console.warn('[AlchemyApi] getAssetTransfers denied by budget', {
+        chain,
+        address: address.toLowerCase(),
+        reason: budget.reason,
+        count: budget.count,
+        limit: budget.limit,
+        key: budget.key,
+      });
+      return [];
+    }
+
     const client = buildClient(chain);
     console.log('[AlchemyApi] getAssetTransfers start', {
       chain,
@@ -120,6 +134,19 @@ export const alchemyApi = {
     chain: string
   ): Promise<{ status: '0x0' | '0x1' | null } | null> => {
     if (!txHash?.trim()) return null;
+    const budget = await claimAlchemyRpcBudget('eth_getTransactionReceipt');
+    if (!budget.allowed) {
+      console.warn('[AlchemyApi] getTransactionReceipt denied by budget', {
+        chain,
+        txHash,
+        reason: budget.reason,
+        count: budget.count,
+        limit: budget.limit,
+        key: budget.key,
+      });
+      return null;
+    }
+
     const normalizedHash = txHash.trim().startsWith('0x') ? txHash.trim() : `0x${txHash.trim()}`;
     const normalizedChain = getChainForFallback(chain);
 
@@ -192,6 +219,19 @@ export const alchemyApi = {
     address: string,
     chain: string
   ): Promise<AlchemyTokenBalance[]> => {
+    const budget = await claimAlchemyRpcBudget('alchemy_getTokenBalances');
+    if (!budget.allowed) {
+      console.warn('[AlchemyApi] getTokenBalances denied by budget', {
+        chain,
+        address: address.toLowerCase(),
+        reason: budget.reason,
+        count: budget.count,
+        limit: budget.limit,
+        key: budget.key,
+      });
+      return [];
+    }
+
     const client = buildClient(chain);
     console.log('[AlchemyApi] getTokenBalances start', {
       chain,
