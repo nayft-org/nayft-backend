@@ -9,6 +9,13 @@ import { fetchAndAggregateHoldings } from '../../utils/holdingsAggregator';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
 import {
+  getSelectionKind,
+  listPortfolioChains,
+  normalizePortfolioAddress,
+  portfolioChainToDto,
+  validatePortfolioChainSelection,
+} from './chainRegistry';
+import {
   PortfolioApiBlockedError,
   PortfolioRequestContext,
   PortfolioTriggerReason,
@@ -52,15 +59,7 @@ function assertFreshnessApiAllowed(
 
 export const portfolioService = {
   getSupportedChains: () => {
-    return config.supportedChains
-      .split(',')
-      .map((raw) => raw.trim())
-      .filter(Boolean)
-      .map((id) => ({
-        id,
-        name:   id.charAt(0).toUpperCase() + id.slice(1),
-        symbol: id.toUpperCase(),
-      }));
+    return listPortfolioChains().map(portfolioChainToDto);
   },
 
   addWallet: async (
@@ -69,11 +68,14 @@ export const portfolioService = {
     chains:  string[],
     label?:  string
   ) => {
-    const normalizedAddress = address.trim().toLowerCase();
+    const selectedChains = validatePortfolioChainSelection(chains, listPortfolioChains());
+    const normalizedChains = selectedChains.map((chain) => chain.id);
+    const selectionKind = getSelectionKind(selectedChains);
+    const normalizedAddress = normalizePortfolioAddress(address, selectionKind);
     console.log('[PortfolioService] addWallet start', {
       userId,
       address: shortAddress(normalizedAddress),
-      chains,
+      chains: normalizedChains,
       label: label ?? null,
     });
     const existing = await portfolioRepository.findWalletByAddress(normalizedAddress);
@@ -84,13 +86,9 @@ export const portfolioService = {
       throw new Error('This wallet is already monitored by another user');
     }
 
-    const supportedIds = config.supportedChains.split(',').map((c) => c.trim());
-    const invalid = chains.filter((c) => !supportedIds.includes(c));
-    if (invalid.length > 0) throw new Error(`Unsupported chains: ${invalid.join(', ')}`);
-
     let wallet: IWalletAddress;
     try {
-      wallet = await portfolioRepository.createWallet(userId, normalizedAddress, chains, label);
+      wallet = await portfolioRepository.createWallet(userId, normalizedAddress, normalizedChains, label);
     } catch (error: unknown) {
       const code = typeof error === 'object' && error !== null ? (error as { code?: number }).code : undefined;
       if (code === 11000) {
@@ -102,7 +100,7 @@ export const portfolioService = {
 
     if (config.allowProviderSubscriptionWrites) {
       // Register address with Alchemy Address Activity webhooks (one per chain)
-      for (const chain of chains) {
+      for (const chain of normalizedChains) {
         const webhookId = alchemyNotify.getWebhookIdForChain(chain);
         if (webhookId) {
           console.log('[PortfolioService] Registering Alchemy webhook address', {
@@ -124,10 +122,10 @@ export const portfolioService = {
         console.log('[PortfolioService] Registering Zerion subscription address', {
           userId,
           address: shortAddress(normalizedAddress),
-          chains,
+          chains: normalizedChains,
           existingSubscriptionId: config.zerionSubscriptionId || null,
         });
-        const subId = await zerionSubscriptions.ensureSubscription([normalizedAddress], chains);
+        const subId = await zerionSubscriptions.ensureSubscription([normalizedAddress], normalizedChains);
         const createdNewSubscription = subId && subId !== config.zerionSubscriptionId;
         if (!createdNewSubscription && config.zerionSubscriptionId) {
           await zerionSubscriptions.patchWallets(config.zerionSubscriptionId, [normalizedAddress], []);
@@ -151,14 +149,14 @@ export const portfolioService = {
       featureKey: 'portfolio_tracking',
       eventType: 'wallet_added',
       userId,
-      metadata: { address: normalizedAddress, chains: chains.length },
+      metadata: { address: normalizedAddress, chains: normalizedChains.length },
     }).catch(() => {});
 
     console.log('[PortfolioService] addWallet success', {
       userId,
       walletId: (wallet._id as { toString(): string }).toString(),
       address: shortAddress(normalizedAddress),
-      chains,
+      chains: normalizedChains,
     });
     return wallet;
   },
