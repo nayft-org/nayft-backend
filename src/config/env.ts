@@ -46,7 +46,7 @@ export const config = {
   eventAggregationWindowMs: parseInt(process.env.EVENT_AGGREGATION_WINDOW_MS || '120000', 10),
   walletEventCooldownMs:    parseInt(process.env.WALLET_EVENT_COOLDOWN_MS    || '300000', 10),
   walletPollIntervalMs:     parseInt(process.env.WALLET_POLL_INTERVAL_MS     || '60000',  10),
-  supportedChains:          process.env.SUPPORTED_CHAINS || 'eth,polygon,bnb',
+  supportedChains:          process.env.SUPPORTED_CHAINS || 'eth,polygon,arb,sol,bnb',
   holdingsCacheTtlMs:       parseInt(process.env.HOLDINGS_CACHE_TTL_MS       || '300000', 10),
   /**
    * When true, portfolio holdings prefer the persisted read model whenever a cached row exists.
