@@ -57,6 +57,8 @@ function assertFreshnessApiAllowed(
   }
 }
 
+const EVENT_STATUS_REFRESH_SCAN_LIMIT = 200;
+
 export const portfolioService = {
   getSupportedChains: () => {
     return listPortfolioChains().map(portfolioChainToDto);
@@ -308,7 +310,7 @@ export const portfolioService = {
       'POST /events/refresh-status'
     );
 
-    const events = await portfolioRepository.findEventsNeedingStatusRefresh(userId, 20);
+    const events = await portfolioRepository.findEventsNeedingStatusRefresh(userId, EVENT_STATUS_REFRESH_SCAN_LIMIT);
     let updated = 0;
     for (const event of events) {
       const txHash = event.activity?.txHash?.trim();
