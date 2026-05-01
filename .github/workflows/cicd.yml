@@ -45,21 +45,21 @@ jobs:
       - name: Prepare environment files and configs
         run: |
           # Backend env - copy from server (managed manually)
-          if [ -f /nayft/secrets/nayft_backend ]; then
-            cp /nayft/secrets/nayft_backend ./.env
+          if [ -f /nayft_storage/secrets/nayft_backend.env ]; then
+            cp /nayft_storage/secrets/nayft_backend.env ./.env
             # Validate that required backend environment variables are present
             if ! grep -q "MONGO_URI=" ./.env; then
               echo "ERROR: MONGO_URI is missing from nayft_backend secrets file"
-              echo "Please ensure /nayft/secrets/nayft_backend contains MONGO_URI"
+              echo "Please ensure /nayft_storage/secrets/nayft_backend.env contains MONGO_URI"
               exit 1
             fi
             if ! grep -q "JWT_SECRET=" ./.env; then
               echo "ERROR: JWT_SECRET is missing from nayft_backend secrets file"
-              echo "Please ensure /nayft/secrets/nayft_backend contains JWT_SECRET"
+              echo "Please ensure /nayft_storage/secrets/nayft_backend.env contains JWT_SECRET"
               exit 1
             fi
           else
-            echo "ERROR: Backend .env file not found at /nayft/secrets/nayft_backend"
+            echo "ERROR: Backend .env file not found at /nayft_storage/secrets/nayft_backend.env"
             echo "Please create this file with MONGO_URI and JWT_SECRET before deploying"
             exit 1
           fi
