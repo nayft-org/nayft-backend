@@ -18,6 +18,10 @@ import { getExplorerTxUrl } from '../utils/explorerUrls';
 import { getTransactionCount, buildEventSummaries } from '../utils/eventSummaryBuilder';
 import { portfolioRepository } from '../modules/portfolio/repository';
 import {
+  buildMergedHoldingsForUser,
+  getHoldingsBroadcastAddressesForUser,
+} from '../modules/portfolio/holdingsSync';
+import {
   IWalletEvent,
   WalletEventType,
   WalletEventActivityFields,
@@ -47,11 +51,22 @@ export interface WalletRawEvent {
   activity: WalletEventActivityFields;
 }
 
+export interface PortfolioHoldingsPosition {
+  name: string;
+  symbol: string;
+  quantity: number;
+  value: number;
+  chain: string;
+  source?: 'wallet' | 'exchange';
+  venue?: string;
+  sourceConnectionId?: string;
+}
+
 export interface PortfolioHoldingsSnapshot {
   totalValue: number;
   absoluteChange24h: number;
   relativeChange24h: number;
-  positions: Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }>;
+  positions: PortfolioHoldingsPosition[];
 }
 
 export interface PortfolioStatusUpdate {
@@ -117,6 +132,11 @@ export function emitWalletStatusUpdate(update: PortfolioStatusUpdate): void {
 
 export function emitHoldingsDeltaUpdate(delta: PortfolioHoldingsDelta): void {
   notifyRealtimeSubscribers({ type: 'holdings_delta', delta });
+}
+
+/** Exchange / poller path: persist elsewhere, then broadcast the saved event to WS subscribers. */
+export function publishWalletEventToSubscribers(event: IWalletEvent): void {
+  notifyRealtimeSubscribers({ type: 'wallet_event', event });
 }
 
 export function ingestWalletEvent(event: WalletRawEvent): void {
@@ -224,28 +244,46 @@ async function flushBuffer(key: string): Promise<void> {
           wallets.length === 1 &&
           wallets[0].address?.toLowerCase() === normalizedAddr
         ) {
-          const totalValue =
-            positions.length > 0
-              ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
-              : portfolio.totalValue;
-          await portfolioRepository.upsertHoldings(userId, {
-            totalValue,
-            absoluteChange24h: portfolio.absoluteChange24h,
-            relativeChange24h:  portfolio.relativeChange24h,
-            positions,
-          });
-          holdingsDelta = {
-            userId,
-            addresses: [normalizedAddr],
-            source: 'zerion_live',
-            updatedAt: new Date().toISOString(),
-            holdings: {
+          if (config.exchangePortfolioEnabled) {
+            const merged = await buildMergedHoldingsForUser(userId);
+            await portfolioRepository.upsertHoldings(userId, merged);
+            const addrs = await getHoldingsBroadcastAddressesForUser(userId);
+            holdingsDelta = {
+              userId,
+              addresses: addrs,
+              source: 'zerion_live',
+              updatedAt: new Date().toISOString(),
+              holdings: {
+                totalValue: merged.totalValue,
+                absoluteChange24h: merged.absoluteChange24h,
+                relativeChange24h: merged.relativeChange24h,
+                positions: merged.positions,
+              },
+            };
+          } else {
+            const totalValue =
+              positions.length > 0
+                ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
+                : portfolio.totalValue;
+            await portfolioRepository.upsertHoldings(userId, {
               totalValue,
               absoluteChange24h: portfolio.absoluteChange24h,
               relativeChange24h: portfolio.relativeChange24h,
               positions,
-            },
-          };
+            });
+            holdingsDelta = {
+              userId,
+              addresses: [normalizedAddr],
+              source: 'zerion_live',
+              updatedAt: new Date().toISOString(),
+              holdings: {
+                totalValue,
+                absoluteChange24h: portfolio.absoluteChange24h,
+                relativeChange24h: portfolio.relativeChange24h,
+                positions,
+              },
+            };
+          }
         }
       } catch (holdErr) {
         console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);

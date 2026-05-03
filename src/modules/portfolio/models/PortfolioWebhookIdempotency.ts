@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type WebhookIdempotencyProvider = 'alchemy' | 'zerion';
+export type WebhookIdempotencyProvider = 'alchemy' | 'zerion' | 'coindcx';
 
 export interface IPortfolioWebhookIdempotency extends Document {
   dedupeKey: string;
@@ -11,7 +11,7 @@ export interface IPortfolioWebhookIdempotency extends Document {
 const portfolioWebhookIdempotencySchema = new Schema<IPortfolioWebhookIdempotency>(
   {
     dedupeKey: { type: String, required: true, unique: true },
-    provider:  { type: String, required: true, enum: ['alchemy', 'zerion'] },
+    provider:  { type: String, required: true, enum: ['alchemy', 'zerion', 'coindcx'] },
     createdAt: { type: Date, default: Date.now },
   },
   { collection: 'portfolio_webhook_idempotencies' }

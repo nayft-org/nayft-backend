@@ -17,6 +17,7 @@
     "script:get-admin-key": "ts-node --transpile-only scripts/get-admin-key-mongo.ts",
     "script:compare-market-trend": "ts-node --transpile-only scripts/compare-market-trend.ts",
     "script:repair-news-tags": "ts-node --transpile-only scripts/repair-news-coin-tags.ts",
+    "script:coindcx-ping": "ts-node --transpile-only scripts/dev-coindcx-ping.ts",
     "script:prod-legacy-cleanup": "bash scripts/prod-legacy-cleanup.sh"
   },
   "keywords": [

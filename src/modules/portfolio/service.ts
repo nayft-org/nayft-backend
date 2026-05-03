@@ -1,11 +1,20 @@
 import { portfolioRepository } from './repository';
 import { config } from '../../config/env';
+import { coindcxService } from '../../integrations/coindcx/coindcxService';
+import { CoindcxApiError } from '../../integrations/coindcx/coindcxErrors';
+import { encryptExchangeCredentials } from './exchangeCrypto';
+import { IExchangeConnection, ExchangeConnectionStatus } from './models/ExchangeConnection';
 import { eventService } from '../../core/event-system';
 import { alchemyNotify } from '../../utils/alchemyNotify';
 import { zerionSubscriptions } from '../../utils/zerionSubscriptions';
 import { alchemyApi } from '../../utils/alchemy';
 import { getExplorerTxUrl } from '../../utils/explorerUrls';
-import { fetchAndAggregateHoldings } from '../../utils/holdingsAggregator';
+import {
+  buildMergedHoldingsForUser,
+  getHoldingsBroadcastAddressesForUser,
+  userHasPollableExchangeConnection,
+} from './holdingsSync';
+import { HoldingPositionFields } from './models/Holding';
 import { IWalletAddress } from './models/WalletAddress';
 import { IWalletEvent } from './models/WalletEvent';
 import {
@@ -35,13 +44,22 @@ function toHoldingsDto(data: {
   totalValue: number;
   absoluteChange24h: number;
   relativeChange24h: number;
-  positions: Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }>;
+  positions: HoldingPositionFields[];
 }) {
   return {
     totalValue: data.totalValue,
     absoluteChange24h: data.absoluteChange24h,
     relativeChange24h: data.relativeChange24h,
-    positions: data.positions ?? [],
+    positions: (data.positions ?? []).map((p) => ({
+      name:  p.name,
+      symbol: p.symbol,
+      quantity: p.quantity,
+      value: p.value,
+      chain: p.chain,
+      ...(p.source != null ? { source: p.source } : {}),
+      ...(p.venue != null ? { venue: p.venue } : {}),
+      ...(p.sourceConnectionId != null ? { sourceConnectionId: p.sourceConnectionId } : {}),
+    })),
   };
 }
 
@@ -55,6 +73,29 @@ function assertFreshnessApiAllowed(
       `Blocked ${endpointLabel}: live session is stream-owned unless trigger is ${liveModeAllowedTriggers.join(', ')}`
     );
   }
+}
+
+function assertExchangePortfolioEnabled(): void {
+  if (!config.exchangePortfolioEnabled) {
+    throw new Error('EXCHANGE_DISABLED');
+  }
+}
+
+function maskApiKey(apiKey: string): string {
+  const k = apiKey.trim();
+  if (k.length <= 8) return '••••';
+  return `${k.slice(0, 4)}…${k.slice(-4)}`;
+}
+
+function mapCoindcxError(e: unknown): string {
+  if (e instanceof CoindcxApiError) {
+    if (e.code === 'invalid_credentials') return 'CoinDCX API key or secret is invalid or revoked';
+    if (e.code === 'rate_limited') return 'CoinDCX rate limit — try again shortly';
+    if (e.code === 'provider_error') return 'CoinDCX is temporarily unavailable';
+    return e.message;
+  }
+  if (e instanceof Error) return e.message;
+  return 'CoinDCX validation failed';
 }
 
 const EVENT_STATUS_REFRESH_SCAN_LIMIT = 200;
@@ -264,9 +305,12 @@ export const portfolioService = {
       return toHoldingsDto(cached);
     }
 
-    const wallets = await portfolioRepository.findWalletsByUser(userId);
-    if (wallets.length === 0) {
-      console.log('[PortfolioService] getHoldings no wallets', { userId });
+    const [wallets, hasExchange] = await Promise.all([
+      portfolioRepository.findWalletsByUser(userId),
+      userHasPollableExchangeConnection(userId),
+    ]);
+    if (wallets.length === 0 && !hasExchange) {
+      console.log('[PortfolioService] getHoldings no wallets and no exchange', { userId });
       return { totalValue: 0, absoluteChange24h: 0, relativeChange24h: 0, positions: [] };
     }
 
@@ -280,23 +324,30 @@ export const portfolioService = {
     console.log('[PortfolioService] getHoldings provider fetch', {
       userId,
       walletCount: wallets.length,
+      hasExchange,
       addresses: addresses.map(shortAddress),
     });
-    const aggregated = await fetchAndAggregateHoldings(addresses);
-    await portfolioRepository.upsertHoldings(userId, aggregated);
+    const merged = await buildMergedHoldingsForUser(userId);
+    await portfolioRepository.upsertHoldings(userId, merged);
+    const broadcastAddrs = await getHoldingsBroadcastAddressesForUser(userId);
     emitHoldingsDeltaUpdate({
       userId,
-      addresses,
+      addresses: broadcastAddrs,
       source: 'api_snapshot',
       updatedAt: new Date().toISOString(),
-      holdings: aggregated,
+      holdings: {
+        totalValue: merged.totalValue,
+        absoluteChange24h: merged.absoluteChange24h,
+        relativeChange24h: merged.relativeChange24h,
+        positions: merged.positions,
+      },
     });
     console.log('[PortfolioService] getHoldings provider fetch success', {
       userId,
-      positions: aggregated.positions.length,
-      totalValue: aggregated.totalValue,
+      positions: merged.positions.length,
+      totalValue: merged.totalValue,
     });
-    return toHoldingsDto(aggregated);
+    return toHoldingsDto(merged);
   },
 
   refreshEventStatuses: async (
@@ -348,5 +399,86 @@ export const portfolioService = {
       updated++;
     }
     return { updated };
+  },
+
+  // ── CoinDCX / exchange connections (Phase 1 REST) ─────────────────
+
+  listExchangeConnections: async (userId: string): Promise<IExchangeConnection[]> => {
+    assertExchangePortfolioEnabled();
+    return portfolioRepository.findExchangeConnectionsByUser(userId);
+  },
+
+  validateCoinDcx: async (apiKey: string, apiSecret: string): Promise<void> => {
+    assertExchangePortfolioEnabled();
+    try {
+      await coindcxService.validateCredentials({ apiKey, apiSecret });
+    } catch (e) {
+      throw new Error(mapCoindcxError(e));
+    }
+  },
+
+  linkCoinDcx: async (
+    userId: string,
+    input: { apiKey: string; apiSecret: string; label?: string }
+  ): Promise<IExchangeConnection> => {
+    assertExchangePortfolioEnabled();
+    const n = await portfolioRepository.countExchangeConnectionsByUser(userId);
+    if (n >= config.exchangeMaxConnectionsPerUser) {
+      throw new Error(`At most ${config.exchangeMaxConnectionsPerUser} exchange connections per account`);
+    }
+    try {
+      await coindcxService.validateCredentials({ apiKey: input.apiKey, apiSecret: input.apiSecret });
+    } catch (e) {
+      throw new Error(mapCoindcxError(e));
+    }
+    const enc = encryptExchangeCredentials({ apiKey: input.apiKey, apiSecret: input.apiSecret });
+    return portfolioRepository.createExchangeConnection({
+      userId,
+      label: input.label,
+      maskedApiKey: maskApiKey(input.apiKey),
+      encryptedSecretBlob: enc.ciphertext,
+      encryptionKeyId: enc.encryptionKeyId,
+      secretVersion: 1,
+      pollingIntervalMs: config.exchangeLivePollIntervalMs,
+    });
+  },
+
+  patchCoinDcx: async (
+    userId: string,
+    id: string,
+    input: { apiKey: string; apiSecret: string; label?: string }
+  ): Promise<IExchangeConnection> => {
+    assertExchangePortfolioEnabled();
+    const existing = await portfolioRepository.findExchangeConnectionByIdAndUser(id, userId);
+    if (!existing) throw new Error('Exchange connection not found');
+    try {
+      await coindcxService.validateCredentials({ apiKey: input.apiKey, apiSecret: input.apiSecret });
+    } catch (e) {
+      throw new Error(mapCoindcxError(e));
+    }
+    const enc = encryptExchangeCredentials({ apiKey: input.apiKey, apiSecret: input.apiSecret });
+    const nextVersion = (existing.secretVersion ?? 1) + 1;
+    const updated = await portfolioRepository.updateExchangeConnection(id, userId, {
+      ...(input.label !== undefined ? { label: input.label } : {}),
+      maskedApiKey: maskApiKey(input.apiKey),
+      encryptedSecretBlob: enc.ciphertext,
+      encryptionKeyId: enc.encryptionKeyId,
+      secretVersion: nextVersion,
+      status: 'active' as ExchangeConnectionStatus,
+    });
+    if (!updated) throw new Error('Exchange connection not found');
+    return updated;
+  },
+
+  removeExchangeConnection: async (userId: string, id: string): Promise<{ eventsRemoved: number }> => {
+    assertExchangePortfolioEnabled();
+    const existing = await portfolioRepository.findExchangeConnectionByIdAndUser(id, userId);
+    if (!existing) throw new Error('Exchange connection not found');
+    const idStr = typeof existing._id === 'string' ? existing._id : (existing._id as { toString(): string }).toString();
+    const eventsRemoved = await portfolioRepository.deleteEventsBySourceId(userId, idStr);
+    const deleted = await portfolioRepository.deleteExchangeConnection(id, userId);
+    if (!deleted) throw new Error('Exchange connection not found');
+    await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
+    return { eventsRemoved };
   },
 };

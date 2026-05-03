@@ -14,6 +14,13 @@ router.get('/events',          authenticate, portfolioController.getEvents);
 router.get('/holdings',        authenticate, portfolioController.getHoldings);
 router.post('/events/refresh-status', authenticate, portfolioController.refreshEventStatuses);
 
+// CoinDCX / exchange connections (gated by EXCHANGE_PORTFOLIO_ENABLED in controller)
+router.get('/exchanges',                    authenticate, portfolioController.getExchanges);
+router.post('/exchanges/coindcx/validate',  authenticate, portfolioController.validateCoinDcx);
+router.post('/exchanges/coindcx',           authenticate, portfolioController.addCoinDcx);
+router.patch('/exchanges/coindcx/:id',      authenticate, portfolioController.patchCoinDcx);
+router.delete('/exchanges/:id',            authenticate, portfolioController.removeExchange);
+
 // Unauthenticated webhook receivers — called directly by Alchemy and Zerion
 // Signature verification is handled inside each controller handler
 router.post('/webhooks/alchemy', webhookController.alchemyWebhook);

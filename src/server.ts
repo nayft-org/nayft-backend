@@ -12,9 +12,12 @@ import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
 import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
 import { runMarketSnapshotBuild } from './modules/market/snapshotBuilder';
+import { startExchangePollScheduler } from './jobs/exchangePollScheduler';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
+/** Stops the colocated exchange poll loop when set. */
+let stopExchangePollRef: (() => void) | null = null;
 
 const startServer = async (): Promise<void> => {
   try {
@@ -51,6 +54,8 @@ const startServer = async (): Promise<void> => {
     }
     // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
+    stopExchangePollRef = startExchangePollScheduler();
+
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {
       runKlineDownsampler().catch((err) => console.error('[KlineDownsampler]', err));
@@ -85,12 +90,21 @@ function shutdownInlineTicker(): void {
   }
 }
 
+function shutdownExchangePoll(): void {
+  if (stopExchangePollRef) {
+    stopExchangePollRef();
+    stopExchangePollRef = null;
+  }
+}
+
 process.on('SIGINT', () => {
   shutdownInlineTicker();
+  shutdownExchangePoll();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   shutdownInlineTicker();
+  shutdownExchangePoll();
   process.exit(0);
 });
 

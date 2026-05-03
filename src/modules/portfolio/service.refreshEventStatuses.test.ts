@@ -72,7 +72,7 @@ describe('portfolioService.refreshEventStatuses', () => {
     });
 
     expect(result).toEqual({ updated: 0 });
-    expect(mockedRepo.findEventsNeedingStatusRefresh).toHaveBeenCalledWith('user_1', 20);
+    expect(mockedRepo.findEventsNeedingStatusRefresh).toHaveBeenCalledWith('user_1', 200);
     expect(mockedAlchemy.getTransactionReceipt).toHaveBeenCalledTimes(2);
     expect(mockedRepo.updateEventActivity).not.toHaveBeenCalled();
   });
