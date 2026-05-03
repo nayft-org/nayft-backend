@@ -6,6 +6,10 @@ export interface HoldingPositionFields {
   quantity: number;
   value:    number;
   chain:    string;
+  source?:  'wallet' | 'exchange';
+  venue?:   string;
+  sourceConnectionId?: string;
+  schemaVersion?: number;
 }
 
 export interface IHolding extends Document {
@@ -26,6 +30,10 @@ const holdingPositionSchema = new Schema<HoldingPositionFields>(
     quantity: { type: Number, required: true },
     value:    { type: Number, required: true },
     chain:    { type: String, required: true },
+    source:   { type: String, enum: ['wallet', 'exchange'] },
+    venue:    { type: String },
+    sourceConnectionId: { type: String },
+    schemaVersion: { type: Number },
   },
   { _id: false }
 );

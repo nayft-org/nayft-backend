@@ -108,4 +108,27 @@ export const config = {
     (process.env.COIN_PROFILE_LOCAL_FIRST_ENABLED || 'false').toLowerCase() === 'true',
   coinDataPrimarySnapshotProvider:
     (process.env.COIN_DATA_PRIMARY_SNAPSHOT_PROVIDER || 'coingecko').toLowerCase(),
+
+  // ── CoinDCX / exchange portfolio ─────────────────────────────────────────
+  exchangePortfolioEnabled: (process.env.EXCHANGE_PORTFOLIO_ENABLED || 'true').toLowerCase() === 'true',
+  exchangeBackfillEnabled: (process.env.EXCHANGE_BACKFILL_ENABLED || 'true').toLowerCase() !== 'false',
+  exchangeLiveSyncEnabled: (process.env.EXCHANGE_LIVE_SYNC_ENABLED || 'true').toLowerCase() !== 'false',
+  exchangeReconcileEnabled: (process.env.EXCHANGE_RECONCILE_ENABLED || 'false').toLowerCase() === 'true',
+  exchangeSchedulerColocated: (process.env.EXCHANGE_SCHEDULER_COLOCATED || 'true').toLowerCase() !== 'false',
+  coindcxBaseUrl: process.env.COINDCX_BASE_URL || 'https://api.coindcx.com',
+  coindcxHttpTimeoutMs: parseInt(process.env.COINDCX_HTTP_TIMEOUT_MS || '25000', 10),
+  coindcxRpmPerKey: Math.max(1, parseInt(process.env.COINDCX_RPM_PER_KEY || '20', 10)),
+  coindcxRpmGlobal: Math.max(1, parseInt(process.env.COINDCX_RPM_GLOBAL || '60', 10)),
+  exchangeLivePollIntervalMs: parseInt(process.env.EXCHANGE_LIVE_POLL_INTERVAL_MS || '90000', 10),
+  exchangeBackfillChunkTrades: Math.max(50, parseInt(process.env.EXCHANGE_BACKFILL_CHUNK_TRADES || '300', 10)),
+  exchangeMaxConnectionsPerUser: Math.max(1, parseInt(process.env.EXCHANGE_MAX_CONNECTIONS_PER_USER || '5', 10)),
+  exchangeLockTtlMs: parseInt(process.env.EXCHANGE_LOCK_TTL_MS || '120000', 10),
+  /** AES-256-GCM key: 64 hex chars (32 bytes). Falls back to derived key from jwtSecret if unset (dev only). */
+  exchangeSecretsKeyHex: (process.env.EXCHANGE_SECRETS_KEY_HEX || '').trim(),
+  exchangeCircuitFailureThreshold: Math.max(1, parseInt(process.env.EXCHANGE_CIRCUIT_FAILURE_THRESHOLD || '5', 10)),
+  exchangeCircuitOpenMs: parseInt(process.env.EXCHANGE_CIRCUIT_OPEN_MS || '120000', 10),
+  /** How often the colocated exchange poll loop runs (ms). */
+  exchangeSchedulerTickMs: Math.max(5_000, parseInt(process.env.EXCHANGE_SCHEDULER_TICK_MS || '20000', 10)),
+  /** Max exchange connections to dequeue per tick (avoids long ticks). */
+  exchangePollBatchSize: Math.max(1, parseInt(process.env.EXCHANGE_POLL_BATCH_SIZE || '8', 10)),
 };

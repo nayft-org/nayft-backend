@@ -1,10 +1,20 @@
 import { WalletAddress, IWalletAddress } from './models/WalletAddress';
-import { WalletEvent, IWalletEvent, WalletEventActivityFields } from './models/WalletEvent';
+import {
+  WalletEvent,
+  IWalletEvent,
+  WalletEventActivityFields,
+  WalletEventSourceType,
+} from './models/WalletEvent';
 import { Holding, IHolding, HoldingPositionFields } from './models/Holding';
 import {
   PortfolioWebhookIdempotency,
   WebhookIdempotencyProvider,
 } from './models/PortfolioWebhookIdempotency';
+import {
+  ExchangeConnection,
+  IExchangeConnection,
+  ExchangeConnectionStatus,
+} from './models/ExchangeConnection';
 
 function shortAddress(address: string | undefined | null): string {
   if (!address) return 'n/a';
@@ -75,6 +85,12 @@ export const portfolioRepository = {
     eventSummaries?:   string[];
     enrichedData:      Record<string, unknown> | null;
     activity?:         WalletEventActivityFields;
+    sourceType?:       WalletEventSourceType;
+    sourceId?:         string;
+    venue?:            string;
+    providerTradeId?:  string;
+    providerTimestamp?: Date;
+    schemaVersion?:    number;
   }): Promise<IWalletEvent> => {
     const event = new WalletEvent({ ...data, aggregatedAt: new Date() });
     const saved = await event.save();
@@ -137,10 +153,15 @@ export const portfolioRepository = {
     return WalletEvent.find({
       userId,
       'activity.txHash': { $exists: true, $ne: '' },
-      $or: [
-        { 'activity.txStatus': { $exists: false } },
-        { 'activity.txStatus': null },
-        { 'activity.txStatus': 'pending' },
+      $and: [
+        { $or: [{ sourceType: { $exists: false } }, { sourceType: 'wallet' }] },
+        {
+          $or: [
+            { 'activity.txStatus': { $exists: false } },
+            { 'activity.txStatus': null },
+            { 'activity.txStatus': 'pending' },
+          ],
+        },
       ],
     })
       .sort({ aggregatedAt: -1 })
@@ -211,5 +232,114 @@ export const portfolioRepository = {
       }
       throw e;
     }
+  },
+
+  // ── ExchangeConnection ────────────────────────────────────────────
+
+  countExchangeConnectionsByUser: async (userId: string): Promise<number> => {
+    return ExchangeConnection.countDocuments({ userId });
+  },
+
+  findExchangeConnectionsByUser: async (userId: string): Promise<IExchangeConnection[]> => {
+    return ExchangeConnection.find({ userId }).sort({ createdAt: -1 });
+  },
+
+  findExchangeConnectionByIdAndUser: async (
+    id: string,
+    userId: string
+  ): Promise<IExchangeConnection | null> => {
+    return ExchangeConnection.findOne({ _id: id, userId });
+  },
+
+  findExchangeConnectionById: async (id: string): Promise<IExchangeConnection | null> => {
+    return ExchangeConnection.findById(id);
+  },
+
+  /**
+   * Connections that are due to sync (poll worker). Excludes auth-terminal states.
+   */
+  findExchangeConnectionsDueForPoll: async (limit: number): Promise<IExchangeConnection[]> => {
+    const now = new Date();
+    return ExchangeConnection.find({
+      nextPollAt: { $lte: now },
+      status: { $in: ['active', 'rate_limited', 'error'] },
+    })
+      .sort({ nextPollAt: 1 })
+      .limit(limit);
+  },
+
+  /**
+   * System/worker updates (no user scoping) — e.g. poller, admin jobs.
+   */
+  updateExchangeConnectionById: async (
+    id: string,
+    patch: Partial<Record<string, unknown>>
+  ): Promise<IExchangeConnection | null> => {
+    return ExchangeConnection.findByIdAndUpdate(
+      id,
+      { $set: patch },
+      { new: true }
+    ) as Promise<IExchangeConnection | null>;
+  },
+
+  createExchangeConnection: async (data: {
+    userId: string;
+    label?: string;
+    maskedApiKey: string;
+    encryptedSecretBlob: string;
+    encryptionKeyId: string;
+    secretVersion: number;
+    pollingIntervalMs: number;
+  }): Promise<IExchangeConnection> => {
+    const now = new Date();
+    const doc = new ExchangeConnection({
+      userId: data.userId,
+      provider: 'coindcx',
+      label: data.label,
+      maskedApiKey: data.maskedApiKey,
+      encryptedSecretBlob: data.encryptedSecretBlob,
+      encryptionKeyId: data.encryptionKeyId,
+      secretVersion: data.secretVersion,
+      status: 'active',
+      syncPhase: 'initial_backfill',
+      balancesFreshness: 'stale',
+      tradesFreshness: 'stale',
+      pollingIntervalMs: data.pollingIntervalMs,
+      nextPollAt: now,
+    });
+    return doc.save();
+  },
+
+  updateExchangeConnection: async (
+    id: string,
+    userId: string,
+    patch: Partial<{
+      label: string;
+      maskedApiKey: string;
+      encryptedSecretBlob: string;
+      encryptionKeyId: string;
+      secretVersion: number;
+      status: ExchangeConnectionStatus;
+      syncPhase: IExchangeConnection['syncPhase'];
+      lastErrorAt: Date;
+      lastErrorCode: string;
+      lastErrorMessage: string;
+    }>
+  ): Promise<IExchangeConnection | null> => {
+    return ExchangeConnection.findOneAndUpdate(
+      { _id: id, userId },
+      { $set: patch },
+      { new: true }
+    );
+  },
+
+  deleteExchangeConnection: async (id: string, userId: string): Promise<boolean> => {
+    const res = await ExchangeConnection.deleteOne({ _id: id, userId });
+    return res.deletedCount > 0;
+  },
+
+  deleteEventsBySourceId: async (userId: string, sourceId: string): Promise<number> => {
+    const r = await WalletEvent.deleteMany({ userId, sourceId, sourceType: 'exchange' });
+    return r.deletedCount ?? 0;
   },
 };
