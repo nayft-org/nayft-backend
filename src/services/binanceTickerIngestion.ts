@@ -125,14 +125,30 @@ export function startBinanceTickerIngestion(): () => void {
   const MAX_RECONNECT_DELAY = 60000;
   let fatalCloseDebounce: ReturnType<typeof setTimeout> | null = null;
 
-  function disconnectAll(): void {
-    for (const s of sockets) {
-      try {
-        s.removeAllListeners();
+  /**
+   * Tear down a socket without triggering ws's "closed before established" throw when the
+   * handshake is still in progress (common when symbol set changes and we reconnect quickly).
+   */
+  function destroySocket(s: WebSocket): void {
+    try {
+      s.removeAllListeners();
+      if (s.readyState === WebSocket.CONNECTING) {
+        s.terminate();
+      } else if (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CLOSING) {
         s.close();
+      }
+    } catch {
+      try {
+        s.terminate();
       } catch {
         /* ignore */
       }
+    }
+  }
+
+  function disconnectAll(): void {
+    for (const s of sockets) {
+      destroySocket(s);
     }
     sockets.length = 0;
     if (fatalCloseDebounce) {

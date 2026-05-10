@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { marketService } from './service';
 import { snapshotService } from './snapshot.service';
+import { marketAnalysisService } from './marketAnalysisService';
 import { sendSuccess, sendError } from '../../utils/response';
 
 function normalizeIfNoneMatch(raw: string | undefined): string | null {
@@ -36,6 +37,17 @@ export const marketController = {
       sendSuccess(res, snapshot);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Snapshot error';
+      sendError(res, message, 500);
+    }
+  },
+
+  getMarketAnalysis: async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const payload = await marketAnalysisService.getCoinsWithSignals();
+      res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      sendSuccess(res, payload);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Market analysis error';
       sendError(res, message, 500);
     }
   },
