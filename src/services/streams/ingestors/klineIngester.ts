@@ -2,6 +2,7 @@ import type { NormalizedKlineEvent, NormalizedStreamEvent } from '../types';
 import { OhlcvKline } from '../../../modules/chart/model';
 import { streamConfig } from '../../../config/streamConfig';
 import { streamMetrics } from '../../../observability/streamMetrics';
+import { redis } from '../../../config/redis';
 
 const FLUSH_INTERVAL_MS = 1500;
 const BATCH_SIZE = 300;
@@ -53,9 +54,30 @@ function flush(): void {
 
   if (ops.length === 0) return;
 
+  // Collect unique (exchange, symbol, interval) for sealed candles to invalidate after write
+  const toInvalidate = new Set(
+    toWrite
+      .filter((e) => e.closed && e.interval === streamConfig.kline.recordedInterval)
+      .map((e) => `chart:kl:v1:${e.exchange}:${e.symbol}:${e.interval}:*`)
+  );
+
   void OhlcvKline.bulkWrite(ops)
-    .then(() => {
+    .then(async () => {
       mongoRequeueStreak = 0;
+      if (toInvalidate.size === 0) return;
+      // Pattern-scan and delete stale kline cache entries for each sealed series
+      for (const pattern of toInvalidate) {
+        try {
+          let cursor = '0';
+          do {
+            const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 50);
+            cursor = nextCursor;
+            if (keys.length > 0) await redis.del(...keys);
+          } while (cursor !== '0');
+        } catch {
+          // Cache invalidation is best-effort — never fail the ingest path
+        }
+      }
     })
     .catch((err) => {
       console.error('[KlineIngester] Bulk write error:', err);
