@@ -17,6 +17,15 @@ export const eventService = {
       timestamp: new Date(),
       invalidFeature,
     });
+    if (!invalidFeature) {
+      const { bridgeSystemEventToNotificationStream } = await import('./notificationEventBridge');
+      void bridgeSystemEventToNotificationStream({
+        featureKey,
+        eventType,
+        userId,
+        metadata,
+      }).catch(() => {});
+    }
   },
 
   async emitEvent(payload: EmitEventPayload): Promise<void> {

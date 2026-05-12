@@ -2,6 +2,7 @@ import { commentRepository } from './repository';
 import { NewsArticle } from '../news/models/NewsArticle';
 import { User } from '../user/model';
 import { IMention } from './model';
+import { publishCommentReply } from '../../core/event-system/notificationEventBridge';
 
 const mapComment = (c: any) => ({
   id: c._id,
@@ -115,6 +116,16 @@ export const commentService = {
 
     if (parentId) {
       await commentRepository.incrementReplyCount(parentId, 1);
+      const parentComment = await commentRepository.findById(parentId);
+      if (parentComment && parentComment.userId !== userId) {
+        void publishCommentReply({
+          recipientUserId: parentComment.userId,
+          actorUserId: userId,
+          newsId,
+          commentId: String(comment._id),
+          preview: trimmedBody,
+        }).catch(() => {});
+      }
     }
 
     const updated = await NewsArticle.findOne({ externalId: newsId }).select('metrics.comments');

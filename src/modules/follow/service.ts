@@ -3,6 +3,7 @@ import { authRepository } from '../auth/repository';
 import { coinRepository } from '../coin/repository';
 import { userRepository } from '../user/repository';
 import { followRepository } from './repository';
+import { publishNewFollower } from '../../core/event-system/notificationEventBridge';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -91,6 +92,7 @@ export const followService = {
     const alreadyFollowing = await followRepository.exists(followerId, 'user', targetUserId);
     if (!alreadyFollowing) {
       await followRepository.upsert(followerId, 'user', targetUserId);
+      void publishNewFollower({ targetUserId, followerId }).catch(() => {});
     }
 
     const followersCount = await followRepository.countByTarget('user', targetUserId);

@@ -4,6 +4,7 @@ import { redis } from '../../config/redis';
 import { getHttpPerformanceSnapshot } from '../../utils/httpPerformanceStats';
 import { getTranslationMetricsSnapshot } from '../../i18n/translationMetrics';
 import { getStreamMetricsSnapshot } from '../../observability/streamMetrics';
+import { notifMetrics } from '../../observability/notifMetrics';
 
 export const metricsController = {
   getMetrics: async (_req: Request, res: Response): Promise<void> => {
@@ -77,6 +78,7 @@ export const metricsController = {
           http: httpPerf,
           stream,
           translation,
+          notifications: { ...notifMetrics },
           performance: {
             targets: {
               p50ResponseTime: '<50ms',

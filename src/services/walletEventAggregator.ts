@@ -21,6 +21,7 @@ import {
   buildMergedHoldingsForUser,
   getHoldingsBroadcastAddressesForUser,
 } from '../modules/portfolio/holdingsSync';
+import { publishWalletActivity } from '../core/event-system/notificationEventBridge';
 import {
   IWalletEvent,
   WalletEventType,
@@ -376,6 +377,8 @@ async function flushBuffer(key: string): Promise<void> {
     cooldownMap.set(address, Date.now() + config.walletEventCooldownMs);
 
     notifyRealtimeSubscribers({ type: 'wallet_event', event: saved });
+
+    void publishWalletActivity(saved).catch(() => {});
 
     const statusTxHash = primaryActivity.txHash?.trim();
     const txStatus = primaryActivity.txStatus;
