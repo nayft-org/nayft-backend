@@ -24,8 +24,13 @@ import chartRoutes from './modules/chart/routes';
 import portfolioRoutes from './modules/portfolio/routes';
 import followRoutes from './modules/follow/routes';
 import metricsRoutes from './modules/metrics/routes';
+import notificationsRoutes, {
+  notificationPreferencesRouter,
+} from './modules/notifications/routes';
+import { notificationsController } from './modules/notifications/controller';
 import adminRoutes from './core/admin/routes';
 import publicFeatureRoutes from './core/public/routes';
+import { authenticate } from './middlewares/auth';
 
 const app: Application = express();
 
@@ -87,6 +92,9 @@ app.use('/api/charts', chartRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/follow', followRoutes);
 app.use('/api/metrics', metricsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/notification-preferences', notificationPreferencesRouter);
+app.get('/api/notification-unread-count', authenticate, notificationsController.unreadCount);
 app.use('/api/admin', adminRoutes);
 app.use('/api', publicFeatureRoutes);
 

@@ -10,6 +10,7 @@ import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
+import { runNotificationStreamWorker } from './workers/notificationStreamWorker';
 import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
 import { runMarketSnapshotBuild } from './modules/market/snapshotBuilder';
 import { startExchangePollScheduler } from './jobs/exchangePollScheduler';
@@ -35,6 +36,9 @@ const startServer = async (): Promise<void> => {
 
     // Start event queue worker (non-blocking)
     setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
+    setImmediate(() =>
+      runNotificationStreamWorker().catch((err) => console.error('[NotificationStreamWorker] Fatal:', err))
+    );
 
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
     // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.

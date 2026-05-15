@@ -4,6 +4,7 @@ import { CoinMaster } from '../models/CoinMaster';
 import { ingestionRepository } from './repository';
 import type { INewsArticle, INewsArticleCategory } from '../models/NewsArticle';
 import { buildNewsCoinDerivationContext, deriveNewsArticleCoins, normalizeSymbol } from './coinDerivation';
+import { publishNewsInserted } from '../realtime';
 
 const SUBTITLE_MAX_LENGTH = 300;
 
@@ -135,6 +136,11 @@ export const ingestionService = {
     const skipped = fetched - stored;
 
     const result = await ingestionRepository.upsertMany(toUpsert);
+    if (result.inserted > 0) {
+      publishNewsInserted(result.inserted).catch((err) => {
+        console.error('[news-realtime] publish failed:', err);
+      });
+    }
 
     return {
       fetched,

@@ -72,12 +72,9 @@ const INDEX_SPECS: IndexSpec[] = [
     key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, time: -1 },
     options: { name: 'trade_market_lookup' },
   },
-  {
-    collection: 'exchange_trade_ticks',
-    key: { 'meta.exchange': 1, 'meta.symbol': 1, 'meta.dataType': 1, tradeId: 1 },
-    options: { sparse: true, unique: true, name: 'trade_market_id_unique' },
-  },
-];
+  { collection: 'notifications', key: { userId: 1, userSeq: 1 }, options: { unique: true, name: 'notif_user_seq' } },
+  { collection: 'notifications', key: { userId: 1, status: 1, createdAt: -1 }, options: { name: 'notif_user_status_created' } },
+  { collection: 'notificationpreferences', key: { userId: 1 }, options: { unique: true, name: 'notif_pref_user' } },
 
 async function connectFromEnv(): Promise<void> {
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;

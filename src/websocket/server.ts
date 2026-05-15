@@ -9,6 +9,13 @@ import {
 } from '../services/walletEventAggregator';
 import { IWalletEvent } from '../modules/portfolio/models/WalletEvent';
 import { streamMetrics, recordOutbound, recordInbound } from '../observability/streamMetrics';
+import { verifyAccessToken } from '../middlewares/jwtPayload';
+import {
+  registerNotifyClient,
+  unregisterNotifyClient,
+  startNotificationRedisFanout,
+} from './notificationFanout';
+import { registerNewsClient, startNewsRedisFanout, unregisterNewsClient } from './newsFanout';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -94,6 +101,13 @@ const clientSymbols = new WeakMap<WebSocket, Set<string>>();
 
 /** Per-client portfolio address subscription */
 const clientAddresses = new WeakMap<WebSocket, Set<string>>();
+
+/** Pending notify userId parsed from WS URL query `token` before `connection` fires */
+const pendingNotifyUserId = new WeakMap<WebSocket, string>();
+/** Bound notify userId for cleanup */
+const wsNotifyUserId = new WeakMap<WebSocket, string>();
+/** Whether this ws subscribed to live news insert events. */
+const wsNewsSubscribed = new WeakMap<WebSocket, boolean>();
 
 let wssInstance: WebSocketServer | null = null;
 
@@ -367,11 +381,24 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   wssInstance = wss;
   startRedisPriceSubscriber();
   startPortfolioHeartbeat();
+  startNotificationRedisFanout();
+  startNewsRedisFanout();
 
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url?.split('?')[0];
     if (pathname === WS_PATH) {
       wss.handleUpgrade(request, socket, head, (ws) => {
+        try {
+          const host = request.headers.host || 'localhost';
+          const u = new URL(request.url || '/', `http://${host}`);
+          const tok = u.searchParams.get('token');
+          const dec = verifyAccessToken(tok);
+          if (dec?.userId) {
+            pendingNotifyUserId.set(ws, dec.userId);
+          }
+        } catch {
+          /* ignore */
+        }
         wss.emit('connection', ws, request);
       });
     } else {
@@ -389,7 +416,9 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       const addrs = clientAddresses.get(ws);
       const hasPrice = syms && syms.size > 0;
       const hasPortfolio = addrs && addrs.size > 0;
-      if (!hasPrice && !hasPortfolio) {
+      const hasNotify = !!wsNotifyUserId.get(ws);
+      const hasNews = !!wsNewsSubscribed.get(ws);
+      if (!hasPrice && !hasPortfolio && !hasNotify && !hasNews) {
         ws.close(4408, 'subscription required');
       }
     }, SUBSCRIBE_IDLE_MS);
@@ -398,9 +427,46 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       clearTimeout(idleTimer);
     };
 
+    const bindNotifyUser = (userId: string): void => {
+      const prev = wsNotifyUserId.get(ws);
+      if (prev && prev !== userId) {
+        unregisterNotifyClient(ws, prev);
+      }
+      wsNotifyUserId.set(ws, userId);
+      registerNotifyClient(ws, userId);
+      clearIdle();
+      sendJson(ws, {
+        channel: 'notifications',
+        v: '1.0',
+        type: 'notification_subscribed',
+        userId,
+      });
+    };
+
+    const pending = pendingNotifyUserId.get(ws);
+    if (pending) {
+      bindNotifyUser(pending);
+      pendingNotifyUserId.delete(ws);
+    }
+
     ws.on('message', (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+
+        if (msg.type === 'notification_subscribe') {
+          const token =
+            typeof msg.token === 'string'
+              ? msg.token
+              : typeof msg.body === 'object' &&
+                  msg.body !== null &&
+                  typeof (msg.body as Record<string, unknown>).token === 'string'
+                ? String((msg.body as Record<string, unknown>).token)
+                : undefined;
+          const dec = verifyAccessToken(token);
+          if (dec?.userId) {
+            bindNotifyUser(dec.userId);
+          }
+        }
 
         if (msg.type === 'subscribe' && Array.isArray(msg.symbols)) {
           const list = msg.symbols.filter((s): s is string => typeof s === 'string' && s.length > 0);
@@ -429,6 +495,17 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
           const set = clientAddresses.get(ws);
           if (set) set.clear();
         }
+
+        if (msg.type === 'news_subscribe') {
+          wsNewsSubscribed.set(ws, true);
+          registerNewsClient(ws);
+          clearIdle();
+          sendJson(ws, {
+            channel: 'news',
+            v: '1.0',
+            type: 'news_subscribed',
+          });
+        }
       } catch {
         /* ignore malformed */
       }
@@ -436,6 +513,15 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
 
     ws.on('close', () => {
       streamMetrics.connectedWsClients -= 1;
+      const nUid = wsNotifyUserId.get(ws);
+      if (nUid) {
+        unregisterNotifyClient(ws, nUid);
+        wsNotifyUserId.delete(ws);
+      }
+      if (wsNewsSubscribed.get(ws)) {
+        unregisterNewsClient(ws);
+        wsNewsSubscribed.delete(ws);
+      }
       const syms = clientSymbols.get(ws);
       if (syms) {
         for (const s of syms) {
