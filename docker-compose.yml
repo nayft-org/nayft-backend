@@ -48,7 +48,7 @@ services:
         max-file: "3"
 
   backend:
-    profiles: ["app"]
+    # profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -75,7 +75,7 @@ services:
 
   # Same image as backend; different CMD — Binance → Redis pub/sub + Mongo klines/trades.
   stream-worker:
-    profiles: ["app"]
+    # profiles: ["app"]
     image: nayft-backend:local
     container_name: crypto-stream-worker
     command: ["node", "dist/workers/streamIngestion.js"]
