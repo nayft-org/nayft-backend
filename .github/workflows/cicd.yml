@@ -64,14 +64,37 @@ jobs:
             exit 1
           fi
 
+      # Self-hosted runners often run as a user that is not in the `docker` group (socket
+      # permission denied). Prefer plain `docker`; if that fails, use non-interactive sudo
+      # (`-n`) so CI never blocks on a password prompt—requires passwordless sudo for docker
+      # on the host when the runner user cannot access the socket directly.
+      - name: Resolve Docker CLI (self-hosted)
+        run: |
+          set -e
+          if docker info &>/dev/null; then
+            echo "DOCKER_WRAP=" >> "$GITHUB_ENV"
+            echo "Using Docker as $(whoami) (socket access OK)"
+          elif sudo -n docker info &>/dev/null; then
+            echo 'DOCKER_WRAP=sudo -n ' >> "$GITHUB_ENV"
+            echo "Using Docker via passwordless sudo"
+          else
+            echo "::error::This runner cannot access the Docker daemon."
+            echo "Fix one of:"
+            echo "  1) Add the runner user to the docker group, then restart the Actions Runner service:"
+            echo "       sudo usermod -aG docker $(whoami)"
+            echo "       sudo systemctl restart 'actions.runner.*'   # use your real runner unit name"
+            echo "  2) Or configure passwordless sudo for /usr/bin/docker for this user (narrow sudoers rule)."
+            exit 1
+          fi
+
       - name: Build backend Docker image
         run: |
-          docker compose -f docker-compose.yml build backend
+          ${DOCKER_WRAP}docker compose -f docker-compose.yml build backend
 
       # Full `docker compose down` (all services) — not `down backend`. Stopping only the
       # backend can remove the project network while redis still references it, causing
       # "network ... not found" on the next `up`.
       - name: Deploy backend
         run: |
-          docker compose -f docker-compose.yml down --remove-orphans || true
-          docker compose -f docker-compose.yml up -d --force-recreate
+          ${DOCKER_WRAP}docker compose -f docker-compose.yml down --remove-orphans || true
+          ${DOCKER_WRAP}docker compose -f docker-compose.yml up -d --force-recreate
