@@ -20,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: crypto-redis
     ports:
-      - "6380:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -35,7 +35,7 @@ services:
     image: mongo:7
     container_name: crypto-mongo
     ports:
-      - "27020:27017"
+      - "27018:27017"
     volumes:
       - /nayft_storage/mongodb:/data/db
     environment:
@@ -48,7 +48,6 @@ services:
         max-file: "3"
 
   backend:
-    # profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -75,7 +74,6 @@ services:
 
   # Same image as backend; different CMD — Binance → Redis pub/sub + Mongo klines/trades.
   stream-worker:
-    # profiles: ["app"]
     image: nayft-backend:local
     container_name: crypto-stream-worker
     command: ["node", "dist/workers/streamIngestion.js"]
