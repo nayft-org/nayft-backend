@@ -37,7 +37,7 @@ services:
     ports:
       - "27018:27017"
     volumes:
-      - /nayft_storage/docker/volumes/nayft-backend_mongo_data/_data:/data/db
+      - /nayft_storage/mongodb:/data/db
     environment:
       MONGO_INITDB_DATABASE: crypto_db
     restart: unless-stopped
