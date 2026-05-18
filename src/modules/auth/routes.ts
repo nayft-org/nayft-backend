@@ -26,5 +26,7 @@ router.post(
 
 router.get('/me', authenticate, authController.getMe);
 
+router.post('/google', authController.googleSignIn);
+
 export default router;
 

@@ -1,9 +1,12 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { authRepository } from './repository';
 import { SignupDto, LoginDto } from './dto';
 import { IUser } from '../../types';
 import { eventService } from '../../core/event-system';
 import { signAccessToken } from '../../middlewares/jwtPayload';
+import { config } from '../../config/env';
 
 export const authService = {
   signup: async (signupDto: SignupDto): Promise<{ user: IUser; token: string }> => {
@@ -100,6 +103,63 @@ export const authService = {
       userId: user._id.toString(),
       preferredLanguage: u.preferredLanguage ?? null,
     });
+  },
+
+  googleSignIn: async (idToken: string): Promise<{ user: IUser; token: string }> => {
+    const client = new OAuth2Client(config.googleWebClientId);
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: config.googleWebClientId,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new Error('Invalid Google token: missing email');
+    }
+
+    const email = payload.email.toLowerCase();
+    let user = await authRepository.findByEmail(email);
+
+    if (!user) {
+      // Derive a username from the Google display name or email prefix.
+      const rawBase = (payload.name || email.split('@')[0]).trim();
+      const baseUsername = rawBase
+        .replace(/[^a-zA-Z0-9_]/g, '_')
+        .replace(/_{2,}/g, '_')
+        .replace(/^_|_$/, '')
+        .slice(0, 20) || 'user';
+
+      let username = baseUsername;
+      let existing = await authRepository.findByUsername(username);
+      let attempts = 0;
+      while (existing && attempts < 5) {
+        username = `${baseUsername}_${Math.random().toString(36).slice(2, 6)}`;
+        existing = await authRepository.findByUsername(username);
+        attempts++;
+      }
+
+      // Sentinel hash: a valid bcrypt hash whose pre-image is discarded,
+      // so password-login for Google-only accounts always fails safely.
+      const sentinelHash = await bcrypt.hash(randomUUID(), 10);
+
+      user = await authRepository.create({ email, passwordHash: sentinelHash, username });
+    }
+
+    const userObj = user.toObject();
+    delete (userObj as any).passwordHash;
+
+    const token = signAccessToken({
+      userId: user._id.toString(),
+      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
+    });
+
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'google_login',
+      userId: user._id.toString(),
+      metadata: {},
+    }).catch(() => {});
+
+    return { user: userObj as IUser, token };
   },
 };
 

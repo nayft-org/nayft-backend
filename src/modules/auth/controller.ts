@@ -43,5 +43,19 @@ export const authController = {
       sendError(res, error.message, 404);
     }
   },
+
+  googleSignIn: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken || typeof idToken !== 'string') {
+        sendError(res, 'idToken is required', 400);
+        return;
+      }
+      const result = await authService.googleSignIn(idToken);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 401);
+    }
+  },
 };
 

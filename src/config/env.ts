@@ -83,6 +83,8 @@ export const config = {
    */
   marketTrendDefaultToV2Enabled:
     (process.env.MARKET_TREND_DEFAULT_TO_V2_ENABLED || 'false').toLowerCase() === 'true',
+  /** Web OAuth client ID used to verify Google Sign-In idTokens from the mobile app. */
+  googleWebClientId: (process.env.GOOGLE_WEB_CLIENT_ID || '').trim(),
   /** Google Cloud Translation API v2 — enables backend news/search/comment translation when set. */
   googleTranslateApiKey: (process.env.GOOGLE_TRANSLATE_API_KEY || '').trim(),
   /**
