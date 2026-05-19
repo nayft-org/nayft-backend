@@ -55,6 +55,29 @@ function parseArticleListResponse(data: unknown): any[] {
   return [];
 }
 
+/** Resolved upstream for store-news logging (which host serves the article list). */
+export function getNewsUpstreamLogContext(limit: number = 100): {
+  upstream: 'coindesk' | 'extraction';
+  host: string;
+  listUrl: string;
+} {
+  const safeLimit = Math.min(Math.max(1, limit), 100);
+  if (config.newsUpstream === 'extraction') {
+    const host = config.newsUpstreamUrl.replace(/\/$/, '') || '(NEWS_UPSTREAM_URL unset)';
+    return {
+      upstream: 'extraction',
+      host,
+      listUrl: `${host}/news/v1/article/list?lang=EN&limit=${safeLimit}`,
+    };
+  }
+  const host = config.coindeskBaseUrl.replace(/\/$/, '');
+  return {
+    upstream: 'coindesk',
+    host,
+    listUrl: `${host}/news/v1/article/list?lang=EN&limit=${safeLimit}`,
+  };
+}
+
 export const coindeskApi = {
   /**
    * Fetch latest crypto news from CoinDesk or news-extraction-engine (NEWS_UPSTREAM).
@@ -66,15 +89,25 @@ export const coindeskApi = {
     const safeLimit = Math.min(Math.max(1, limit), 100);
 
     if (config.newsUpstream === 'extraction') {
+      const upstreamCtx = getNewsUpstreamLogContext(safeLimit);
+      console.info('[store-news] GET extraction article list', upstreamCtx);
       const response = await extractionNewsClient().get<CoindeskNewsResponse>('/news/v1/article/list', {
         params: {
           lang: 'EN',
           limit: safeLimit,
         },
       });
-      return parseArticleListResponse(response.data).map((raw) => normalizeArticle(raw));
+      const list = parseArticleListResponse(response.data);
+      console.info('[store-news] extraction response', {
+        host: upstreamCtx.host,
+        status: response.status,
+        articleCount: list.length,
+      });
+      return list.map((raw) => normalizeArticle(raw));
     }
 
+    const coindeskCtx = getNewsUpstreamLogContext(safeLimit);
+    console.info('[store-news] GET CoinDesk article list', coindeskCtx);
     const response = await coindeskClient.get<CoindeskNewsResponse>('/news/v1/article/list', {
       params: {
         lang: 'EN',

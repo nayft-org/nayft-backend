@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { newsService } from './service';
 import { coinService } from '../coin/service';
 import { ingestionService } from './ingestion/service';
+import { getNewsUpstreamLogContext } from '../../utils/coindesk';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { eventService } from '../../core/event-system';
@@ -95,6 +96,8 @@ export const newsController = {
   },
 
   storeNews: async (_req: Request, res: Response): Promise<void> => {
+    const upstreamCtx = getNewsUpstreamLogContext();
+    console.info('[store-news] POST /api/news/store-news', upstreamCtx);
     try {
       const result = await ingestionService.storeNews();
       // Registered feature key (see feature_registry); avoids invalidFeature and ensures trends match admin filters.
@@ -115,8 +118,14 @@ export const newsController = {
         sendError(res, err?.message || 'Failed to record store-news event', 500);
         return;
       }
+      console.info('[store-news] request done', { ...upstreamCtx, ...result });
       sendSuccess(res, result);
     } catch (error: any) {
+      console.error('[store-news] request failed', {
+        ...upstreamCtx,
+        status: error.response?.status,
+        message: error.message,
+      });
       const message =
         error.response?.data?.message ||
         error.response?.data?.error ||
