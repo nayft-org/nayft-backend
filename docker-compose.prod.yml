@@ -1,13 +1,14 @@
 # Production stack — self-hosted VM deploy via .github/workflows/cicd.yml
 #
 # Deploy:
-#   cp /nayft_storage/secrets/nayft_backend.env .env
 #   docker compose -f docker-compose.prod.yml build backend
 #   docker compose -f docker-compose.prod.yml up -d --force-recreate
 #
+# Secrets: /nayft_storage/secrets/nayft_backend.env (mounted read-only into app containers).
+#
 # Fan-out: `backend` serves HTTP/WebSocket; `stream-worker` ingests Binance streams.
 # In-container URLs: redis://redis:6379 and mongodb://mongodb:27017/crypto_db
-# (compose `environment` overrides host-specific values from .env).
+# (compose `environment` overrides host-specific values from the secrets file).
 #
 # Persistent data lives under /nayft_storage on the host (not Docker named volumes).
 
@@ -65,7 +66,7 @@ services:
     ports:
       - "4001:4001"
     env_file:
-      - .env
+      - ${PROD_ENV_FILE:-/nayft_storage/secrets/nayft_backend.env}
     environment:
       HOST: "0.0.0.0"
       NODE_ENV: production
@@ -100,7 +101,7 @@ services:
     container_name: crypto-stream-worker
     command: ["node", "dist/workers/streamIngestion.js"]
     env_file:
-      - .env
+      - ${PROD_ENV_FILE:-/nayft_storage/secrets/nayft_backend.env}
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
