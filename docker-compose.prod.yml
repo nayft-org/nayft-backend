@@ -1,0 +1,120 @@
+# Production stack — self-hosted VM deploy via .github/workflows/cicd.yml
+#
+# Deploy:
+#   cp /nayft_storage/secrets/nayft_backend.env .env
+#   docker compose -f docker-compose.prod.yml build backend
+#   docker compose -f docker-compose.prod.yml up -d --force-recreate
+#
+# Fan-out: `backend` serves HTTP/WebSocket; `stream-worker` ingests Binance streams.
+# In-container URLs: redis://redis:6379 and mongodb://mongodb:27017/crypto_db
+# (compose `environment` overrides host-specific values from .env).
+#
+# Persistent data lives under /nayft_storage on the host (not Docker named volumes).
+
+name: nayft-backend
+
+networks:
+  default:
+    name: nayft-backend_default
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: crypto-redis
+    volumes:
+      - /nayft_storage/redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  mongodb:
+    image: mongo:7
+    container_name: crypto-mongo
+    volumes:
+      - /nayft_storage/mongodb:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: crypto_db
+    command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nayft-backend:prod
+    container_name: crypto-backend
+    ports:
+      - "4001:4001"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      MONGO_URI: mongodb://mongodb:27017/crypto_db
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  stream-worker:
+    image: nayft-backend:prod
+    container_name: crypto-stream-worker
+    command: ["node", "dist/workers/streamIngestion.js"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      MONGO_URI: mongodb://mongodb:27017/crypto_db
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

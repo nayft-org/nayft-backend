@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  COMPOSE_FILE: docker-compose.prod.yml
+
 jobs:
   build:
     name: Build Docker images
@@ -15,9 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate production compose file
+        run: docker compose -f "$COMPOSE_FILE" config --quiet
+
       - name: Build backend Docker image
-        run: |
-          docker compose -f docker-compose.yml build backend
+        run: docker compose -f "$COMPOSE_FILE" build backend
 
   deploy:
     name: Deploy to NAYFT (self-hosted)
@@ -64,6 +69,9 @@ jobs:
             exit 1
           fi
 
+          # Host bind mounts for Redis/Mongo (idempotent; may require sudo on first provision)
+          sudo mkdir -p /nayft_storage/redis /nayft_storage/mongodb || true
+
       # Self-hosted runners often run as a user that is not in the `docker` group (socket
       # permission denied). Prefer plain `docker`; if that fails, use non-interactive sudo
       # (`-n`) so CI never blocks on a password prompt—requires passwordless sudo for docker
@@ -87,14 +95,37 @@ jobs:
             exit 1
           fi
 
+      - name: Validate production compose file
+        run: ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" config --quiet
+
       - name: Build backend Docker image
-        run: |
-          ${DOCKER_WRAP}docker compose -f docker-compose.yml build backend
+        run: ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" build backend
 
       # Full `docker compose down` (all services) — not `down backend`. Stopping only the
       # backend can remove the project network while redis still references it, causing
       # "network ... not found" on the next `up`.
-      - name: Deploy backend
+      - name: Deploy production stack
         run: |
-          ${DOCKER_WRAP}docker compose -f docker-compose.yml down --remove-orphans || true
-          ${DOCKER_WRAP}docker compose -f docker-compose.yml up -d --force-recreate
+          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" down --remove-orphans || true
+          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" up -d --force-recreate
+
+      - name: Verify deployment
+        run: |
+          set -e
+          echo "--- compose ps ---"
+          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" ps
+
+          echo "--- waiting for backend health ---"
+          for i in $(seq 1 30); do
+            if curl -sfS http://127.0.0.1:4001/health >/dev/null; then
+              echo "Backend healthy after ${i} attempt(s)"
+              curl -sfS http://127.0.0.1:4001/health
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::Backend did not become healthy within 60s"
+          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" logs --tail=80 backend stream-worker
+          exit 1
