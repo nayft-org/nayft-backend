@@ -118,7 +118,7 @@ export const ingestionService = {
       articles = await coindeskApi.getLatestNews();
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || err.message;
-      throw new Error(`CoinDesk API error: ${msg || `HTTP ${err.response?.status}`}`);
+      throw new Error(`News upstream error: ${msg || `HTTP ${err.response?.status}`}`);
     }
 
     const fetched = articles.length;
