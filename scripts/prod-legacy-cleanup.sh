@@ -18,8 +18,8 @@
 #   ENV_FILE                 — if set, only this file is sourced (absolute path on the server).
 #   Otherwise: .env then .env.production under repo root (later overrides earlier).
 #   MONGO_DB_NAME            — default crypto_db
-#   PROD_CLEANUP_STOP_CMD    — e.g. 'sudo systemctl stop crypto-backend'
-#   PROD_CLEANUP_START_CMD   — e.g. 'sudo systemctl start crypto-backend'
+#   PROD_CLEANUP_STOP_CMD    — e.g. 'docker compose -f docker-compose.prod.yml stop backend stream-worker'
+#   PROD_CLEANUP_START_CMD   — e.g. 'docker compose -f docker-compose.prod.yml start backend stream-worker'
 #   SMOKE_BASE               — default http://127.0.0.1:4001
 #
 # Usage:

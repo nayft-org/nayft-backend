@@ -1,6 +1,9 @@
-# Local / compose stack: Redis + MongoDB + API + stream worker (fan-out).
-# Build image: docker compose build backend
-# Run: docker compose up -d
+# Local dev stack: Redis + MongoDB + API + stream worker (fan-out).
+# Production deploy uses docker-compose.prod.yml (see .github/workflows/cicd.yml).
+#
+# Build image: docker compose --profile app build backend
+# Run infra only: docker compose up -d
+# Run full stack: docker compose --profile app up -d --build
 #
 # Fan-out: `backend` serves HTTP/WebSocket; `stream-worker` runs Binance ticker + kline/aggTrade
 # and publishes prices to Redis (`stream:prices:batch`). Both need Redis + Mongo — scale API replicas,
@@ -20,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: crypto-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -35,9 +38,9 @@ services:
     image: mongo:7
     container_name: crypto-mongo
     ports:
-      - "27018:27017"
+      - "27020:27017"
     volumes:
-      - /nayft_storage/mongodb:/data/db
+      - mongodb:/data/db
     environment:
       MONGO_INITDB_DATABASE: crypto_db
     restart: unless-stopped
@@ -48,6 +51,7 @@ services:
         max-file: "3"
 
   backend:
+    profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -74,6 +78,7 @@ services:
 
   # Same image as backend; different CMD — Binance → Redis pub/sub + Mongo klines/trades.
   stream-worker:
+    profiles: ["app"]
     image: nayft-backend:local
     container_name: crypto-stream-worker
     command: ["node", "dist/workers/streamIngestion.js"]
@@ -99,3 +104,4 @@ services:
 
 volumes:
   redis_data:
+  mongodb:
