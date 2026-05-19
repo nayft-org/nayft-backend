@@ -1,4 +1,9 @@
-import { coindeskApi, extractTickers, type CoindeskNewsArticle } from '../../../utils/coindesk';
+import {
+  coindeskApi,
+  extractTickers,
+  getNewsUpstreamLogContext,
+  type CoindeskNewsArticle,
+} from '../../../utils/coindesk';
 import { FilteredCoin } from '../../coin/models/FilteredCoin';
 import { CoinMaster } from '../models/CoinMaster';
 import { ingestionRepository } from './repository';
@@ -103,6 +108,9 @@ function coindeskToNewsArticle(
 
 export const ingestionService = {
   storeNews: async (): Promise<StoreNewsResult> => {
+    const upstreamCtx = getNewsUpstreamLogContext();
+    console.info('[store-news] ingest start', upstreamCtx);
+
     const baseAssets = (await FilteredCoin.distinct('base_asset', {
       base_asset: { $exists: true, $nin: [null, ''] },
     })) as string[];
@@ -117,12 +125,19 @@ export const ingestionService = {
     try {
       articles = await coindeskApi.getLatestNews();
     } catch (err: any) {
+      console.error('[store-news] upstream fetch failed', {
+        ...upstreamCtx,
+        status: err.response?.status,
+        message: err.message,
+      });
       const msg = err.response?.data?.message || err.response?.data?.error || err.message;
       throw new Error(`News upstream error: ${msg || `HTTP ${err.response?.status}`}`);
     }
 
     const fetched = articles.length;
+    console.info('[store-news] upstream fetch ok', { ...upstreamCtx, fetched });
     if (fetched === 0) {
+      console.warn('[store-news] no articles returned from upstream', upstreamCtx);
       return { fetched: 0, stored: 0, skipped: 0, inserted: 0, updated: 0 };
     }
 
@@ -142,12 +157,14 @@ export const ingestionService = {
       });
     }
 
-    return {
+    const summary = {
       fetched,
       stored,
       skipped,
       inserted: result.inserted,
       updated: result.updated,
     };
+    console.info('[store-news] ingest complete', { ...upstreamCtx, ...summary });
+    return summary;
   },
 };

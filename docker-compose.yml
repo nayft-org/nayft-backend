@@ -1,9 +1,6 @@
-# Local dev stack: Redis + MongoDB + API + stream worker (fan-out).
-# Production deploy uses docker-compose.prod.yml (see .github/workflows/cicd.yml).
-#
-# Build image: docker compose --profile app build backend
-# Run infra only: docker compose up -d
-# Run full stack: docker compose --profile app up -d --build
+# Local / compose stack: Redis + MongoDB + API + stream worker (fan-out).
+# Build image: docker compose build backend
+# Run: docker compose up -d
 #
 # Fan-out: `backend` serves HTTP/WebSocket; `stream-worker` runs Binance ticker + kline/aggTrade
 # and publishes prices to Redis (`stream:prices:batch`). Both need Redis + Mongo — scale API replicas,
