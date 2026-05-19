@@ -6,7 +6,7 @@
 #
 # Typical flow:
 #   1. CI deploys new backend to the VM.
-#   2. You SSH in, cd to crypto-backend, ensure .env has MONGO_URI and REDIS_URL.
+#   2. You SSH in, cd to crypto-backend; secrets live at /nayft_storage/secrets/nayft_backend.env.
 #   3. Set PROD_CLEANUP_STOP_CMD / PROD_CLEANUP_START_CMD for your process manager.
 #   4. Run: ./scripts/prod-legacy-cleanup.sh   (interactive: type yes when prompted)
 #      or:  ./scripts/prod-legacy-cleanup.sh --yes   (non-interactive / CI)
@@ -14,9 +14,9 @@
 # Requirements on PATH: mongodump, mongosh, redis-cli, curl. Optional: jq (prettier /health).
 #
 # Environment (optional):
-#   MONGO_URI, REDIS_URL     — export them, or use .env / ENV_FILE (see below).
+#   MONGO_URI, REDIS_URL     — export them, or use ENV_FILE (see below).
 #   ENV_FILE                 — if set, only this file is sourced (absolute path on the server).
-#   Otherwise: .env then .env.production under repo root (later overrides earlier).
+#   Otherwise: /nayft_storage/secrets/nayft_backend.env, then .env / .env.production under repo root.
 #   MONGO_DB_NAME            — default crypto_db
 #   PROD_CLEANUP_STOP_CMD    — e.g. 'docker compose -f docker-compose.prod.yml stop backend stream-worker'
 #   PROD_CLEANUP_START_CMD   — e.g. 'docker compose -f docker-compose.prod.yml start backend stream-worker'
@@ -103,6 +103,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+PROD_ENV_FILE="${PROD_ENV_FILE:-/nayft_storage/secrets/nayft_backend.env}"
+
 load_env_files() {
   if [[ -n "${ENV_FILE:-}" ]]; then
     [[ -f "$ENV_FILE" ]] || die "ENV_FILE is set but file not found: $ENV_FILE"
@@ -111,6 +113,14 @@ load_env_files() {
     source "$ENV_FILE"
     set +a
     echo "Loaded: $ENV_FILE" >&2
+    return
+  fi
+  if [[ -f "$PROD_ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROD_ENV_FILE"
+    set +a
+    echo "Loaded: $PROD_ENV_FILE" >&2
     return
   fi
   if [[ -f "$ROOT/.env" ]]; then
@@ -127,8 +137,8 @@ load_env_files() {
     set +a
     echo "Loaded: $ROOT/.env.production" >&2
   fi
-  if [[ ! -f "$ROOT/.env" ]] && [[ ! -f "$ROOT/.env.production" ]] && [[ -z "${MONGO_URI:-}${REDIS_URL:-}" ]]; then
-    echo "note: no $ROOT/.env or .env.production; relying on exported MONGO_URI / REDIS_URL." >&2
+  if [[ ! -f "$PROD_ENV_FILE" ]] && [[ ! -f "$ROOT/.env" ]] && [[ ! -f "$ROOT/.env.production" ]] && [[ -z "${MONGO_URI:-}${REDIS_URL:-}" ]]; then
+    echo "note: no $PROD_ENV_FILE, $ROOT/.env, or .env.production; relying on exported MONGO_URI / REDIS_URL." >&2
   fi
 }
 
@@ -145,8 +155,8 @@ require_mongo_redis() {
     echo "" >&2
     echo "  Option B — create $ROOT/.env with those keys (not committed on CI runners)." >&2
     echo "" >&2
-    echo "  Option C — point at an env file on the server:" >&2
-    echo "    ENV_FILE=/path/to/prod.env ./scripts/$(basename "$0") --yes" >&2
+    echo "  Option C — point at production secrets on the server:" >&2
+    echo "    ENV_FILE=$PROD_ENV_FILE ./scripts/$(basename "$0") --yes" >&2
     exit 1
   fi
 }
