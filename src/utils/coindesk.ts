@@ -35,15 +35,46 @@ const coindeskClient = axios.create({
   },
 });
 
+/** news-extraction-engine exposes the same path as CoinDesk for drop-in upstream swap. */
+const extractionNewsClient = () => {
+  const baseURL = config.newsUpstreamUrl.replace(/\/$/, '');
+  if (!baseURL) {
+    throw new Error('NEWS_UPSTREAM_URL is required when NEWS_UPSTREAM=extraction');
+  }
+  return axios.create({
+    baseURL,
+    timeout: config.newsUpstreamTimeoutMs,
+  });
+};
+
+function parseArticleListResponse(data: unknown): any[] {
+  if (!data || typeof data !== 'object') return [];
+  const payload = data as CoindeskNewsResponse;
+  if (Array.isArray(payload.Data)) return payload.Data;
+  if (Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
 export const coindeskApi = {
   /**
-   * Fetch latest crypto news from CoinDesk.
+   * Fetch latest crypto news from CoinDesk or news-extraction-engine (NEWS_UPSTREAM).
    * Per docs, the Latest Articles endpoint is:
    *   GET /news/v1/article/list?lang=EN&limit=…
    * CoinDesk caps `limit` at 100 per request; larger values return HTTP 400.
    */
   getLatestNews: async (limit: number = 100): Promise<CoindeskNewsArticle[]> => {
     const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    if (config.newsUpstream === 'extraction') {
+      const response = await extractionNewsClient().get<CoindeskNewsResponse>('/news/v1/article/list', {
+        params: {
+          lang: 'EN',
+          limit: safeLimit,
+        },
+      });
+      return parseArticleListResponse(response.data).map((raw) => normalizeArticle(raw));
+    }
+
     const response = await coindeskClient.get<CoindeskNewsResponse>('/news/v1/article/list', {
       params: {
         lang: 'EN',
@@ -51,13 +82,7 @@ export const coindeskApi = {
       },
     });
 
-    // Handle both `Data` and `data` shapes and normalise each item
-    const list: any[] =
-      (response.data && (response.data as any).Data) ||
-      (response.data && (response.data as any).data) ||
-      [];
-
-    return list.map((raw) => normalizeArticle(raw));
+    return parseArticleListResponse(response.data).map((raw) => normalizeArticle(raw));
   },
 
   /**
@@ -131,7 +156,9 @@ export const normalizeArticle = (raw: any): CoindeskNewsArticle => {
     ? raw.CATEGORY_DATA.map((c: any) => (c?.CATEGORY || c?.NAME || '').toString().toUpperCase()).filter(
         (c: string) => !!c
       )
-    : [];
+    : Array.isArray(raw.categories)
+      ? (raw.categories as string[]).map((c) => String(c).toUpperCase()).filter(Boolean)
+      : [];
 
   return {
     // ID / GUID

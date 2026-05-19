@@ -24,6 +24,15 @@ export const config = {
   cmcBaseUrl: process.env.CMC_BASE_URL || 'https://pro-api.coinmarketcap.com',
   coindeskApiKey: process.env.COIN_DESK_API_KEY || '',
   coindeskBaseUrl: process.env.COIN_DESK_BASE_URL || 'https://data-api.coindesk.com',
+  /** `store-news` bulk ingest: `coindesk` (default) or local news-extraction-engine shim. */
+  newsUpstream: (() => {
+    const v = (process.env.NEWS_UPSTREAM || 'coindesk').toLowerCase();
+    return v === 'extraction' ? ('extraction' as const) : ('coindesk' as const);
+  })(),
+  /** Base URL for news-extraction-engine (e.g. http://localhost:5002). Required when newsUpstream is extraction. */
+  newsUpstreamUrl: (process.env.NEWS_UPSTREAM_URL || '').trim(),
+  /** HTTP timeout (ms) for news-extraction-engine list requests. */
+  newsUpstreamTimeoutMs: Math.max(1000, parseInt(process.env.NEWS_UPSTREAM_TIMEOUT_MS || '30000', 10)),
   coinGeckoApiKey: process.env.COIN_GECKO_API_KEY || '',
   coinGeckoApiType: (process.env.COIN_GECKO_API_TYPE || 'demo').toLowerCase() as 'demo' | 'pro',
   coinGeckoBaseUrl:
