@@ -48,7 +48,7 @@ jobs:
     # Labels must match /home/ubuntu/nayft-backend-runner/.runner — NOT nayft-news-runner.
     runs-on:
       - self-hosted
-      - nayft-backend
+      - nayft-backend-runner
     needs: build
 
     steps:
