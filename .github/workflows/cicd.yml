@@ -45,6 +45,7 @@ jobs:
 
   deploy:
     name: Deploy to NAYFT (self-hosted)
+    # Labels must match /home/ubuntu/nayft-backend-runner/.runner — NOT nayft-news-runner.
     runs-on:
       - self-hosted
       - nayft-backend
@@ -66,6 +67,13 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Identify selected runner
+        run: |
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          echo "RUNNER_OS=$RUNNER_OS"
+          hostname
+          pgrep -af Runner.Listener
 
       - name: Infrastructure preflight (self-hosted)
         run: |
