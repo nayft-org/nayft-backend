@@ -16,7 +16,7 @@
 # Environment (optional):
 #   MONGO_URI, REDIS_URL     — export them, or use ENV_FILE (see below).
 #   ENV_FILE                 — if set, only this file is sourced (absolute path on the server).
-#   Otherwise: /nayft_storage/secrets/nayft_backend.env, then .env / .env.production under repo root.
+#   Otherwise: .env.production (workspace copy), /nayft_storage/secrets/nayft_backend.env, then .env.
 #   MONGO_DB_NAME            — default crypto_db
 #   PROD_CLEANUP_STOP_CMD    — e.g. 'docker compose -f docker-compose.prod.yml stop backend stream-worker'
 #   PROD_CLEANUP_START_CMD   — e.g. 'docker compose -f docker-compose.prod.yml start backend stream-worker'
@@ -115,6 +115,14 @@ load_env_files() {
     echo "Loaded: $ENV_FILE" >&2
     return
   fi
+  if [[ -f "$ROOT/.env.production" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT/.env.production"
+    set +a
+    echo "Loaded: $ROOT/.env.production" >&2
+    return
+  fi
   if [[ -f "$PROD_ENV_FILE" ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -130,15 +138,8 @@ load_env_files() {
     set +a
     echo "Loaded: $ROOT/.env" >&2
   fi
-  if [[ -f "$ROOT/.env.production" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$ROOT/.env.production"
-    set +a
-    echo "Loaded: $ROOT/.env.production" >&2
-  fi
-  if [[ ! -f "$PROD_ENV_FILE" ]] && [[ ! -f "$ROOT/.env" ]] && [[ ! -f "$ROOT/.env.production" ]] && [[ -z "${MONGO_URI:-}${REDIS_URL:-}" ]]; then
-    echo "note: no $PROD_ENV_FILE, $ROOT/.env, or .env.production; relying on exported MONGO_URI / REDIS_URL." >&2
+  if [[ ! -f "$ROOT/.env.production" ]] && [[ ! -f "$PROD_ENV_FILE" ]] && [[ ! -f "$ROOT/.env" ]] && [[ -z "${MONGO_URI:-}${REDIS_URL:-}" ]]; then
+    echo "note: no $ROOT/.env.production, $PROD_ENV_FILE, or $ROOT/.env; relying on exported MONGO_URI / REDIS_URL." >&2
   fi
 }
 

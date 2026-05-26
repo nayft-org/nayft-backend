@@ -8,7 +8,10 @@ on:
 
 env:
   COMPOSE_FILE: docker-compose.prod.yml
-  PROD_ENV_FILE: /nayft_storage/secrets/nayft_backend.env
+  # Canonical host secrets store (read once per deploy, then copied into workspace).
+  HOST_SECRETS_FILE: /nayft_storage/secrets/nayft_backend.env
+  # Compose and containers consume only this workspace-local file during deploy.
+  WORKSPACE_ENV_FILE: .env.production
 
 jobs:
   build:
@@ -19,13 +22,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare CI stub environment
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' \
+            'MONGO_URI=mongodb://mongodb:27017/crypto_db' \
+            'JWT_SECRET=ci-build-stub' \
+            > "${WORKSPACE_ENV_FILE}"
+          chmod 600 "${WORKSPACE_ENV_FILE}"
+          ls -la "${WORKSPACE_ENV_FILE}"
+
       - name: Validate production compose file
         run: |
-          echo -e "MONGO_URI=mongodb://mongodb:27017/crypto_db\nJWT_SECRET=ci-build-stub" > .env.prod.stub
-          PROD_ENV_FILE="$(pwd)/.env.prod.stub" docker compose -f "$COMPOSE_FILE" config --quiet
+          set -euo pipefail
+          docker compose -f "${COMPOSE_FILE}" config --quiet
 
       - name: Build backend Docker image
-        run: docker compose -f "$COMPOSE_FILE" build backend
+        run: |
+          set -euo pipefail
+          docker compose -f "${COMPOSE_FILE}" build backend
 
   deploy:
     name: Deploy to NAYFT (self-hosted)
@@ -39,82 +55,146 @@ jobs:
       # scripts/prod-legacy-cleanup.sh or docker cp) cause EACCES and fail the deploy.
       - name: Fix workspace permissions (self-hosted)
         run: |
-          set -e
-          if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
-            if [ -d "${GITHUB_WORKSPACE}/.backups" ]; then
+          set -euo pipefail
+          if [[ -n "${GITHUB_WORKSPACE:-}" && -d "${GITHUB_WORKSPACE}" ]]; then
+            if [[ -d "${GITHUB_WORKSPACE}/.backups" ]]; then
               sudo rm -rf "${GITHUB_WORKSPACE}/.backups"
             fi
             sudo chown -R "$(whoami):$(whoami)" "${GITHUB_WORKSPACE}" || true
           fi
+          rm -f "${GITHUB_WORKSPACE:-.}/${WORKSPACE_ENV_FILE}" || true
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare environment files and configs
+      - name: Infrastructure preflight (self-hosted)
         run: |
-          echo "Running as: $(whoami)"
-          echo "File exists: $(ls -la $PROD_ENV_FILE 2>&1)"
-          # Production secrets live on the host (managed manually); compose mounts them directly.
-          if [ ! -f "$PROD_ENV_FILE" ]; then
-            echo "ERROR: Production secrets file not found at $PROD_ENV_FILE"
-            echo "Please create this file with MONGO_URI and JWT_SECRET before deploying"
+          set -euo pipefail
+          echo "::group::Runner identity"
+          whoami
+          id
+          pwd
+          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-<unset>}"
+          echo "RUNNER_NAME=${RUNNER_NAME:-<unset>}"
+          hostname -f 2>/dev/null || hostname
+          echo "::endgroup::"
+
+          echo "::group::Host secrets path (single read source)"
+          printf 'HOST_SECRETS_FILE=%q\n' "${HOST_SECRETS_FILE}"
+          printf '%s' "${HOST_SECRETS_FILE}" | od -An -tx1 || true
+          namei -l "${HOST_SECRETS_FILE}" 2>&1 || true
+          ls -la "${HOST_SECRETS_FILE}" 2>&1 || echo "direct read: not visible to runner (may use sudo fallback)"
+          echo "::endgroup::"
+
+          echo "::group::Persistent data mounts"
+          mount | grep -E 'nayft|sdb' || echo "(no nayft/sdb in mount table — Redis/Mongo bind mounts may still work if paths exist)"
+          df -h / "${HOST_SECRETS_FILE%/*}" 2>&1 || true
+          ls -ld /nayft_storage /nayft_storage/redis /nayft_storage/mongodb 2>&1 || true
+          echo "::endgroup::"
+
+      - name: Prepare production environment
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+
+          echo "::group::Copy host secrets into workspace"
+          dest="${WORKSPACE_ENV_FILE}"
+          src="${HOST_SECRETS_FILE}"
+          rm -f "${dest}"
+
+          copy_host_secrets() {
+            if [[ -f "${src}" && -r "${src}" ]]; then
+              cp -- "${src}" "${dest}"
+              echo "Copied secrets using runner filesystem access."
+              return 0
+            fi
+            if sudo -n test -r "${src}" 2>/dev/null; then
+              sudo -n cp -- "${src}" "${dest}"
+              sudo -n chown "$(id -u):$(id -g)" "${dest}"
+              echo "Copied secrets using passwordless sudo (runner mount-namespace fallback)."
+              return 0
+            fi
+            return 1
+          }
+
+          if ! copy_host_secrets; then
+            echo "::error::Could not read host secrets at ${src}"
+            echo "Ensure the file exists and either:"
+            echo "  1) The runner user can read it (directory traverse + file read), or"
+            echo "  2) Passwordless sudo is allowed for: test -r ${src} && cp ${src} <workspace>"
+            echo ""
+            echo "Runner diagnostics:"
+            ls -ld "$(dirname "${src}")" 2>&1 || true
+            namei -l "${src}" 2>&1 || true
             exit 1
           fi
 
-          if ! grep -q "MONGO_URI=" "$PROD_ENV_FILE"; then
-            echo "ERROR: MONGO_URI is missing from $PROD_ENV_FILE"
-            exit 1
-          fi
-          if ! grep -q "JWT_SECRET=" "$PROD_ENV_FILE"; then
-            echo "ERROR: JWT_SECRET is missing from $PROD_ENV_FILE"
-            exit 1
-          fi
+          umask 077
+          chmod 600 "${dest}"
+          ls -la "${dest}"
+          echo "::endgroup::"
 
-          # Host bind mounts for Redis/Mongo (idempotent; may require sudo on first provision)
-          sudo mkdir -p /nayft_storage/redis /nayft_storage/mongodb || true
+          echo "::group::Validate workspace env file"
+          for key in MONGO_URI JWT_SECRET; do
+            if ! grep -qE "^${key}=" "${dest}"; then
+              echo "::error::Required key ${key} is missing from ${dest}"
+              exit 1
+            fi
+          done
+          echo "Required keys present (values not printed)."
+          echo "::endgroup::"
 
-      # Self-hosted runners often run as a user that is not in the `docker` group (socket
-      # permission denied). Prefer plain `docker`; if that fails, use non-interactive sudo
-      # (`-n`) so CI never blocks on a password prompt—requires passwordless sudo for docker
-      # on the host when the runner user cannot access the socket directly.
+          echo "::group::Provision persistent data directories"
+          sudo mkdir -p /nayft_storage/redis /nayft_storage/mongodb
+          echo "::endgroup::"
+
       - name: Resolve Docker CLI (self-hosted)
         run: |
-          set -e
+          set -euo pipefail
           if docker info &>/dev/null; then
-            echo "DOCKER_WRAP=" >> "$GITHUB_ENV"
+            echo "DOCKER_WRAP=" >> "${GITHUB_ENV}"
             echo "Using Docker as $(whoami) (socket access OK)"
           elif sudo -n docker info &>/dev/null; then
-            echo 'DOCKER_WRAP=sudo -n ' >> "$GITHUB_ENV"
+            echo 'DOCKER_WRAP=sudo -n ' >> "${GITHUB_ENV}"
             echo "Using Docker via passwordless sudo"
           else
             echo "::error::This runner cannot access the Docker daemon."
             echo "Fix one of:"
             echo "  1) Add the runner user to the docker group, then restart the Actions Runner service:"
             echo "       sudo usermod -aG docker $(whoami)"
-            echo "       sudo systemctl restart 'actions.runner.*'   # use your real runner unit name"
-            echo "  2) Or configure passwordless sudo for /usr/bin/docker for this user (narrow sudoers rule)."
+            echo "       sudo systemctl restart 'actions.runner.*'"
+            echo "  2) Or configure passwordless sudo for /usr/bin/docker (narrow sudoers rule)."
             exit 1
           fi
 
       - name: Validate production compose file
-        run: ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" config --quiet
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          test -f "${WORKSPACE_ENV_FILE}"
+          ls -la "${WORKSPACE_ENV_FILE}"
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" config --quiet
 
       - name: Build backend Docker image
-        run: ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" build backend
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" build backend
 
-      # Full `docker compose down` (all services) — not `down backend`. Stopping only the
-      # backend can remove the project network while redis still references it, causing
-      # "network ... not found" on the next `up`.
       - name: Deploy production stack
         run: |
-          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" down --remove-orphans || true
-          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" up -d --force-recreate
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          # Full stack down — partial down can leave a stale project network.
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
 
       - name: Verify deployment
         run: |
-          set -e
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
           echo "--- compose ps ---"
-          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" ps
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps
 
           echo "--- waiting for backend health ---"
           for i in $(seq 1 30); do
@@ -128,5 +208,15 @@ jobs:
           done
 
           echo "::error::Backend did not become healthy within 60s"
-          ${DOCKER_WRAP}docker compose -f "$COMPOSE_FILE" logs --tail=80 backend stream-worker
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=80 backend stream-worker
           exit 1
+
+      - name: Cleanup workspace secrets
+        if: always()
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          if [[ -f "${WORKSPACE_ENV_FILE}" ]]; then
+            shred -u "${WORKSPACE_ENV_FILE}" 2>/dev/null || rm -f "${WORKSPACE_ENV_FILE}"
+            echo "Removed ${WORKSPACE_ENV_FILE} from workspace."
+          fi

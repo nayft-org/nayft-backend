@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+.env.production
+.env.prod.stub
 .env.bkp
 *.log
 .DS_Store
