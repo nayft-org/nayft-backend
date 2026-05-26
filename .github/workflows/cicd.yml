@@ -52,6 +52,8 @@ jobs:
 
       - name: Prepare environment files and configs
         run: |
+          echo "Running as: $(whoami)"
+          echo "File exists: $(ls -la $PROD_ENV_FILE 2>&1)"
           # Production secrets live on the host (managed manually); compose mounts them directly.
           if [ ! -f "$PROD_ENV_FILE" ]; then
             echo "ERROR: Production secrets file not found at $PROD_ENV_FILE"
