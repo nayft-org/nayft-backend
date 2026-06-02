@@ -16,6 +16,7 @@ import { runMarketSnapshotBuild } from './modules/market/snapshotBuilder';
 import { startExchangePollScheduler } from './jobs/exchangePollScheduler';
 import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWorker';
 import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
+import { startRiskBuildScheduler } from './modules/risk/jobs/riskBuildScheduler';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -66,6 +67,7 @@ const startServer = async (): Promise<void> => {
     stopExchangePollRef = startExchangePollScheduler();
 
     startCoinSentimentScheduler();
+    startRiskBuildScheduler();
 
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {

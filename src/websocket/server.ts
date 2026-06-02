@@ -16,6 +16,7 @@ import {
   startNotificationRedisFanout,
 } from './notificationFanout';
 import { registerNewsClient, startNewsRedisFanout, unregisterNewsClient } from './newsFanout';
+import { attachRiskFanout, handleRiskWsMessage } from './riskFanout';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -383,6 +384,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   startPortfolioHeartbeat();
   startNotificationRedisFanout();
   startNewsRedisFanout();
+  attachRiskFanout(wss);
 
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url?.split('?')[0];
@@ -505,6 +507,10 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
             v: '1.0',
             type: 'news_subscribed',
           });
+        }
+
+        if (handleRiskWsMessage(ws as WebSocket & { riskSubscribed?: boolean }, msg as { type?: string })) {
+          clearIdle();
         }
       } catch {
         /* ignore malformed */
