@@ -10,6 +10,9 @@ import { ingestionRepository } from './repository';
 import type { INewsArticle, INewsArticleCategory } from '../models/NewsArticle';
 import { buildNewsCoinDerivationContext, deriveNewsArticleCoins, normalizeSymbol } from './coinDerivation';
 import { publishNewsInserted } from '../realtime';
+import { computeArticleContentHash } from '../../sentiment/utils/contentHash';
+import { enqueueSentimentJobs } from '../../sentiment/services/sentimentQueue.service';
+import { sentimentConfig } from '../../sentiment/config/sentimentConfig';
 
 const SUBTITLE_MAX_LENGTH = 300;
 
@@ -69,10 +72,13 @@ function coindeskToNewsArticle(
 
   if (coins.length === 0) return null;
 
+  const title = article.title || article.headline || 'Untitled';
+  const contentHash = computeArticleContentHash(title, truncatedSubtitle);
+
   return {
     externalId,
     guid: externalId,
-    title: article.title || article.headline || 'Untitled',
+    title,
     subtitle: truncatedSubtitle,
     imageUrl: article.imageUrl,
     sourceUrl: article.url,
@@ -86,7 +92,7 @@ function coindeskToNewsArticle(
     author: undefined,
     categories: mapCategories(article.categories),
     coins,
-    sentiment: 'neutral',
+    contentHash,
     status: 'active',
     metrics: {
       views: 0,
@@ -103,7 +109,7 @@ function coindeskToNewsArticle(
         total: 0,
       },
     },
-  };
+  } as Omit<INewsArticle, 'createdAt' | 'updatedAt'> & { contentHash: string };
 }
 
 export const ingestionService = {
@@ -141,7 +147,7 @@ export const ingestionService = {
       return { fetched: 0, stored: 0, skipped: 0, inserted: 0, updated: 0 };
     }
 
-    const toUpsert: Omit<INewsArticle, 'createdAt' | 'updatedAt'>[] = [];
+    const toUpsert: Parameters<typeof ingestionRepository.upsertMany>[0] = [];
     for (const a of articles) {
       const doc = coindeskToNewsArticle(a, ctx);
       if (doc) toUpsert.push(doc);
@@ -151,6 +157,13 @@ export const ingestionService = {
     const skipped = fetched - stored;
 
     const result = await ingestionRepository.upsertMany(toUpsert);
+
+    if (sentimentConfig.enrichmentEnabled && result.enqueueJobs.length > 0) {
+      await enqueueSentimentJobs(result.enqueueJobs).catch((err) => {
+        console.error('[store-news] sentiment enqueue failed:', err);
+      });
+    }
+
     if (result.inserted > 0) {
       publishNewsInserted(result.inserted).catch((err) => {
         console.error('[news-realtime] publish failed:', err);

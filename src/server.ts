@@ -14,6 +14,8 @@ import { runNotificationStreamWorker } from './workers/notificationStreamWorker'
 import { refreshCoinDictionary, startCoinDictionaryRefresh } from './i18n/coinDictionary';
 import { runMarketSnapshotBuild } from './modules/market/snapshotBuilder';
 import { startExchangePollScheduler } from './jobs/exchangePollScheduler';
+import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWorker';
+import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -39,6 +41,9 @@ const startServer = async (): Promise<void> => {
     setImmediate(() =>
       runNotificationStreamWorker().catch((err) => console.error('[NotificationStreamWorker] Fatal:', err))
     );
+    setImmediate(() =>
+      runSentimentStreamWorker().catch((err) => console.error('[SentimentWorker] Fatal:', err))
+    );
 
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
     // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.
@@ -59,6 +64,8 @@ const startServer = async (): Promise<void> => {
     // Wallet monitoring is now driven by Alchemy/Zerion webhooks — no polling needed
 
     stopExchangePollRef = startExchangePollScheduler();
+
+    startCoinSentimentScheduler();
 
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {

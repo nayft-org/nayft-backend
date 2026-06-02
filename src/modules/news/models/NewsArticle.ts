@@ -34,6 +34,21 @@ export interface INewsArticleReactions {
   total: number;
 }
 
+export type NewsSentimentStatus = 'pending' | 'processing' | 'ready' | 'failed';
+
+export interface INewsArticleSentimentAnalysis {
+  score: number;
+  magnitude: number;
+  label: string;
+  confidence: number;
+  model: string;
+  modelVersion: string;
+  analyzedAt: Date;
+  sourceTrust: number;
+  flags: string[];
+  contentHash: string;
+}
+
 export interface INewsArticleMetrics {
   views: number;
   likes: number;
@@ -55,6 +70,8 @@ export interface INewsArticle {
   categories: INewsArticleCategory[];
   coins: INewsArticleCoin[];
   sentiment?: string;
+  sentimentStatus?: NewsSentimentStatus;
+  sentimentAnalysis?: INewsArticleSentimentAnalysis;
   status: string;
   metrics: INewsArticleMetrics;
   createdAt: Date;
@@ -110,6 +127,22 @@ const reactionsSchema = new Schema<INewsArticleReactions>(
   { _id: false }
 );
 
+const sentimentAnalysisSchema = new Schema<INewsArticleSentimentAnalysis>(
+  {
+    score: { type: Number, required: true },
+    magnitude: { type: Number, required: true },
+    label: { type: String, required: true },
+    confidence: { type: Number, required: true },
+    model: { type: String, required: true },
+    modelVersion: { type: String, required: true },
+    analyzedAt: { type: Date, required: true },
+    sourceTrust: { type: Number, required: true },
+    flags: { type: [String], default: [] },
+    contentHash: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const metricsSchema = new Schema<INewsArticleMetrics>(
   {
     views: { type: Number, default: 0 },
@@ -146,6 +179,12 @@ const newsArticleSchema = new Schema<INewsArticle>(
     categories: { type: [categorySchema], default: [] },
     coins: { type: [coinSchema], default: [] },
     sentiment: { type: String, default: 'neutral' },
+    sentimentStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'ready', 'failed'],
+      required: false,
+    },
+    sentimentAnalysis: { type: sentimentAnalysisSchema, required: false },
     status: { type: String, default: 'active' },
     metrics: {
       type: metricsSchema,
@@ -175,6 +214,8 @@ newsArticleSchema.index({ 'coins.symbol': 1 });
 newsArticleSchema.index({ 'source.key': 1 });
 newsArticleSchema.index({ status: 1 });
 newsArticleSchema.index({ sentiment: 1 });
+newsArticleSchema.index({ sentimentStatus: 1, publishedAt: -1 });
+newsArticleSchema.index({ 'coins.symbol': 1, publishedAt: -1, sentimentStatus: 1 });
 newsArticleSchema.index({ title: 'text', subtitle: 'text' }, { background: true, name: 'news_text_search' });
 
 export const NewsArticle = mongoose.model<INewsArticle>('NewsArticle', newsArticleSchema);

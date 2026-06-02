@@ -50,6 +50,12 @@ const mapNewsArticleToDto = (
     comments: article.metrics?.comments ?? 0,
     reactions,
     userReaction: userReaction ?? null,
+    ...(article.sentimentStatus === 'ready' && article.sentimentAnalysis
+      ? {
+          sentiment: article.sentiment,
+          sentimentScore: article.sentimentAnalysis.score,
+        }
+      : {}),
   };
 };
 

@@ -29,6 +29,7 @@ import notificationsRoutes, {
 } from './modules/notifications/routes';
 import { notificationsController } from './modules/notifications/controller';
 import adminRoutes from './core/admin/routes';
+import sentimentAdminRoutes from './modules/sentiment/adminRoutes';
 import publicFeatureRoutes from './core/public/routes';
 import { authenticate } from './middlewares/auth';
 
@@ -96,6 +97,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/notification-preferences', notificationPreferencesRouter);
 app.get('/api/notification-unread-count', authenticate, notificationsController.unreadCount);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/sentiment', sentimentAdminRoutes);
 app.use('/api', publicFeatureRoutes);
 
 // Error handling
