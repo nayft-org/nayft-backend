@@ -1,9 +1,15 @@
 import { LabeledActiveCoin } from '../../coin/models/LabeledActiveCoin';
 import { chartRepository } from '../../chart/repository';
-import { streamConfig } from '../../../config/streamConfig';
+import { resolveKlineSymbols } from '../../../config/klineSymbolResolver';
+import { riskConfig } from '../config/riskConfig';
+import {
+  enqueueFactorShardJobs,
+  getFactorShardResult,
+  waitForFactorShards,
+  clearFactorShardResults,
+} from '../jobs/riskFactorQueue.service';
 import { config } from '../../../config/env';
 import { RiskFactorRaw } from '../models/RiskFactorRaw';
-import { riskConfig } from '../config/riskConfig';
 import type { RiskFactorName, FactorRawResult, CoinFactorBundle } from '../types/factorTypes';
 import type { FrozenUniverse } from '../universe/rrsUniverse.service';
 import type { FactorBuildContext, MarketRow, OhlcRow } from './factorContext';
@@ -13,7 +19,15 @@ import { computeVolatilityRaw } from './volatility.provider';
 import { computeLiquidityRaw } from './liquidity.provider';
 import { computeDrawdownRaw } from './drawdown.provider';
 
-const KLINE_SYMBOLS = new Set(streamConfig.kline.symbols.map((s) => s.toUpperCase()));
+let klineSymbolCache: Set<string> | null = null;
+
+async function getKlineSymbols(): Promise<Set<string>> {
+  if (!klineSymbolCache) {
+    const list = await resolveKlineSymbols();
+    klineSymbolCache = new Set(list.map((s) => s.toUpperCase()));
+  }
+  return klineSymbolCache;
+}
 
 async function loadMarketRows(
   symbols: string[],
@@ -52,7 +66,8 @@ async function loadMarketRows(
 
 async function loadOhlcBatch(symbols: string[], buildCutoffTime: Date): Promise<Map<string, OhlcRow>> {
   const map = new Map<string, OhlcRow>();
-  const eligible = symbols.filter((s) => KLINE_SYMBOLS.has(s));
+  const klineSet = await getKlineSymbols();
+  const eligible = symbols.filter((s) => klineSet.has(s));
   const from = new Date(buildCutoffTime.getTime() - 30 * 24 * 3_600_000);
 
   await Promise.all(
@@ -97,7 +112,7 @@ export async function buildFactorContext(universe: FrozenUniverse): Promise<Fact
   };
 }
 
-export async function computeAllFactorRaws(
+async function computeAllFactorRawsInline(
   ctx: FactorBuildContext
 ): Promise<Map<string, Record<RiskFactorName, FactorRawResult>>> {
   const out = new Map<string, Record<RiskFactorName, FactorRawResult>>();
@@ -119,6 +134,51 @@ export async function computeAllFactorRaws(
     });
   }
   return out;
+}
+
+export async function computeAllFactorRaws(
+  ctx: FactorBuildContext
+): Promise<Map<string, Record<RiskFactorName, FactorRawResult>>> {
+  const shardThreshold = riskConfig.factorShardThreshold;
+  if (ctx.universe.members.length >= shardThreshold) {
+    return computeAllFactorRawsSharded(ctx);
+  }
+  return computeAllFactorRawsInline(ctx);
+}
+
+async function computeAllFactorRawsSharded(
+  ctx: FactorBuildContext
+): Promise<Map<string, Record<RiskFactorName, FactorRawResult>>> {
+  const shardCount = Math.min(16, Math.ceil(ctx.universe.members.length / 500));
+  const perShard = Math.ceil(ctx.universe.members.length / shardCount);
+  const shards: Array<{ shardId: number; symbols: string[] }> = [];
+
+  for (let shardId = 0; shardId < shardCount; shardId++) {
+    const slice = ctx.universe.members.slice(shardId * perShard, (shardId + 1) * perShard);
+    if (slice.length === 0) continue;
+    shards.push({ shardId, symbols: slice.map((m) => m.symbol) });
+  }
+
+  await clearFactorShardResults(ctx.universe.buildId);
+  await enqueueFactorShardJobs(ctx.universe.buildId, shards, ctx.buildCutoffTime);
+
+  const ready = await waitForFactorShards(ctx.universe.buildId, shards.length);
+  if (!ready) {
+    console.warn('[RiskBuild] factor shard timeout — falling back to inline compute');
+    return computeAllFactorRawsInline(ctx);
+  }
+
+  const merged = new Map<string, Record<RiskFactorName, FactorRawResult>>();
+  for (const shard of shards) {
+    const raw = await getFactorShardResult(ctx.universe.buildId, shard.shardId);
+    if (!raw) continue;
+    const parsed = JSON.parse(raw) as Record<string, Record<RiskFactorName, FactorRawResult>>;
+    for (const [sym, factors] of Object.entries(parsed)) {
+      merged.set(sym, factors);
+    }
+  }
+  await clearFactorShardResults(ctx.universe.buildId);
+  return merged;
 }
 
 export async function persistFactorRaws(

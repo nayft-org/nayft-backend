@@ -1,5 +1,9 @@
+import { redis } from '../../../config/redis';
 import { RiskRegime } from '../models/RiskRegime';
+import { riskConfig } from '../config/riskConfig';
 import type { CrsResult } from '../types/factorTypes';
+
+const REGIME_CANDIDATE_KEY = 'risk:regime:candidate:v1';
 
 export type MarketRegime =
   | 'low_risk'
@@ -76,6 +80,30 @@ export async function detectMarketRegime(
   if (previousRegime === 'panic' && marketRegime === 'normal') {
     marketRegime = 'elevated';
     drivers.push('panic_cooldown');
+  }
+
+  if (marketRegime !== previousRegime) {
+    try {
+      const raw = await redis.get(REGIME_CANDIDATE_KEY);
+      const parsed = raw
+        ? (JSON.parse(raw) as { regime: MarketRegime; count: number })
+        : { regime: marketRegime, count: 0 };
+      if (parsed.regime === marketRegime) {
+        parsed.count += 1;
+      } else {
+        parsed.regime = marketRegime;
+        parsed.count = 1;
+      }
+      await redis.set(REGIME_CANDIDATE_KEY, JSON.stringify(parsed));
+      if (parsed.count < riskConfig.regimePersistenceBuilds) {
+        marketRegime = previousRegime;
+        drivers.push('regime_persistence_pending');
+      }
+    } catch {
+      // keep computed regime on redis failure
+    }
+  } else {
+    await redis.del(REGIME_CANDIDATE_KEY).catch(() => undefined);
   }
 
   return {

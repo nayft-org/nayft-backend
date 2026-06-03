@@ -3,6 +3,7 @@
  * Run alongside the API (`npm run start`); see STREAMING.md.
  */
 import { connectDatabase } from '../config/database';
+import { resolveKlineSymbols } from '../config/klineSymbolResolver';
 import { registerAdapter, startStreams, stopStreams } from '../services/streams/registry';
 import { BinanceKlineAdapter } from '../services/streams/adapters';
 import { startBinanceTickerIngestion } from '../services/binanceTickerIngestion';
@@ -11,8 +12,9 @@ let stopTicker: (() => void) | null = null;
 
 async function main(): Promise<void> {
   await connectDatabase();
+  const klineSymbols = await resolveKlineSymbols();
   registerAdapter('binance', new BinanceKlineAdapter());
-  startStreams();
+  startStreams(klineSymbols);
   stopTicker = startBinanceTickerIngestion();
   console.log('[streamIngestion] Worker started (Binance ticker + kline/aggTrade)');
 }

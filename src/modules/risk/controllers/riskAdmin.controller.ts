@@ -4,6 +4,8 @@ import { riskConfig } from '../config/riskConfig';
 import { runRiskBuild } from '../build/riskBuildCoordinator';
 import { runRiskReplay } from '../replay/replayEngine';
 import { getActiveManifest } from '../publish/riskSnapshotPublisher';
+import { RiskFactorRaw } from '../models/RiskFactorRaw';
+import { RrsBuildUniverse } from '../models/RrsBuildUniverse';
 export const riskAdminController = {
   health: async (_req: Request, res: Response): Promise<void> => {
     const manifest = await getActiveManifest();
@@ -30,6 +32,25 @@ export const riskAdminController = {
   recalculate: async (_req: Request, res: Response): Promise<void> => {
     const result = await runRiskBuild();
     res.json({ success: result.ok, data: result });
+  },
+
+  getBuild: async (req: Request, res: Response): Promise<void> => {
+    const buildId = String(req.params.buildId || '');
+    const [universe, factorCount] = await Promise.all([
+      RrsBuildUniverse.findOne({ buildId }).lean(),
+      RiskFactorRaw.countDocuments({ buildId }),
+    ]);
+    if (!universe) {
+      res.status(404).json({ success: false, error: 'build_not_found' });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        universe,
+        factorRawCount: factorCount,
+      },
+    });
   },
 
   replay: async (req: Request, res: Response): Promise<void> => {

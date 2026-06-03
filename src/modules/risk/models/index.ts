@@ -5,3 +5,4 @@ export { RiskRegime, type IRiskRegime } from './RiskRegime';
 export { RiskScoreHistory, type IRiskScoreHistory } from './RiskScoreHistory';
 export { RiskRecalcJob, type IRiskRecalcJob } from './RiskRecalcJob';
 export { RiskAlert, type IRiskAlert } from './RiskAlert';
+export { RiskFactorBuildSummary, type IRiskFactorBuildSummary } from './RiskFactorBuildSummary';

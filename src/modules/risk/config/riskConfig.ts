@@ -30,6 +30,7 @@ export const riskConfig = {
   universeMinMarketCap: parseFloat(process.env.RRS_UNIVERSE_MIN_MARKET_CAP || '1000000'),
   shardThreshold: parseInt(process.env.RRS_SHARD_THRESHOLD || '3000', 10),
   shardCount: parseInt(process.env.RRS_SHARD_COUNT || '16', 10),
+  factorShardThreshold: parseInt(process.env.RRS_FACTOR_SHARD_THRESHOLD || '2000', 10),
   marketCapFloor: parseFloat(process.env.RRS_MARKET_CAP_FLOOR || '1000000'),
   newsConfidenceThreshold: parseFloat(process.env.RRS_NEWS_CONFIDENCE_THRESHOLD || '0.3'),
   newsMinArticleCount: parseInt(process.env.RRS_NEWS_MIN_ARTICLE_COUNT || '2', 10),

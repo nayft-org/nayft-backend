@@ -15,7 +15,6 @@ import { detectMarketRegime, coinRegimeFromCrs, persistRegimes } from '../regime
 import { validateRiskBuild } from '../validation/riskBuildValidator';
 import { publishRiskSnapshot } from '../publish/riskSnapshotPublisher';
 import { RiskSnapshot } from '../models/RiskSnapshot';
-import { RiskScoreHistory } from '../models/RiskScoreHistory';
 import { RrsBuildUniverse } from '../models/RrsBuildUniverse';
 import { riskMetrics } from '../../../observability/riskMetrics';
 import type { RiskFactorName } from '../types/factorTypes';
@@ -215,18 +214,18 @@ export async function runRiskBuild(options?: {
       await RiskSnapshot.bulkWrite(snapshotOps.slice(i, i + batchSize), { ordered: false });
     }
 
-    const historyDocs = coinResults.map((c) => ({
-      symbol: c.symbol,
-      buildId: universe.buildId,
-      revision: publishedRevision,
-      computedAt,
-      crs: c.crs.crs,
-      rank: c.crs.rank,
-      regime: c.regime,
-    }));
-    for (let i = 0; i < historyDocs.length; i += batchSize) {
-      await RiskScoreHistory.insertMany(historyDocs.slice(i, i + batchSize), { ordered: false });
-    }
+    const { queueRiskScoreHistory } = await import('./riskHistoryWriter');
+    queueRiskScoreHistory(
+      coinResults.map((c) => ({
+        symbol: c.symbol,
+        buildId: universe.buildId,
+        revision: publishedRevision,
+        computedAt,
+        crs: c.crs.crs,
+        rank: c.crs.rank,
+        regime: c.regime,
+      }))
+    );
 
     await persistRegimes(marketRegime, crsMap, publishedRevision, universe.buildId, computedAt);
 

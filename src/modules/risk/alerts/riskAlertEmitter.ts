@@ -1,6 +1,8 @@
+import { randomUUID } from 'crypto';
 import { RiskAlert } from '../models/RiskAlert';
 import { RiskSnapshot } from '../models/RiskSnapshot';
 import { riskMetrics } from '../../../observability/riskMetrics';
+import { appendNotificationEvent } from '../../../services/notificationEngine/notificationEventBus';
 
 export async function emitRiskAlerts(
   revision: number,
@@ -35,6 +37,25 @@ export async function emitRiskAlerts(
         payload: { delta, crs: snap.crs },
       });
       riskMetrics.alertsEmittedTotal += 1;
+
+      await appendNotificationEvent(
+        JSON.stringify({
+          eventId: randomUUID(),
+          eventName: 'risk_alert',
+          occurredAt: new Date().toISOString(),
+          producer: 'rrs',
+          schemaVersion: 1,
+          idempotencyKey: dedupeKey,
+          body: {
+            alertType: 'crs_jump',
+            symbol: snap.symbol,
+            revision,
+            buildId,
+            delta,
+            crs: snap.crs,
+          },
+        })
+      ).catch((err) => console.error('[RiskAlert] notif fanout failed', err));
     }
   }
 }

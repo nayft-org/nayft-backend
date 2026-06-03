@@ -21,8 +21,8 @@ function routeEvent(event: NormalizedStreamEvent): void {
   }
 }
 
-export function startStreams(): void {
-  const klineSymbols = streamConfig.kline.symbols;
+export function startStreams(klineSymbolsOverride?: string[]): void {
+  const klineSymbols = klineSymbolsOverride ?? streamConfig.kline.symbols;
   let aggTradeSymbols = streamConfig.aggTrade.symbols;
   const maxAgg = streamConfig.aggTrade.maxSymbols;
   if (Number.isFinite(maxAgg) && maxAgg > 0 && aggTradeSymbols.length > maxAgg) {

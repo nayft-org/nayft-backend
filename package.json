@@ -22,7 +22,9 @@
     "script:backfill-news-sentiment": "ts-node --transpile-only scripts/backfill-news-sentiment.ts",
     "dev:worker:sentiment": "ts-node-dev --respawn --transpile-only src/modules/sentiment/jobs/sentimentWorker.ts",
     "dev:worker:risk": "ts-node-dev --respawn --transpile-only src/modules/risk/jobs/riskBuildScheduler.ts",
-    "script:rrs-build": "ts-node --transpile-only scripts/run-rrs-build.ts"
+    "dev:worker:risk-factors": "ts-node-dev --respawn --transpile-only src/modules/risk/jobs/riskFactorWorker.ts",
+    "script:rrs-build": "ts-node --transpile-only scripts/run-rrs-build.ts",
+    "script:sync-kline-top500": "ts-node --transpile-only scripts/sync-kline-top500.ts"
   },
   "keywords": [
     "crypto",
