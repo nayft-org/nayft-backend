@@ -43,6 +43,8 @@ services:
   mongodb:
     image: mongo:7
     container_name: crypto-mongo
+    ports:
+      - "0.0.0.0:27027:27017"
     volumes:
       - /nayft_storage/mongodb:/data/db
     environment:
