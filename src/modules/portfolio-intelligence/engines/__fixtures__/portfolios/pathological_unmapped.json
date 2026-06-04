@@ -1,0 +1,13 @@
+{
+  "id": "pathological_unmapped",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "u1:1", "internalCoinId": "u1", "symbol": "U1", "name": "Unknown1", "chain": "ethereum", "quantity": 1, "valueUsd": 6000, "weightPct": 0.6, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "u2:1", "internalCoinId": "u2", "symbol": "U2", "name": "Unknown2", "chain": "ethereum", "quantity": 1, "valueUsd": 4000, "weightPct": 0.4, "source": "wallet", "mappingConfidence": 1 }
+  ],
+  "mappings": [
+    { "internalCoinId": "u1", "primaryCategoryId": null, "confidence": 0.5, "nayftBucket": "Other" },
+    { "internalCoinId": "u2", "primaryCategoryId": null, "confidence": 0.5, "nayftBucket": "Other" }
+  ],
+  "totalValueUsd": 10000
+}

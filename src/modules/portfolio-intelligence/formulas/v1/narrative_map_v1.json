@@ -1,0 +1,16 @@
+{
+  "version": "narrative_v1",
+  "bucketToNarrative": {
+    "AI": "AI",
+    "RWA": "RWA",
+    "Memes": "Memes",
+    "Gaming": "Gaming",
+    "Layer1": "Layer1",
+    "Layer2": "Layer1",
+    "DeFi": "DeFi",
+    "Bitcoin": "Bitcoin",
+    "Infrastructure": "Infrastructure",
+    "Stablecoins": "Infrastructure",
+    "Other": "Infrastructure"
+  }
+}

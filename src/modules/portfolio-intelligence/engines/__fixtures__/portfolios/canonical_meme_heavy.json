@@ -1,0 +1,17 @@
+{
+  "id": "canonical_meme_heavy",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "doge:1", "internalCoinId": "doge", "symbol": "DOGE", "name": "Dogecoin", "chain": "dogecoin", "quantity": 1, "valueUsd": 2000, "weightPct": 0.2, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "shib:1", "internalCoinId": "shib", "symbol": "SHIB", "name": "Shiba", "chain": "ethereum", "quantity": 1, "valueUsd": 1500, "weightPct": 0.15, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "pepe:1", "internalCoinId": "pepe", "symbol": "PEPE", "name": "Pepe", "chain": "ethereum", "quantity": 1, "valueUsd": 1500, "weightPct": 0.15, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "btc:1", "internalCoinId": "btc", "symbol": "BTC", "name": "Bitcoin", "chain": "bitcoin", "quantity": 1, "valueUsd": 5000, "weightPct": 0.5, "source": "wallet", "mappingConfidence": 1 }
+  ],
+  "mappings": [
+    { "internalCoinId": "doge", "primaryCategoryId": "meme-token", "confidence": 1, "nayftBucket": "Memes" },
+    { "internalCoinId": "shib", "primaryCategoryId": "meme-token", "confidence": 1, "nayftBucket": "Memes" },
+    { "internalCoinId": "pepe", "primaryCategoryId": "meme-token", "confidence": 1, "nayftBucket": "Memes" },
+    { "internalCoinId": "btc", "primaryCategoryId": "bitcoin", "confidence": 1, "nayftBucket": "Bitcoin" }
+  ],
+  "totalValueUsd": 10000
+}

@@ -1,0 +1,17 @@
+{
+  "id": "canonical_stable_heavy",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "usdt:1", "internalCoinId": "usdt", "symbol": "USDT", "name": "Tether", "chain": "ethereum", "quantity": 1, "valueUsd": 5000, "weightPct": 0.5, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "usdc:1", "internalCoinId": "usdc", "symbol": "USDC", "name": "USD Coin", "chain": "ethereum", "quantity": 1, "valueUsd": 3000, "weightPct": 0.3, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "dai:1", "internalCoinId": "dai", "symbol": "DAI", "name": "Dai", "chain": "ethereum", "quantity": 1, "valueUsd": 1500, "weightPct": 0.15, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "btc:1", "internalCoinId": "btc", "symbol": "BTC", "name": "Bitcoin", "chain": "bitcoin", "quantity": 1, "valueUsd": 500, "weightPct": 0.05, "source": "wallet", "mappingConfidence": 1 }
+  ],
+  "mappings": [
+    { "internalCoinId": "usdt", "primaryCategoryId": "stablecoins", "confidence": 1, "nayftBucket": "Stablecoins" },
+    { "internalCoinId": "usdc", "primaryCategoryId": "stablecoins", "confidence": 1, "nayftBucket": "Stablecoins" },
+    { "internalCoinId": "dai", "primaryCategoryId": "stablecoins", "confidence": 1, "nayftBucket": "Stablecoins" },
+    { "internalCoinId": "btc", "primaryCategoryId": "bitcoin", "confidence": 1, "nayftBucket": "Bitcoin" }
+  ],
+  "totalValueUsd": 10000
+}

@@ -4,6 +4,8 @@ import { PortfolioPosition } from '../models/PortfolioPosition';
 import { PortfolioSnapshot, type SnapshotTrigger } from '../models/PortfolioSnapshot';
 import { PortfolioAnalyticsSnapshot } from '../models/PortfolioAnalyticsSnapshot';
 import type { AnalyticsShellPayload } from '../contracts/piContracts';
+import type { PortfolioAnalyticsPayloadV2 } from '../contracts/piEngineContracts';
+import { PI_ANALYTICS_SCHEMA_VERSION } from '../contracts/piEngineContracts';
 
 export const piRepository = {
   async replacePositionsForUser(
@@ -92,17 +94,33 @@ export const piRepository = {
     inputsRevision: number;
     catalogVersion: number;
     buildFingerprint: string;
-    payload: AnalyticsShellPayload;
+    payload: AnalyticsShellPayload | PortfolioAnalyticsPayloadV2;
   }): Promise<void> {
+    const schemaVersion =
+      'schemaVersion' in params.payload && params.payload.schemaVersion === 2
+        ? PI_ANALYTICS_SCHEMA_VERSION
+        : 1;
+
     await PortfolioAnalyticsSnapshot.create({
       userId: params.userId,
       revision: params.revision,
-      schemaVersion: 1,
+      schemaVersion,
       computedAt: new Date(),
       inputsRevision: params.inputsRevision,
       catalogVersion: params.catalogVersion,
       buildFingerprint: params.buildFingerprint,
       payload: params.payload,
     });
+
+    const excess = await PortfolioAnalyticsSnapshot.find({ userId: params.userId })
+      .sort({ revision: -1 })
+      .skip(30)
+      .select('_id')
+      .lean();
+    if (excess.length > 0) {
+      await PortfolioAnalyticsSnapshot.deleteMany({
+        _id: { $in: excess.map((r) => r._id) },
+      });
+    }
   },
 };

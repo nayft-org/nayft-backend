@@ -1,0 +1,24 @@
+{
+  "version": "taxonomy_v1",
+  "buckets": ["Bitcoin", "Layer1", "Layer2", "DeFi", "AI", "Memes", "Gaming", "RWA", "Stablecoins", "Infrastructure", "Other"],
+  "coingeckoPatterns": {
+    "Bitcoin": ["bitcoin", "btc", "store-of-value"],
+    "Layer1": ["layer 1", "smart contract platform", "ethereum ecosystem"],
+    "Layer2": ["layer 2", "rollups", "scaling"],
+    "DeFi": ["defi", "decentralized finance", "dex", "lending"],
+    "AI": ["artificial intelligence", "ai", "machine learning"],
+    "Memes": ["meme", "memes", "dog-themed"],
+    "Gaming": ["gaming", "gamefi", "metaverse", "play to earn"],
+    "RWA": ["real world assets", "rwa", "tokenized"],
+    "Stablecoins": ["stablecoins", "usd stablecoin", "stablecoin"],
+    "Infrastructure": ["infrastructure", "oracle", "interoperability", "bridges"]
+  },
+  "symbolOverrides": {
+    "BTC": "Bitcoin",
+    "ETH": "Layer1",
+    "USDT": "Stablecoins",
+    "USDC": "Stablecoins",
+    "DAI": "Stablecoins",
+    "FDUSD": "Stablecoins"
+  }
+}

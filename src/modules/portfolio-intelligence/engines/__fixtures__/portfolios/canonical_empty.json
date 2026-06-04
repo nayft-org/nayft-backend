@@ -1,0 +1,10 @@
+{
+  "id": "canonical_empty",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "x:1", "internalCoinId": "x", "symbol": "X", "name": "Unknown", "chain": "ethereum", "quantity": 1, "valueUsd": 5000, "weightPct": 0.5, "source": "wallet", "mappingConfidence": 0.2 },
+    { "positionKey": "y:1", "internalCoinId": "y", "symbol": "Y", "name": "Unknown2", "chain": "ethereum", "quantity": 1, "valueUsd": 5000, "weightPct": 0.5, "source": "wallet", "mappingConfidence": 0.1 }
+  ],
+  "mappings": [],
+  "totalValueUsd": 10000
+}

@@ -11,8 +11,15 @@ import { recomputeEnqueueService } from './recomputeEnqueue.service';
 import { PiRecomputeJob as PiRecomputeJobModel } from '../models/PiRecomputeJob';
 import { piMetrics } from '../../../observability/piMetrics';
 import { eventService } from '../../../core/event-system';
-
-const EMPTY_SHELL = { metrics: {} as Record<string, unknown>, insights: [] as [] };
+import {
+  buildEngineContext,
+  runAnalyticsPipeline,
+  buildAnalyticsFingerprint,
+} from '../engines/composition/piAnalyticsPipeline';
+import type { PortfolioAnalyticsPayloadV2 } from '../contracts/piEngineContracts';
+import { redis } from '../../../config/redis';
+import { piRedisKeys } from '../cache/piRedisKeys';
+import { getActiveFormulaBundle } from '../config/piFormulaRegistry';
 
 export const piRecomputeService = {
   async processJob(job: PiRecomputeJob): Promise<void> {
@@ -26,10 +33,13 @@ export const piRecomputeService = {
       metadata: { correlationId, trigger },
     });
 
+    const catalogVersion = await categoryMappingService.getCatalogVersion();
+    const bundle = getActiveFormulaBundle();
+
     const jobId = recomputeEnqueueService.jobIdFor(
       userId,
       job.ingestRevision ?? 0,
-      await categoryMappingService.getCatalogVersion()
+      catalogVersion
     );
 
     await PiRecomputeJobModel.findOneAndUpdate(
@@ -44,24 +54,62 @@ export const piRecomputeService = {
 
     try {
       const normalized = await positionNormalizerService.normalizeForUser(userId, correlationId);
-      const catalogVersion = await categoryMappingService.getCatalogVersion();
-      const fingerprint = positionNormalizerService.buildFingerprint(
+      const fingerprint = buildAnalyticsFingerprint(
         userId,
         normalized.ingestRevision,
-        catalogVersion
+        catalogVersion,
+        bundle
       );
+
+      const manifestRaw = await redis.get(piRedisKeys.userManifest(userId));
+      if (manifestRaw) {
+        try {
+          const m = JSON.parse(manifestRaw) as { buildFingerprint?: string };
+          if (m.buildFingerprint === fingerprint) {
+            piMetrics.recomputeCompleted(trigger, Date.now() - start);
+            await PiRecomputeJobModel.updateOne(
+              { jobId },
+              { $set: { status: 'completed', finishedAt: new Date() } }
+            );
+            return;
+          }
+        } catch {
+          /* continue recompute */
+        }
+      }
+
+      const ctx = await buildEngineContext({
+        userId,
+        correlationId,
+        ingestRevision: normalized.ingestRevision,
+        catalogVersion,
+        positions: normalized.positions,
+        totalValueUsd: normalized.totalValueUsd,
+      });
+
+      const engineStart = Date.now();
+      const payload: PortfolioAnalyticsPayloadV2 = runAnalyticsPipeline(ctx);
+      piMetrics.engineLatencyMs('pipeline', Date.now() - engineStart);
+      piMetrics.insightsGenerated(payload.insights.length);
 
       const previous = await piRepository.findPositionsByUser(userId);
       const prevTotal = previous.reduce((s, p) => s + p.valueUsd, 0);
 
       const shadow = piConfig.shadowMode && !piConfig.enabled;
+      const tier1Ok = !payload.engineErrors?.some((e) => e.engineId === 'allocation');
+      const complete = tier1Ok && ctx.positions.length >= 0;
+      const partial = payload.partial || !tier1Ok;
+
       const analyticsRevision = await piPublishService.publishUserAnalytics({
         userId,
         ingestRevision: normalized.ingestRevision,
         catalogVersion,
         buildFingerprint: fingerprint,
-        payload: EMPTY_SHELL,
+        payload,
         shadow,
+        complete,
+        partial,
+        formulaBundle: bundle as unknown as Record<string, string>,
       });
 
       await snapshotWriterService.writeDeltaIfNeeded(
@@ -79,10 +127,14 @@ export const piRecomputeService = {
         inputsRevision: normalized.ingestRevision,
         catalogVersion,
         buildFingerprint: fingerprint,
-        payload: EMPTY_SHELL,
+        payload,
       });
 
-      await piReadService.invalidateFeedContext(userId);
+      if (complete && !partial) {
+        await piReadService.invalidateFeedContext(userId);
+        await piReadService.buildFeedContextV2(userId, payload, analyticsRevision);
+      }
+
       await shadowDriftService.compareUser(userId);
 
       await PiRecomputeJobModel.updateOne(

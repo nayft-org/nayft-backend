@@ -16,7 +16,7 @@ export async function ensurePiConsumerGroup(): Promise<void> {
 export async function readPiJobs(
   consumerName: string,
   count = 5
-): Promise<Array<{ id: string; job: string }>> {
+): Promise<Array<{ id: string; job: string; stream: string }>> {
   const streams = [piRedisKeys.recomputeHigh, piRedisKeys.recomputeStream];
   for (const stream of streams) {
     const rows = await redis.xreadgroup(
@@ -36,7 +36,7 @@ export async function readPiJobs(
     return messages.map(([id, fields]) => {
       const payloadIdx = fields.indexOf('payload');
       const job = payloadIdx >= 0 ? fields[payloadIdx + 1] : fields[1];
-      return { id, job };
+      return { id, job, stream };
     });
   }
   return [];
@@ -58,4 +58,47 @@ export async function moveToDlq(payload: string, reason: string): Promise<void> 
     'reason',
     reason
   );
+}
+
+export async function runPiAutoclaimPass(consumerName: string): Promise<number> {
+  let claimed = 0;
+  for (const stream of [piRedisKeys.recomputeHigh, piRedisKeys.recomputeStream]) {
+    try {
+      const raw = (await redis.call(
+        'XAUTOCLAIM',
+        stream,
+        piConfig.consumerGroup,
+        consumerName,
+        String(piConfig.xautoclaimIdleMs),
+        '0-0',
+        'COUNT',
+        String(piConfig.xautoclaimBatch)
+      )) as [string, Array<[string, string[]]>, unknown[]] | null;
+
+      if (!raw || !Array.isArray(raw[1])) continue;
+
+      for (const [id, fieldList] of raw[1]) {
+        const payloadIdx = fieldList.indexOf('payload');
+        const job = payloadIdx >= 0 ? fieldList[payloadIdx + 1] : fieldList[1];
+        if (!job) {
+          await ackPiJob(stream, id);
+          continue;
+        }
+        claimed += 1;
+        await redis.xadd(
+          stream,
+          'MAXLEN',
+          '~',
+          String(piConfig.streamMaxLen),
+          '*',
+          'payload',
+          job
+        );
+        await ackPiJob(stream, id);
+      }
+    } catch (err) {
+      console.error('[PI Queue] XAUTOCLAIM error', stream, err);
+    }
+  }
+  return claimed;
 }

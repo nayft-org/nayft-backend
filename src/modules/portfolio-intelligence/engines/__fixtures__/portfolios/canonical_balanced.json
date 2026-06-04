@@ -1,0 +1,17 @@
+{
+  "id": "canonical_balanced",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "btc:1", "internalCoinId": "btc", "symbol": "BTC", "name": "Bitcoin", "chain": "bitcoin", "quantity": 1, "valueUsd": 4000, "weightPct": 0.4, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "eth:1", "internalCoinId": "eth", "symbol": "ETH", "name": "Ethereum", "chain": "ethereum", "quantity": 1, "valueUsd": 3000, "weightPct": 0.3, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "usdc:1", "internalCoinId": "usdc", "symbol": "USDC", "name": "USD Coin", "chain": "ethereum", "quantity": 1, "valueUsd": 2000, "weightPct": 0.2, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "sol:1", "internalCoinId": "sol", "symbol": "SOL", "name": "Solana", "chain": "solana", "quantity": 1, "valueUsd": 1000, "weightPct": 0.1, "source": "wallet", "mappingConfidence": 1 }
+  ],
+  "mappings": [
+    { "internalCoinId": "btc", "primaryCategoryId": "bitcoin", "confidence": 1, "nayftBucket": "Bitcoin" },
+    { "internalCoinId": "eth", "primaryCategoryId": "ethereum", "confidence": 1, "nayftBucket": "Layer1" },
+    { "internalCoinId": "usdc", "primaryCategoryId": "stablecoins", "confidence": 1, "nayftBucket": "Stablecoins" },
+    { "internalCoinId": "sol", "primaryCategoryId": "solana", "confidence": 1, "nayftBucket": "Layer1" }
+  ],
+  "totalValueUsd": 10000
+}

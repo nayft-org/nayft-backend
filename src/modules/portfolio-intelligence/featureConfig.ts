@@ -46,3 +46,39 @@ export const piNormalizedFeatureConfig: FeatureConfig = {
   category: 'premium',
   controllable: true,
 };
+
+export const piEnginesFeatureConfig: FeatureConfig = {
+  key: 'portfolio_intelligence_engines',
+  name: 'Portfolio Intelligence Engines',
+  module: PI_MODULE,
+  description: 'Deterministic portfolio analytics engines',
+  category: 'premium',
+  controllable: true,
+};
+
+export const piHealthFeatureConfig: FeatureConfig = {
+  key: 'portfolio_intelligence_health_score',
+  name: 'Portfolio Health Score',
+  module: PI_MODULE,
+  description: 'Composite portfolio health score',
+  category: 'premium',
+  controllable: true,
+};
+
+export const piInsightsFeatureConfig: FeatureConfig = {
+  key: 'portfolio_intelligence_insights',
+  name: 'Portfolio Intelligence Insights',
+  module: PI_MODULE,
+  description: 'Rule-based portfolio insights',
+  category: 'premium',
+  controllable: true,
+};
+
+export const piFeedIntelFeatureConfig: FeatureConfig = {
+  key: 'portfolio_intelligence_feed_intel',
+  name: 'Portfolio Feed Intelligence',
+  module: PI_MODULE,
+  description: 'Narrative and conviction vectors for feed ranking',
+  category: 'premium',
+  controllable: true,
+};

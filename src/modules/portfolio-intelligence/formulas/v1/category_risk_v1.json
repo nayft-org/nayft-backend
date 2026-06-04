@@ -1,0 +1,22 @@
+{
+  "version": "risk_v1",
+  "weights": {
+    "Stablecoins": 1.0,
+    "Bitcoin": 3.0,
+    "Layer1": 5.0,
+    "Infrastructure": 5.5,
+    "DeFi": 6.5,
+    "Layer2": 6.0,
+    "RWA": 5.0,
+    "Gaming": 7.5,
+    "AI": 8.0,
+    "Memes": 9.5,
+    "Other": 6.0
+  },
+  "labels": [
+    { "maxTenths": 30, "label": "Conservative" },
+    { "maxTenths": 50, "label": "Moderate" },
+    { "maxTenths": 75, "label": "Aggressive" },
+    { "maxTenths": 100, "label": "Extreme" }
+  ]
+}

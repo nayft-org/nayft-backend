@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "AI": 33.3,
+      "DeFi": 33.3,
+      "Gaming": 33.3
+    },
+    "topCategory": {
+      "id": "Gaming",
+      "name": "Gaming",
+      "pct": 33.3
+    },
+    "categoryCount": 3,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 3,
+      "excludedCount": 0,
+      "unmappedCount": 0,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 7.3,
+    "riskLabel": "Aggressive",
+    "contributions": [
+      {
+        "categoryId": "AI",
+        "weightPct": 33.3,
+        "riskWeight": 8,
+        "contribution": 2.67
+      },
+      {
+        "categoryId": "DeFi",
+        "weightPct": 33.3,
+        "riskWeight": 6.5,
+        "contribution": 2.17
+      },
+      {
+        "categoryId": "Gaming",
+        "weightPct": 33.3,
+        "riskWeight": 7.5,
+        "contribution": 2.5
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "AI": 33.3,
+      "DeFi": 33.3,
+      "Gaming": 33.3
+    },
+    "dominant": {
+      "id": "AI",
+      "name": "AI",
+      "pct": 33.3
+    },
+    "ranked": [
+      {
+        "id": "AI",
+        "name": "AI",
+        "pct": 33.3
+      },
+      {
+        "id": "DeFi",
+        "name": "DeFi",
+        "pct": 33.3
+      },
+      {
+        "id": "Gaming",
+        "name": "Gaming",
+        "pct": 33.3
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "C",
+    "topHoldingPct": 33.3,
+    "top3Pct": 100,
+    "concentrationLevel": "Moderate",
+    "hhi": 0.3333
+  },
+  "diversification": {
+    "score": 100,
+    "label": "Excellent",
+    "effectiveCategories": 3
+  },
+  "stablecoin": {
+    "stablecoinPct": 0,
+    "bufferClass": "Thin",
+    "pullbackReadiness": "Low",
+    "stableBps": 0
+  },
+  "health": {
+    "healthScore": -210,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -630,
+      "diversification": 100,
+      "concentration": 62,
+      "stablecoin": 0
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -630,
+        "diversification": 100,
+        "concentration": 62,
+        "stablecoin": 0
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "balanced_investor",
+      "name": "Balanced Investor",
+      "confidence": 1
+    },
+    "signals": {
+      "riskTenths": 73,
+      "diversification": 100,
+      "btcBps": 0,
+      "memeBps": 0
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 1,
+          "passed": true
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [
+    {
+      "id": "dcadcb1681e58269",
+      "templateId": "high_ai_conviction",
+      "type": "narrative",
+      "severity": "info",
+      "priority": 354,
+      "title": "High AI conviction",
+      "summary": "AI narrative exposure exceeds 30%.",
+      "evidence": {
+        "templateId": "high_ai_conviction",
+        "formulaVersion": "insights_v1",
+        "actualPct": 33.3,
+        "threshold": 30
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "11362863341115db",
+      "templateId": "low_stablecoin_buffer",
+      "type": "liquidity",
+      "severity": "info",
+      "priority": 0,
+      "title": "Low stablecoin buffer",
+      "summary": "Stablecoin allocation below 5%.",
+      "evidence": {
+        "templateId": "low_stablecoin_buffer",
+        "formulaVersion": "insights_v1"
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    }
+  ],
+  "feedIntel": {
+    "narrativeVector": {
+      "AI": 33.3,
+      "DeFi": 33.3,
+      "Gaming": 33.3
+    },
+    "convictionVector": {
+      "AI": 0.33299999999999996,
+      "DeFi": 0.33299999999999996,
+      "Gaming": 0.33299999999999996
+    },
+    "topThemes": [
+      "AI",
+      "DeFi",
+      "Gaming"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 3,
+    "excludedLowConfidenceCount": 0,
+    "mappingCoveragePct": 1
+  }
+}

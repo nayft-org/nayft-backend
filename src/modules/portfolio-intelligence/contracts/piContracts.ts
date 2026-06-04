@@ -80,6 +80,9 @@ export type PiManifest = {
   computedAt: string;
   complete: boolean;
   catalogVersion: number;
+  partial?: boolean;
+  formulaBundle?: Record<string, string>;
+  etag?: string;
 };
 
 export type PiFanoutMessage = {

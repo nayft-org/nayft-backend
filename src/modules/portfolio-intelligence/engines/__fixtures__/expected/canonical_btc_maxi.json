@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "Bitcoin": 70,
+      "Layer1": 30
+    },
+    "topCategory": {
+      "id": "Bitcoin",
+      "name": "Bitcoin",
+      "pct": 70
+    },
+    "categoryCount": 2,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 2,
+      "excludedCount": 0,
+      "unmappedCount": 0,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 3.6,
+    "riskLabel": "Moderate",
+    "contributions": [
+      {
+        "categoryId": "Bitcoin",
+        "weightPct": 70,
+        "riskWeight": 3,
+        "contribution": 2.1
+      },
+      {
+        "categoryId": "Layer1",
+        "weightPct": 30,
+        "riskWeight": 5,
+        "contribution": 1.5
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "Bitcoin": 70,
+      "Layer1": 30
+    },
+    "dominant": {
+      "id": "Bitcoin",
+      "name": "Bitcoin",
+      "pct": 70
+    },
+    "ranked": [
+      {
+        "id": "Bitcoin",
+        "name": "Bitcoin",
+        "pct": 70
+      },
+      {
+        "id": "Layer1",
+        "name": "Layer1",
+        "pct": 30
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "BTC",
+    "topHoldingPct": 70,
+    "top3Pct": 100,
+    "concentrationLevel": "Extreme",
+    "hhi": 0.58
+  },
+  "diversification": {
+    "score": 88,
+    "label": "Excellent",
+    "effectiveCategories": 2
+  },
+  "stablecoin": {
+    "stablecoinPct": 0,
+    "bufferClass": "Thin",
+    "pullbackReadiness": "Low",
+    "stableBps": 0
+  },
+  "health": {
+    "healthScore": -74,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -260,
+      "diversification": 88,
+      "concentration": 20,
+      "stablecoin": 0
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -260,
+        "diversification": 88,
+        "concentration": 20,
+        "stablecoin": 0
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "bitcoin_maxi",
+      "name": "Bitcoin Maxi",
+      "confidence": 1
+    },
+    "secondary": {
+      "id": "balanced_investor",
+      "name": "Balanced Investor",
+      "confidence": 0.88
+    },
+    "signals": {
+      "riskTenths": 36,
+      "diversification": 88,
+      "btcBps": 7000,
+      "memeBps": 0
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 70,
+          "passed": true
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 0.88,
+          "passed": true
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [
+    {
+      "id": "4bb356d58a04c4cd",
+      "templateId": "extreme_btc_concentration",
+      "type": "concentration",
+      "severity": "warn",
+      "priority": 1771,
+      "title": "Heavy Bitcoin weight",
+      "summary": "Bitcoin exceeds 55% of portfolio.",
+      "evidence": {
+        "templateId": "extreme_btc_concentration",
+        "formulaVersion": "insights_v1",
+        "actualBps": 7000
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "11362863341115db",
+      "templateId": "low_stablecoin_buffer",
+      "type": "liquidity",
+      "severity": "info",
+      "priority": 0,
+      "title": "Low stablecoin buffer",
+      "summary": "Stablecoin allocation below 5%.",
+      "evidence": {
+        "templateId": "low_stablecoin_buffer",
+        "formulaVersion": "insights_v1"
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    }
+  ],
+  "feedIntel": {
+    "narrativeVector": {
+      "Bitcoin": 70,
+      "Layer1": 30
+    },
+    "convictionVector": {
+      "Bitcoin": 0.7,
+      "Layer1": 0.3
+    },
+    "topThemes": [
+      "Bitcoin",
+      "Layer1"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 2,
+    "excludedLowConfidenceCount": 0,
+    "mappingCoveragePct": 1
+  }
+}

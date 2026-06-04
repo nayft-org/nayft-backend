@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "Other": 100
+    },
+    "topCategory": {
+      "id": "Other",
+      "name": "Other",
+      "pct": 100
+    },
+    "categoryCount": 1,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 2,
+      "excludedCount": 0,
+      "unmappedCount": 2,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 6,
+    "riskLabel": "Aggressive",
+    "contributions": [
+      {
+        "categoryId": "Other",
+        "weightPct": 100,
+        "riskWeight": 6,
+        "contribution": 6
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "Infrastructure": 100
+    },
+    "dominant": {
+      "id": "Infrastructure",
+      "name": "Infrastructure",
+      "pct": 100
+    },
+    "ranked": [
+      {
+        "id": "Infrastructure",
+        "name": "Infrastructure",
+        "pct": 100
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "U1",
+    "topHoldingPct": 60,
+    "top3Pct": 100,
+    "concentrationLevel": "High",
+    "hhi": 0.52
+  },
+  "diversification": {
+    "score": 0,
+    "label": "Poor",
+    "effectiveCategories": 1
+  },
+  "stablecoin": {
+    "stablecoinPct": 0,
+    "bufferClass": "Thin",
+    "pullbackReadiness": "Low",
+    "stableBps": 0
+  },
+  "health": {
+    "healthScore": -194,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -500,
+      "diversification": 0,
+      "concentration": 31,
+      "stablecoin": 0
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -500,
+        "diversification": 0,
+        "concentration": 31,
+        "stablecoin": 0
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "balanced_investor",
+      "name": "Balanced Investor",
+      "confidence": 0.5
+    },
+    "signals": {
+      "riskTenths": 60,
+      "diversification": 0,
+      "btcBps": 0,
+      "memeBps": 0
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [
+    {
+      "id": "6c472ae2ea0f1feb",
+      "templateId": "whale_concentration",
+      "type": "concentration",
+      "severity": "critical",
+      "priority": 1233,
+      "title": "Whale concentration",
+      "summary": "Single holding exceeds 50% of portfolio.",
+      "evidence": {
+        "templateId": "whale_concentration",
+        "formulaVersion": "insights_v1",
+        "topHoldingPct": 60
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "11362863341115db",
+      "templateId": "low_stablecoin_buffer",
+      "type": "liquidity",
+      "severity": "info",
+      "priority": 0,
+      "title": "Low stablecoin buffer",
+      "summary": "Stablecoin allocation below 5%.",
+      "evidence": {
+        "templateId": "low_stablecoin_buffer",
+        "formulaVersion": "insights_v1"
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "3d1033d0e02fdd11",
+      "templateId": "weak_diversification",
+      "type": "diversification",
+      "severity": "warn",
+      "priority": 0,
+      "title": "Weak diversification",
+      "summary": "Portfolio diversification score is low.",
+      "evidence": {
+        "templateId": "weak_diversification",
+        "formulaVersion": "insights_v1",
+        "score": 0
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    }
+  ],
+  "feedIntel": {
+    "narrativeVector": {
+      "Infrastructure": 100
+    },
+    "convictionVector": {
+      "Other": 1
+    },
+    "topThemes": [
+      "Infrastructure"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 2,
+    "excludedLowConfidenceCount": 0,
+    "mappingCoveragePct": 0
+  }
+}

@@ -6,6 +6,8 @@ import { piConfig } from '../config/piConfig';
 import { piRedisKeys } from '../cache/piRedisKeys';
 import { CoinCategoryCatalog } from '../models/CoinCategoryCatalog';
 import { CoinCategoryMapping } from '../models/CoinCategoryMapping';
+import { PiCatalogSnapshot } from '../models/PiCatalogSnapshot';
+import { getActiveFormulaBundle } from '../config/piFormulaRegistry';
 import { LabeledActiveCoin } from '../../coin/models/LabeledActiveCoin';
 
 type CoingeckoCategory = { category_id: string; name: string };
@@ -97,6 +99,20 @@ export async function runCategoryCatalogSync(): Promise<number> {
         /* rate limit — continue */
       }
     }
+
+    const bundle = getActiveFormulaBundle();
+    await PiCatalogSnapshot.findOneAndUpdate(
+      { catalogVersion },
+      {
+        $set: {
+          catalogVersion,
+          taxonomyVersion: bundle.taxonomy,
+          categories: categories.map((c) => ({ categoryId: c.category_id, name: c.name })),
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
 
     console.log('[PI CategorySync] complete', { catalogVersion, categories: categories.length, mapped });
     return catalogVersion;

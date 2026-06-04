@@ -48,6 +48,18 @@ export const piMetrics = {
   zerionCircuitOpen(): void {
     inc('pi_zerion_circuit_open_total');
   },
+  engineLatencyMs(engine: string, ms: number): void {
+    observe('pi_engine_latency_ms', ms, `engine=${engine}`);
+  },
+  engineFailed(engine: string): void {
+    inc('pi_engine_failures_total', `engine=${engine}`);
+  },
+  insightsGenerated(count: number): void {
+    inc('pi_insights_generated_total', '', count);
+  },
+  replayDriftPct(pct: number): void {
+    counters.set('pi_replay_drift_pct', pct);
+  },
   getSnapshot(): { counters: Record<string, number>; histograms: Record<string, HistogramBucket> } {
     return {
       counters: Object.fromEntries(counters),

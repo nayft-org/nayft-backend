@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "AI": 10,
+      "Bitcoin": 10,
+      "DeFi": 10,
+      "Gaming": 10,
+      "Infrastructure": 10,
+      "Layer1": 10,
+      "Layer2": 10,
+      "Memes": 10,
+      "RWA": 10,
+      "Stablecoins": 10
+    },
+    "topCategory": {
+      "id": "AI",
+      "name": "AI",
+      "pct": 10
+    },
+    "categoryCount": 10,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 20,
+      "excludedCount": 0,
+      "unmappedCount": 0,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 5.7,
+    "riskLabel": "Aggressive",
+    "contributions": [
+      {
+        "categoryId": "AI",
+        "weightPct": 10,
+        "riskWeight": 8,
+        "contribution": 0.8
+      },
+      {
+        "categoryId": "Bitcoin",
+        "weightPct": 10,
+        "riskWeight": 3,
+        "contribution": 0.3
+      },
+      {
+        "categoryId": "DeFi",
+        "weightPct": 10,
+        "riskWeight": 6.5,
+        "contribution": 0.65
+      },
+      {
+        "categoryId": "Gaming",
+        "weightPct": 10,
+        "riskWeight": 7.5,
+        "contribution": 0.75
+      },
+      {
+        "categoryId": "Infrastructure",
+        "weightPct": 10,
+        "riskWeight": 5.5,
+        "contribution": 0.55
+      },
+      {
+        "categoryId": "Layer1",
+        "weightPct": 10,
+        "riskWeight": 5,
+        "contribution": 0.5
+      },
+      {
+        "categoryId": "Layer2",
+        "weightPct": 10,
+        "riskWeight": 6,
+        "contribution": 0.6
+      },
+      {
+        "categoryId": "Memes",
+        "weightPct": 10,
+        "riskWeight": 9.5,
+        "contribution": 0.95
+      },
+      {
+        "categoryId": "RWA",
+        "weightPct": 10,
+        "riskWeight": 5,
+        "contribution": 0.5
+      },
+      {
+        "categoryId": "Stablecoins",
+        "weightPct": 10,
+        "riskWeight": 1,
+        "contribution": 0.1
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "AI": 10,
+      "Bitcoin": 10,
+      "DeFi": 10,
+      "Gaming": 10,
+      "Infrastructure": 20,
+      "Layer1": 20,
+      "Memes": 10,
+      "RWA": 10
+    },
+    "dominant": {
+      "id": "Infrastructure",
+      "name": "Infrastructure",
+      "pct": 20
+    },
+    "ranked": [
+      {
+        "id": "Infrastructure",
+        "name": "Infrastructure",
+        "pct": 20
+      },
+      {
+        "id": "Layer1",
+        "name": "Layer1",
+        "pct": 20
+      },
+      {
+        "id": "AI",
+        "name": "AI",
+        "pct": 10
+      },
+      {
+        "id": "Bitcoin",
+        "name": "Bitcoin",
+        "pct": 10
+      },
+      {
+        "id": "DeFi",
+        "name": "DeFi",
+        "pct": 10
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "C00",
+    "topHoldingPct": 0.5,
+    "top3Pct": 1.5,
+    "concentrationLevel": "Low",
+    "hhi": 0.0005
+  },
+  "diversification": {
+    "score": 100,
+    "label": "Excellent",
+    "effectiveCategories": 10
+  },
+  "stablecoin": {
+    "stablecoinPct": 10,
+    "bufferClass": "Adequate",
+    "pullbackReadiness": "Medium",
+    "stableBps": 1000
+  },
+  "health": {
+    "healthScore": -133,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -470,
+      "diversification": 100,
+      "concentration": 99,
+      "stablecoin": 50
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -470,
+        "diversification": 100,
+        "concentration": 99,
+        "stablecoin": 50
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "balanced_investor",
+      "name": "Balanced Investor",
+      "confidence": 1
+    },
+    "signals": {
+      "riskTenths": 57,
+      "diversification": 100,
+      "btcBps": 1000,
+      "memeBps": 1000
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 1,
+          "passed": true
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [],
+  "feedIntel": {
+    "narrativeVector": {
+      "AI": 10,
+      "Bitcoin": 10,
+      "DeFi": 10,
+      "Gaming": 10,
+      "Infrastructure": 20,
+      "Layer1": 20,
+      "Memes": 10,
+      "RWA": 10
+    },
+    "convictionVector": {
+      "AI": 0.1,
+      "Bitcoin": 0.1,
+      "DeFi": 0.1,
+      "Gaming": 0.1,
+      "Infrastructure": 0.1,
+      "Layer1": 0.1,
+      "Layer2": 0.1,
+      "Memes": 0.1,
+      "RWA": 0.1,
+      "Stablecoins": 0.1
+    },
+    "topThemes": [
+      "Infrastructure",
+      "Layer1",
+      "AI"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 20,
+    "excludedLowConfidenceCount": 0,
+    "mappingCoveragePct": 1
+  }
+}

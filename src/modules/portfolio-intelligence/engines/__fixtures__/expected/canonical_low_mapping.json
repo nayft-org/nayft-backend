@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "Bitcoin": 33.3,
+      "Layer1": 66.7
+    },
+    "topCategory": {
+      "id": "Layer1",
+      "name": "Layer1",
+      "pct": 66.7
+    },
+    "categoryCount": 2,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 3,
+      "excludedCount": 2,
+      "unmappedCount": 0,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 4.3,
+    "riskLabel": "Moderate",
+    "contributions": [
+      {
+        "categoryId": "Bitcoin",
+        "weightPct": 33.3,
+        "riskWeight": 3,
+        "contribution": 1
+      },
+      {
+        "categoryId": "Layer1",
+        "weightPct": 66.7,
+        "riskWeight": 5,
+        "contribution": 3.33
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "Bitcoin": 33.3,
+      "Layer1": 66.7
+    },
+    "dominant": {
+      "id": "Layer1",
+      "name": "Layer1",
+      "pct": 66.7
+    },
+    "ranked": [
+      {
+        "id": "Layer1",
+        "name": "Layer1",
+        "pct": 66.7
+      },
+      {
+        "id": "Bitcoin",
+        "name": "Bitcoin",
+        "pct": 33.3
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "BTC",
+    "topHoldingPct": 20,
+    "top3Pct": 60,
+    "concentrationLevel": "Low",
+    "hhi": 0.12
+  },
+  "diversification": {
+    "score": 92,
+    "label": "Excellent",
+    "effectiveCategories": 2
+  },
+  "stablecoin": {
+    "stablecoinPct": 0,
+    "bufferClass": "Thin",
+    "pullbackReadiness": "Low",
+    "stableBps": 0
+  },
+  "health": {
+    "healthScore": -89,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -330,
+      "diversification": 92,
+      "concentration": 77,
+      "stablecoin": 0
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -330,
+        "diversification": 92,
+        "concentration": 77,
+        "stablecoin": 0
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "balanced_investor",
+      "name": "Balanced Investor",
+      "confidence": 0.92
+    },
+    "signals": {
+      "riskTenths": 43,
+      "diversification": 92,
+      "btcBps": 3333,
+      "memeBps": 0
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 0.92,
+          "passed": true
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [
+    {
+      "id": "11362863341115db",
+      "templateId": "low_stablecoin_buffer",
+      "type": "liquidity",
+      "severity": "info",
+      "priority": 0,
+      "title": "Low stablecoin buffer",
+      "summary": "Stablecoin allocation below 5%.",
+      "evidence": {
+        "templateId": "low_stablecoin_buffer",
+        "formulaVersion": "insights_v1"
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    }
+  ],
+  "feedIntel": {
+    "narrativeVector": {
+      "Bitcoin": 33.3,
+      "Layer1": 66.7
+    },
+    "convictionVector": {
+      "Bitcoin": 0.33299999999999996,
+      "Layer1": 0.667
+    },
+    "topThemes": [
+      "Layer1",
+      "Bitcoin"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 3,
+    "excludedLowConfidenceCount": 2,
+    "mappingCoveragePct": 1
+  }
+}

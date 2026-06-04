@@ -7,9 +7,17 @@ import { piMetrics } from '../observability/piMetrics';
 type PortfolioFanoutClient = WebSocket & {
   portfolioAddresses?: Set<string>;
   portfolioFanoutSubscribed?: boolean;
+  portfolioFanoutUserId?: string;
 };
 
+const clientFanoutUserId = new WeakMap<WebSocket, string>();
+
 let subscriberStarted = false;
+
+export function setPortfolioFanoutUserId(ws: WebSocket, userId: string): void {
+  clientFanoutUserId.set(ws, userId);
+  (ws as PortfolioFanoutClient).portfolioFanoutUserId = userId;
+}
 
 export function attachPortfolioFanout(wss: { clients: Set<WebSocket> }): void {
   if (subscriberStarted || !piConfig.fanoutEnabled) return;
@@ -29,7 +37,8 @@ export function attachPortfolioFanout(wss: { clients: Set<WebSocket> }): void {
     } catch {
       return;
     }
-    if (!parsed.userId) return;
+    const targetUserId = parsed.userId;
+    if (!targetUserId) return;
 
     const payload = JSON.stringify({
       channel: 'portfolio',
@@ -40,6 +49,8 @@ export function attachPortfolioFanout(wss: { clients: Set<WebSocket> }): void {
       const c = client as PortfolioFanoutClient;
       if (c.readyState !== 1) continue;
       if (!c.portfolioFanoutSubscribed && !c.portfolioAddresses?.size) continue;
+      const boundUser = clientFanoutUserId.get(client) ?? c.portfolioFanoutUserId;
+      if (boundUser && boundUser !== targetUserId) continue;
       c.send(payload);
       piMetrics.fanoutMessage();
     }

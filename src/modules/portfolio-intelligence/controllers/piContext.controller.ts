@@ -6,6 +6,11 @@ import { recomputeEnqueueService } from '../services/recomputeEnqueue.service';
 import { piConfig } from '../config/piConfig';
 import { featureService } from '../../../core/feature-system/feature.service';
 
+async function enginesOrPiEnabled(): Promise<boolean> {
+  const engines = await featureService.isActive('portfolio_intelligence_engines');
+  return engines || piConfig.enabled;
+}
+
 export const piContextController = {
   getContext: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -23,8 +28,7 @@ export const piContextController = {
 
   getLatestSnapshot: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const enabled = await featureService.isActive('portfolio_intelligence_context_api');
-      if (!enabled && !piConfig.enabled) {
+      if (!(await enginesOrPiEnabled()) && !piConfig.enabled) {
         sendError(res, 'Portfolio intelligence is not enabled', 403);
         return;
       }
@@ -35,8 +39,45 @@ export const piContextController = {
     }
   },
 
+  getSummary: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const health = await featureService.isActive('portfolio_intelligence_health_score');
+      if (!health && !(await enginesOrPiEnabled())) {
+        sendError(res, 'Portfolio health score is not enabled', 403);
+        return;
+      }
+      const summary = await piReadService.getSummary(req.userId!);
+      if (!summary) {
+        sendError(res, 'No analytics available', 404);
+        return;
+      }
+      sendSuccess(res, summary);
+    } catch (e) {
+      sendError(res, e instanceof Error ? e.message : 'Failed to load summary', 500);
+    }
+  },
+
+  getInsights: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const insightsFlag = await featureService.isActive('portfolio_intelligence_insights');
+      if (!insightsFlag && !(await enginesOrPiEnabled())) {
+        sendError(res, 'Portfolio insights are not enabled', 403);
+        return;
+      }
+      const data = await piReadService.getInsights(req.userId!);
+      sendSuccess(res, data);
+    } catch (e) {
+      sendError(res, e instanceof Error ? e.message : 'Failed to load insights', 500);
+    }
+  },
+
   manualRecompute: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+      const enabled = await featureService.isActive('portfolio_intelligence_foundation');
+      if (!enabled && !piConfig.enabled && !piConfig.workerEnabled) {
+        sendError(res, 'Portfolio intelligence is not enabled', 403);
+        return;
+      }
       const ok = await recomputeEnqueueService.enqueue(req.userId!, 'manual', {
         bypassDebounce: true,
         highPriority: true,

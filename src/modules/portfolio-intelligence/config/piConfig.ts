@@ -42,7 +42,7 @@ export const piConfig = {
   snapshotValueDriftThreshold: parseFloat(process.env.PI_SNAPSHOT_VALUE_DRIFT_THRESHOLD || '0.005'),
   shadowValueDriftAlertPct: parseFloat(process.env.PI_SHADOW_DRIFT_ALERT_PCT || '0.02'),
   dailySnapshotBatchPerMin: parseIntEnv('PI_DAILY_SNAPSHOT_BATCH_PER_MIN', 500),
-  schemaVersion: 1,
+  schemaVersion: 2,
   jobSchemaVersion: 1,
   contextSchemaVersion: 1,
   fanoutChannel: 'pi:fanout',

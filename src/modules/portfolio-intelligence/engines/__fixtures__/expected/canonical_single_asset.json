@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 2,
+  "replayPin": {
+    "ingestRevision": 1,
+    "catalogVersion": 1,
+    "taxonomyVersion": "taxonomy_v1",
+    "formulaBundle": {
+      "allocation": "v1",
+      "risk": "v1",
+      "narrative": "v1",
+      "concentration": "v1",
+      "diversification": "v1",
+      "stablecoin": "v1",
+      "health": "v1",
+      "identity": "v1",
+      "insights": "v1",
+      "taxonomy": "taxonomy_v1"
+    }
+  },
+  "taxonomyVersion": "taxonomy_v1",
+  "formulaBundle": {
+    "allocation": "v1",
+    "risk": "v1",
+    "narrative": "v1",
+    "concentration": "v1",
+    "diversification": "v1",
+    "stablecoin": "v1",
+    "health": "v1",
+    "identity": "v1",
+    "insights": "v1",
+    "taxonomy": "taxonomy_v1"
+  },
+  "partial": false,
+  "allocation": {
+    "byCategory": {
+      "Bitcoin": 95,
+      "Other": 5
+    },
+    "topCategory": {
+      "id": "Bitcoin",
+      "name": "Bitcoin",
+      "pct": 95
+    },
+    "categoryCount": 2,
+    "catalogVersion": 1,
+    "explain": {
+      "eligibleCount": 2,
+      "excludedCount": 0,
+      "unmappedCount": 0,
+      "normalizationMethod": "hamilton_largest_remainder"
+    }
+  },
+  "risk": {
+    "riskScore": 3.1,
+    "riskLabel": "Moderate",
+    "contributions": [
+      {
+        "categoryId": "Bitcoin",
+        "weightPct": 95,
+        "riskWeight": 3,
+        "contribution": 2.85
+      },
+      {
+        "categoryId": "Other",
+        "weightPct": 5,
+        "riskWeight": 6,
+        "contribution": 0.3
+      }
+    ],
+    "explain": {
+      "formula": "weighted_category_risk_v1"
+    }
+  },
+  "narrative": {
+    "vector": {
+      "Bitcoin": 95,
+      "Infrastructure": 5
+    },
+    "dominant": {
+      "id": "Bitcoin",
+      "name": "Bitcoin",
+      "pct": 95
+    },
+    "ranked": [
+      {
+        "id": "Bitcoin",
+        "name": "Bitcoin",
+        "pct": 95
+      },
+      {
+        "id": "Infrastructure",
+        "name": "Infrastructure",
+        "pct": 5
+      }
+    ]
+  },
+  "concentration": {
+    "topHolding": "BTC",
+    "topHoldingPct": 95,
+    "top3Pct": 100,
+    "concentrationLevel": "Extreme",
+    "hhi": 0.905
+  },
+  "diversification": {
+    "score": 17,
+    "label": "Poor",
+    "effectiveCategories": 2
+  },
+  "stablecoin": {
+    "stablecoinPct": 0,
+    "bufferClass": "Thin",
+    "pullbackReadiness": "Low",
+    "stableBps": 0
+  },
+  "health": {
+    "healthScore": -75,
+    "healthLabel": "Weak",
+    "breakdown": {
+      "risk": -210,
+      "diversification": 17,
+      "concentration": 20,
+      "stablecoin": 0
+    },
+    "explain": {
+      "weights": {
+        "risk": 0.4,
+        "diversification": 0.3,
+        "concentration": 0.2,
+        "stablecoin": 0.1
+      },
+      "subScores": {
+        "risk": -210,
+        "diversification": 17,
+        "concentration": 20,
+        "stablecoin": 0
+      }
+    }
+  },
+  "identity": {
+    "primary": {
+      "id": "bitcoin_maxi",
+      "name": "Bitcoin Maxi",
+      "confidence": 1
+    },
+    "signals": {
+      "riskTenths": 31,
+      "diversification": 17,
+      "btcBps": 9500,
+      "memeBps": 0
+    },
+    "explain": {
+      "matchedRules": [
+        {
+          "ruleId": "bitcoin_maxi",
+          "priority": 10,
+          "score": 95,
+          "passed": true
+        },
+        {
+          "ruleId": "ai_hunter",
+          "priority": 9,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "narrative_chaser",
+          "priority": 8,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "yield_farmer",
+          "priority": 7,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "risk_taker",
+          "priority": 6,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "capital_preserver",
+          "priority": 5,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "balanced_investor",
+          "priority": 4,
+          "score": 0,
+          "passed": false
+        },
+        {
+          "ruleId": "meme_degen",
+          "priority": 3,
+          "score": 0,
+          "passed": false
+        }
+      ]
+    }
+  },
+  "insights": [
+    {
+      "id": "4e85fbc304b7b5e4",
+      "templateId": "extreme_btc_concentration",
+      "type": "concentration",
+      "severity": "warn",
+      "priority": 1832,
+      "title": "Heavy Bitcoin weight",
+      "summary": "Bitcoin exceeds 55% of portfolio.",
+      "evidence": {
+        "templateId": "extreme_btc_concentration",
+        "formulaVersion": "insights_v1",
+        "actualBps": 9500
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "11362863341115db",
+      "templateId": "low_stablecoin_buffer",
+      "type": "liquidity",
+      "severity": "info",
+      "priority": 0,
+      "title": "Low stablecoin buffer",
+      "summary": "Stablecoin allocation below 5%.",
+      "evidence": {
+        "templateId": "low_stablecoin_buffer",
+        "formulaVersion": "insights_v1"
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    },
+    {
+      "id": "3f659723215bd028",
+      "templateId": "weak_diversification",
+      "type": "diversification",
+      "severity": "warn",
+      "priority": 0,
+      "title": "Weak diversification",
+      "summary": "Portfolio diversification score is low.",
+      "evidence": {
+        "templateId": "weak_diversification",
+        "formulaVersion": "insights_v1",
+        "score": 17
+      },
+      "confidence": 0.9,
+      "modelVersion": "rules_v1"
+    }
+  ],
+  "feedIntel": {
+    "narrativeVector": {
+      "Bitcoin": 95,
+      "Infrastructure": 5
+    },
+    "convictionVector": {
+      "Bitcoin": 0.95,
+      "Other": 0.05
+    },
+    "topThemes": [
+      "Bitcoin",
+      "Infrastructure"
+    ]
+  },
+  "telemetry": {
+    "eligiblePositionCount": 2,
+    "excludedLowConfidenceCount": 0,
+    "mappingCoveragePct": 1
+  }
+}

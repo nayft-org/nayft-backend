@@ -1,0 +1,15 @@
+{
+  "id": "pathological_rounding",
+  "replayPin": { "ingestRevision": 1, "catalogVersion": 1 },
+  "positions": [
+    { "positionKey": "a:1", "internalCoinId": "a", "symbol": "A", "name": "A", "chain": "ethereum", "quantity": 1, "valueUsd": 3333, "weightPct": 0.3333, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "b:1", "internalCoinId": "b", "symbol": "B", "name": "B", "chain": "ethereum", "quantity": 1, "valueUsd": 3333, "weightPct": 0.3333, "source": "wallet", "mappingConfidence": 1 },
+    { "positionKey": "c:1", "internalCoinId": "c", "symbol": "C", "name": "C", "chain": "ethereum", "quantity": 1, "valueUsd": 3334, "weightPct": 0.3334, "source": "wallet", "mappingConfidence": 1 }
+  ],
+  "mappings": [
+    { "internalCoinId": "a", "primaryCategoryId": "defi", "confidence": 1, "nayftBucket": "DeFi" },
+    { "internalCoinId": "b", "primaryCategoryId": "gaming", "confidence": 1, "nayftBucket": "Gaming" },
+    { "internalCoinId": "c", "primaryCategoryId": "ai", "confidence": 1, "nayftBucket": "AI" }
+  ],
+  "totalValueUsd": 10000
+}

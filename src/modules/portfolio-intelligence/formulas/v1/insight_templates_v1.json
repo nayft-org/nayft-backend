@@ -1,0 +1,15 @@
+{
+  "version": "insights_v1",
+  "severityWeight": { "info": 1, "warn": 2, "critical": 3 },
+  "templates": [
+    { "id": "high_meme_exposure", "type": "exposure", "severity": "warn", "bucket": "Memes", "minBps": 2000, "title": "High meme exposure", "summary": "Meme allocation exceeds 20% of portfolio." },
+    { "id": "extreme_btc_concentration", "type": "concentration", "severity": "warn", "bucket": "Bitcoin", "minBps": 5500, "title": "Heavy Bitcoin weight", "summary": "Bitcoin exceeds 55% of portfolio." },
+    { "id": "low_stablecoin_buffer", "type": "liquidity", "severity": "info", "bucket": "Stablecoins", "maxBps": 500, "title": "Low stablecoin buffer", "summary": "Stablecoin allocation below 5%." },
+    { "id": "high_ai_conviction", "type": "narrative", "severity": "info", "narrative": "AI", "minBps": 3000, "title": "High AI conviction", "summary": "AI narrative exposure exceeds 30%." },
+    { "id": "weak_diversification", "type": "diversification", "severity": "warn", "maxScore": 40, "title": "Weak diversification", "summary": "Portfolio diversification score is low." },
+    { "id": "extreme_risk_score", "type": "risk", "severity": "critical", "minRiskTenths": 80, "title": "Extreme portfolio risk", "summary": "Risk score indicates extreme risk profile." },
+    { "id": "whale_concentration", "type": "concentration", "severity": "critical", "minTopHoldingPct": 50, "title": "Whale concentration", "summary": "Single holding exceeds 50% of portfolio." },
+    { "id": "single_asset_dominance", "type": "concentration", "severity": "critical", "minTopHoldingPct": 65, "title": "Single asset dominance", "summary": "One asset dominates the portfolio." }
+  ],
+  "maxInsights": 8
+}

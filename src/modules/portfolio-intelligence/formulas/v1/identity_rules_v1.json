@@ -1,0 +1,14 @@
+{
+  "version": "identity_v1",
+  "rules": [
+    { "id": "bitcoin_maxi", "name": "Bitcoin Maxi", "priority": 10, "minBtcBps": 6000 },
+    { "id": "ai_hunter", "name": "AI Hunter", "priority": 9, "minAiNarrativeBps": 3500 },
+    { "id": "narrative_chaser", "name": "Narrative Chaser", "priority": 8, "minDominantNarrativeBps": 4000 },
+    { "id": "yield_farmer", "name": "Yield Farmer", "priority": 7, "minDeFiBps": 4000 },
+    { "id": "risk_taker", "name": "Risk Taker", "priority": 6, "minRiskTenths": 75 },
+    { "id": "capital_preserver", "name": "Capital Preserver", "priority": 5, "minStableBps": 2000, "maxRiskTenths": 40 },
+    { "id": "balanced_investor", "name": "Balanced Investor", "priority": 4, "minDiversification": 70 },
+    { "id": "meme_degen", "name": "Meme Degen", "priority": 3, "minMemeBps": 2500 }
+  ],
+  "default": { "id": "balanced_investor", "name": "Balanced Investor" }
+}

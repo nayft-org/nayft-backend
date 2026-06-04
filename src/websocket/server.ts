@@ -17,7 +17,11 @@ import {
 } from './notificationFanout';
 import { registerNewsClient, startNewsRedisFanout, unregisterNewsClient } from './newsFanout';
 import { attachRiskFanout, handleRiskWsMessage } from './riskFanout';
-import { attachPortfolioFanout, markPortfolioFanoutClient } from './portfolioFanout';
+import {
+  attachPortfolioFanout,
+  markPortfolioFanoutClient,
+  setPortfolioFanoutUserId,
+} from './portfolioFanout';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -437,6 +441,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
         unregisterNotifyClient(ws, prev);
       }
       wsNotifyUserId.set(ws, userId);
+      setPortfolioFanoutUserId(ws, userId);
       registerNotifyClient(ws, userId);
       clearIdle();
       sendJson(ws, {
