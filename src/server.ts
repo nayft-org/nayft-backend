@@ -17,6 +17,10 @@ import { startExchangePollScheduler } from './jobs/exchangePollScheduler';
 import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWorker';
 import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
 import { startRiskBuildScheduler } from './modules/risk/jobs/riskBuildScheduler';
+import { bootstrapPiFeatures } from './modules/portfolio-intelligence/bootstrapPiFeatures';
+import { runPiRecomputeWorker } from './modules/portfolio-intelligence/jobs/piRecomputeWorker';
+import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/categoryCatalogSync';
+import { piConfig } from './modules/portfolio-intelligence/config/piConfig';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -33,6 +37,7 @@ const startServer = async (): Promise<void> => {
 
     // Auto-register features from modules
     await bootstrapFeatures();
+    await bootstrapPiFeatures();
 
     // Seed plans if empty
     await bootstrapPlans();
@@ -45,6 +50,24 @@ const startServer = async (): Promise<void> => {
     setImmediate(() =>
       runSentimentStreamWorker().catch((err) => console.error('[SentimentWorker] Fatal:', err))
     );
+    if (piConfig.workerEnabled) {
+      setImmediate(() =>
+        runPiRecomputeWorker().catch((err) => console.error('[PI Worker] Fatal:', err))
+      );
+    }
+    cron.schedule('0 4 * * *', () => {
+      runCategoryCatalogSync().catch((err) => console.error('[PI CategorySync]', err));
+    });
+    cron.schedule('0 0 * * *', () => {
+      import('./modules/portfolio-intelligence/jobs/piSnapshotDaily')
+        .then((m) => m.runPiSnapshotDaily())
+        .catch((err) => console.error('[PI DailySnapshot]', err));
+    });
+    cron.schedule('0 * * * *', () => {
+      import('./modules/portfolio-intelligence/jobs/piReconciliation.job')
+        .then((m) => m.runPiReconciliation(200))
+        .catch((err) => console.error('[PI Reconciliation]', err));
+    });
 
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
     // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.

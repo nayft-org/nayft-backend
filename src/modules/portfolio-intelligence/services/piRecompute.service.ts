@@ -1,0 +1,121 @@
+import { piConfig } from '../config/piConfig';
+import { PiRecomputeJob } from '../contracts/piContracts';
+import { positionNormalizerService } from './positionNormalizer.service';
+import { snapshotWriterService } from './snapshotWriter.service';
+import { piPublishService } from './piPublish.service';
+import { shadowDriftService } from './shadowDrift.service';
+import { categoryMappingService } from './categoryMapping.service';
+import { piReadService } from './piRead.service';
+import { piRepository } from '../repository/piRepository';
+import { recomputeEnqueueService } from './recomputeEnqueue.service';
+import { PiRecomputeJob as PiRecomputeJobModel } from '../models/PiRecomputeJob';
+import { piMetrics } from '../../../observability/piMetrics';
+import { eventService } from '../../../core/event-system';
+
+const EMPTY_SHELL = { metrics: {} as Record<string, unknown>, insights: [] as [] };
+
+export const piRecomputeService = {
+  async processJob(job: PiRecomputeJob): Promise<void> {
+    const start = Date.now();
+    const { userId, trigger, correlationId } = job;
+
+    await eventService.emitEvent({
+      featureKey: 'portfolio_intelligence_foundation',
+      eventType: 'portfolio_intelligence.recompute_started',
+      userId,
+      metadata: { correlationId, trigger },
+    });
+
+    const jobId = recomputeEnqueueService.jobIdFor(
+      userId,
+      job.ingestRevision ?? 0,
+      await categoryMappingService.getCatalogVersion()
+    );
+
+    await PiRecomputeJobModel.findOneAndUpdate(
+      { jobId },
+      {
+        $setOnInsert: { jobId, userId, trigger, correlationId, status: 'processing' },
+        $set: { startedAt: new Date(), status: 'processing' },
+        $inc: { attempts: 1 },
+      },
+      { upsert: true }
+    );
+
+    try {
+      const normalized = await positionNormalizerService.normalizeForUser(userId, correlationId);
+      const catalogVersion = await categoryMappingService.getCatalogVersion();
+      const fingerprint = positionNormalizerService.buildFingerprint(
+        userId,
+        normalized.ingestRevision,
+        catalogVersion
+      );
+
+      const previous = await piRepository.findPositionsByUser(userId);
+      const prevTotal = previous.reduce((s, p) => s + p.valueUsd, 0);
+
+      const shadow = piConfig.shadowMode && !piConfig.enabled;
+      const analyticsRevision = await piPublishService.publishUserAnalytics({
+        userId,
+        ingestRevision: normalized.ingestRevision,
+        catalogVersion,
+        buildFingerprint: fingerprint,
+        payload: EMPTY_SHELL,
+        shadow,
+      });
+
+      await snapshotWriterService.writeDeltaIfNeeded(
+        userId,
+        normalized.ingestRevision,
+        analyticsRevision,
+        normalized.positions,
+        normalized.totalValueUsd,
+        prevTotal
+      );
+
+      await piRepository.saveAnalyticsSnapshot({
+        userId,
+        revision: analyticsRevision,
+        inputsRevision: normalized.ingestRevision,
+        catalogVersion,
+        buildFingerprint: fingerprint,
+        payload: EMPTY_SHELL,
+      });
+
+      await piReadService.invalidateFeedContext(userId);
+      await shadowDriftService.compareUser(userId);
+
+      await PiRecomputeJobModel.updateOne(
+        { jobId },
+        { $set: { status: 'completed', finishedAt: new Date() } }
+      );
+
+      piMetrics.recomputeCompleted(trigger, Date.now() - start);
+
+      await eventService.emitEvent({
+        featureKey: 'portfolio_intelligence_foundation',
+        eventType: 'portfolio_intelligence.recompute_completed',
+        userId,
+        metadata: {
+          correlationId,
+          ingestRevision: normalized.ingestRevision,
+          analyticsRevision,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      piMetrics.recomputeFailed(trigger);
+      await PiRecomputeJobModel.updateOne(
+        { jobId },
+        { $set: { status: 'failed', finishedAt: new Date(), error: message } }
+      );
+      await eventService.emitEvent({
+        featureKey: 'portfolio_intelligence_foundation',
+        eventType: 'portfolio_intelligence.recompute_failed',
+        userId,
+        metadata: { correlationId, error: message },
+      });
+      throw err;
+    }
+  },
+};

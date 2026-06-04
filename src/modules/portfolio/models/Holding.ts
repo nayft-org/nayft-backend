@@ -10,6 +10,8 @@ export interface HoldingPositionFields {
   venue?:   string;
   sourceConnectionId?: string;
   schemaVersion?: number;
+  internalCoinId?: string;
+  mappingConfidence?: number;
 }
 
 export interface IHolding extends Document {
@@ -19,6 +21,7 @@ export interface IHolding extends Document {
   relativeChange24h: number;
   positions:         HoldingPositionFields[];
   syncedAt:          Date;
+  ingestRevision?:   number;
   createdAt:         Date;
   updatedAt:         Date;
 }
@@ -34,6 +37,8 @@ const holdingPositionSchema = new Schema<HoldingPositionFields>(
     venue:    { type: String },
     sourceConnectionId: { type: String },
     schemaVersion: { type: Number },
+    internalCoinId: { type: String },
+    mappingConfidence: { type: Number },
   },
   { _id: false }
 );
@@ -46,6 +51,7 @@ const holdingSchema = new Schema<IHolding>(
     relativeChange24h: { type: Number, default: 0 },
     positions:         { type: [holdingPositionSchema], default: [] },
     syncedAt:          { type: Date, required: true },
+    ingestRevision:    { type: Number },
   },
   { timestamps: true }
 );

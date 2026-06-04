@@ -1,4 +1,5 @@
 import { zerionApi, ZerionPosition } from './zerion';
+import { piConfig } from '../modules/portfolio-intelligence/config/piConfig';
 
 export interface AggregatedHoldings {
   totalValue:        number;
@@ -52,8 +53,10 @@ export async function fetchAndAggregateHoldings(
         continue;
       }
 
-      // Delay to reduce 429 on positions (demo tier rate limit)
-      await new Promise((r) => setTimeout(r, 2000));
+      // Delay to reduce 429 on positions (demo tier rate limit). Skipped when PI_API_ZERION_SLEEP_DISABLED=true.
+      if (!piConfig.apiZerionSleepDisabled) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
 
       try {
         positions = await zerionApi.getWalletPositions(address);

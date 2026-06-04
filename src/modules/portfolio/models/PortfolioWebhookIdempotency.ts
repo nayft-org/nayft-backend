@@ -17,6 +17,8 @@ const portfolioWebhookIdempotencySchema = new Schema<IPortfolioWebhookIdempotenc
   { collection: 'portfolio_webhook_idempotencies' }
 );
 
+portfolioWebhookIdempotencySchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
+
 export const PortfolioWebhookIdempotency = mongoose.model<IPortfolioWebhookIdempotency>(
   'PortfolioWebhookIdempotency',
   portfolioWebhookIdempotencySchema

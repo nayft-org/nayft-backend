@@ -17,6 +17,7 @@ import {
 } from './notificationFanout';
 import { registerNewsClient, startNewsRedisFanout, unregisterNewsClient } from './newsFanout';
 import { attachRiskFanout, handleRiskWsMessage } from './riskFanout';
+import { attachPortfolioFanout, markPortfolioFanoutClient } from './portfolioFanout';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -385,6 +386,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   startNotificationRedisFanout();
   startNewsRedisFanout();
   attachRiskFanout(wss);
+  attachPortfolioFanout(wss);
 
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url?.split('?')[0];
@@ -487,6 +489,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
           }
           if (set.size > 0) {
             clearIdle();
+            markPortfolioFanoutClient(ws as WebSocket & { portfolioFanoutSubscribed?: boolean });
             const subscribed = [...set.values()];
             sendPortfolioLifecycleMessage(ws, 'portfolio_subscribed', subscribed);
             sendPortfolioLifecycleMessage(ws, 'portfolio_sync_ready', subscribed);

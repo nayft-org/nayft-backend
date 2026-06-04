@@ -196,7 +196,7 @@ export function startBinanceTickerIngestion(): () => void {
       });
       ws.on('message', (raw) => {
         if (generation !== connectionGeneration) return;
-        onRawMessage(raw);
+        onRawMessage(Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer));
       });
       ws.on('ping', () => {
         if (generation !== connectionGeneration) return;

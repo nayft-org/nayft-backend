@@ -32,6 +32,10 @@ import {
   normalizePortfolioContext,
 } from './sessionPolicy';
 import { emitHoldingsDeltaUpdate, emitWalletStatusUpdate } from '../../services/walletEventAggregator';
+import { recomputeEnqueueService } from '../portfolio-intelligence/services/recomputeEnqueue.service';
+import { piConfig } from '../portfolio-intelligence/config/piConfig';
+import { positionNormalizerService } from '../portfolio-intelligence/services/positionNormalizer.service';
+import { createCorrelationId } from '../portfolio-intelligence/utils/correlationId';
 
 function shortAddress(address: string | undefined | null): string {
   if (!address) return 'n/a';
@@ -140,6 +144,10 @@ export const portfolioService = {
       throw error;
     }
     await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
+
+    if (piConfig.enqueueEnabled || piConfig.workerEnabled) {
+      void recomputeEnqueueService.enqueue(userId, 'wallet_change', { bypassDebounce: true });
+    }
 
     if (config.allowProviderSubscriptionWrites) {
       // Register address with Alchemy Address Activity webhooks (one per chain)
@@ -327,8 +335,38 @@ export const portfolioService = {
       hasExchange,
       addresses: addresses.map(shortAddress),
     });
-    const merged = await buildMergedHoldingsForUser(userId);
-    await portfolioRepository.upsertHoldings(userId, merged);
+    let merged = await buildMergedHoldingsForUser(userId);
+    if (piConfig.enabled || piConfig.shadowMode) {
+      const normalized = await positionNormalizerService.normalizeForUser(
+        userId,
+        createCorrelationId('holdings')
+      );
+      merged = {
+        totalValue: normalized.totalValueUsd,
+        absoluteChange24h: normalized.absoluteChange24h,
+        relativeChange24h: normalized.relativeChange24h,
+        positions: normalized.positions.map((p) => ({
+          name: p.name,
+          symbol: p.symbol,
+          quantity: p.quantity,
+          value: p.valueUsd,
+          chain: p.chain,
+          source: p.source,
+          venue: p.venue,
+          sourceConnectionId: p.sourceConnectionId,
+          internalCoinId: p.internalCoinId ?? undefined,
+          mappingConfidence: p.mappingConfidence,
+        })),
+      };
+    } else {
+      await portfolioRepository.upsertHoldings(userId, merged);
+    }
+    if (piConfig.enqueueEnabled || piConfig.workerEnabled) {
+      void recomputeEnqueueService.enqueue(userId, forceRefresh ? 'manual' : 'holdings_refresh', {
+        bypassDebounce: forceRefresh,
+        highPriority: forceRefresh,
+      });
+    }
     const broadcastAddrs = await getHoldingsBroadcastAddressesForUser(userId);
     emitHoldingsDeltaUpdate({
       userId,

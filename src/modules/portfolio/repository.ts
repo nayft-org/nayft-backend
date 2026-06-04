@@ -182,17 +182,23 @@ export const portfolioRepository = {
       absoluteChange24h: number;
       relativeChange24h: number;
       positions:         HoldingPositionFields[];
+      ingestRevision?:   number;
     }
   ): Promise<IHolding> => {
     const now = new Date();
+    const set: Record<string, unknown> = {
+      totalValue: data.totalValue,
+      absoluteChange24h: data.absoluteChange24h,
+      relativeChange24h: data.relativeChange24h,
+      positions: data.positions,
+      syncedAt: now,
+    };
+    if (data.ingestRevision != null) {
+      set.ingestRevision = data.ingestRevision;
+    }
     const result = await Holding.findOneAndUpdate(
       { userId },
-      {
-        $set: {
-          ...data,
-          syncedAt: now,
-        },
-      },
+      { $set: set },
       { upsert: true, new: true }
     );
     return result as IHolding;

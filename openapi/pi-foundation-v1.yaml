@@ -1,0 +1,34 @@
+openapi: 3.0.3
+info:
+  title: NAYFT Portfolio Intelligence Foundation API
+  version: 1.0.0
+paths:
+  /api/portfolio/intelligence/context:
+    get:
+      summary: Portfolio context for feed personalization
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Held symbols and revision metadata
+  /api/portfolio/intelligence/snapshot/latest:
+    get:
+      summary: Latest analytics snapshot shell
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Manifest and empty metrics shell
+  /api/portfolio/intelligence/recompute:
+    post:
+      summary: Manual recompute enqueue
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Enqueue result
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

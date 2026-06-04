@@ -22,6 +22,9 @@ import {
   getHoldingsBroadcastAddressesForUser,
 } from '../modules/portfolio/holdingsSync';
 import { publishWalletActivity } from '../core/event-system/notificationEventBridge';
+import { piConfig } from '../modules/portfolio-intelligence/config/piConfig';
+import { recomputeEnqueueService } from '../modules/portfolio-intelligence/services/recomputeEnqueue.service';
+import { createCorrelationId } from '../modules/portfolio-intelligence/utils/correlationId';
 import {
   IWalletEvent,
   WalletEventType,
@@ -238,6 +241,8 @@ async function flushBuffer(key: string): Promise<void> {
       });
 
       // Opportunistic holdings cache update: only when user has exactly 1 wallet (complete data)
+      // Disabled when PI_AGGREGATOR_UPSERT_DISABLED=true (G7 cutover).
+      if (!piConfig.aggregatorUpsertDisabled) {
       try {
         const wallets = await portfolioRepository.findWalletsByUser(userId);
         const normalizedAddr = address.toLowerCase();
@@ -288,6 +293,7 @@ async function flushBuffer(key: string): Promise<void> {
         }
       } catch (holdErr) {
         console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);
+      }
       }
     } else {
       // Case B: single chain → Alchemy
@@ -397,6 +403,12 @@ async function flushBuffer(key: string): Promise<void> {
 
     if (holdingsDelta) {
       emitHoldingsDeltaUpdate(holdingsDelta);
+    }
+
+    if (piConfig.enqueueEnabled || piConfig.workerEnabled) {
+      void recomputeEnqueueService
+        .enqueue(userId, 'webhook', { correlationId: createCorrelationId('wh') })
+        .catch((e) => console.error('[WalletAggregator] PI enqueue failed:', e));
     }
   } catch (err) {
     console.error(`[WalletAggregator] DB write failed for ${key}:`, err);
