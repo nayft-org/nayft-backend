@@ -124,25 +124,20 @@ export function startBinanceTickerIngestion(): () => void {
   let reconnectAttempts = 0;
   const MAX_RECONNECT_DELAY = 60000;
   let fatalCloseDebounce: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped on each deliberate reconnect so stale socket callbacks are ignored. */
+  let connectionGeneration = 0;
 
   /**
-   * Tear down a socket without triggering ws's "closed before established" throw when the
-   * handshake is still in progress (common when symbol set changes and we reconnect quickly).
+   * Tear down a socket. ws aborts in-flight handshakes via terminate() and emits `error` on
+   * the next tick; attach a noop handler after removeAllListeners so Node does not crash.
    */
   function destroySocket(s: WebSocket): void {
-    try {
-      s.removeAllListeners();
-      if (s.readyState === WebSocket.CONNECTING) {
-        s.terminate();
-      } else if (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CLOSING) {
-        s.close();
-      }
-    } catch {
-      try {
-        s.terminate();
-      } catch {
-        /* ignore */
-      }
+    s.removeAllListeners();
+    s.on('error', () => {});
+    if (s.readyState === WebSocket.CONNECTING) {
+      s.terminate();
+    } else if (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CLOSING) {
+      s.close();
     }
   }
 
@@ -171,7 +166,12 @@ export function startBinanceTickerIngestion(): () => void {
   }
 
   function connectWithSymbols(symbolsUpper: string[]): void {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     disconnectAll();
+    const generation = ++connectionGeneration;
     const list = symbolsUpper.map((s) => s.trim().toUpperCase()).filter(Boolean);
     lastConnectedSymbols = list;
     const active = new Set(list);
@@ -190,18 +190,25 @@ export function startBinanceTickerIngestion(): () => void {
       const ws = new WebSocket(url);
       sockets.push(ws);
       ws.on('open', () => {
+        if (generation !== connectionGeneration) return;
         console.log('[BinanceTicker] Connected', url.slice(0, 120) + (url.length > 120 ? '…' : ''));
         reconnectAttempts = 0;
       });
-      ws.on('message', onRawMessage);
+      ws.on('message', (raw) => {
+        if (generation !== connectionGeneration) return;
+        onRawMessage(raw);
+      });
       ws.on('ping', () => {
+        if (generation !== connectionGeneration) return;
         ws.pong();
       });
       ws.on('close', () => {
+        if (generation !== connectionGeneration) return;
         console.log('[BinanceTicker] Socket closed');
         scheduleFatalReconnect();
       });
       ws.on('error', (err: Error) => {
+        if (generation !== connectionGeneration) return;
         console.error('[BinanceTicker] Socket error:', err.message);
       });
     }

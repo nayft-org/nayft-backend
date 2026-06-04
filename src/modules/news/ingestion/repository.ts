@@ -72,11 +72,21 @@ export const ingestionRepository = {
 
       const $set: Record<string, unknown> = { ...contentFields };
       assertNoWorkerFieldsInSet($set);
+      delete $set.metrics;
+      delete $set.sentiment;
+      delete $set.sentimentStatus;
+
       if (hashChanged) {
         $set.sentimentStatus = 'pending';
       }
-      if (!isNew) {
-        delete $set.metrics;
+
+      const $setOnInsert: Record<string, unknown> = {
+        sentiment: 'neutral',
+        metrics: article.metrics,
+      };
+      // Mongo rejects overlapping paths in $set and $setOnInsert even on matched updates
+      if (!('sentimentStatus' in $set)) {
+        $setOnInsert.sentimentStatus = 'pending';
       }
 
       bulkOps.push({
@@ -84,11 +94,7 @@ export const ingestionRepository = {
           filter: { externalId: article.externalId },
           update: {
             $set,
-            $setOnInsert: {
-              sentimentStatus: 'pending',
-              sentiment: 'neutral',
-              metrics: article.metrics,
-            },
+            $setOnInsert,
           },
           upsert: true,
         },
