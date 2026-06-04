@@ -4,6 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { authRepository } from './repository';
 import { SignupDto, LoginDto } from './dto';
 import { IUser } from '../../types';
+import { onboardingService } from '../onboarding/service';
 import { eventService } from '../../core/event-system';
 import { signAccessToken } from '../../middlewares/jwtPayload';
 import { config } from '../../config/env';
@@ -33,7 +34,8 @@ export const authService = {
       username,
     });
 
-    const userObj = user.toObject();
+    const migrated = await onboardingService.ensureCoinOnboardingMigrated(user);
+    const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
 
     const token = signAccessToken({
@@ -66,7 +68,8 @@ export const authService = {
       throw new Error('Invalid email or password');
     }
 
-    const userObj = user.toObject();
+    const migrated = await onboardingService.ensureCoinOnboardingMigrated(user);
+    const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
 
     const token = signAccessToken({
@@ -89,7 +92,7 @@ export const authService = {
     if (!user) {
       throw new Error('User not found');
     }
-    return user;
+    return onboardingService.ensureCoinOnboardingMigrated(user);
   },
 
   /** New JWT after preference update — embeds latest preferredLanguage without DB read per request. */
@@ -144,7 +147,8 @@ export const authService = {
       user = await authRepository.create({ email, passwordHash: sentinelHash, username });
     }
 
-    const userObj = user.toObject();
+    const migrated = await onboardingService.ensureCoinOnboardingMigrated(user);
+    const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
 
     const token = signAccessToken({

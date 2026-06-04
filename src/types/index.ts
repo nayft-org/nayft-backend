@@ -9,6 +9,7 @@ export interface IUser extends Document {
   followingCoins: string[];
   rewardPoints: number;
   preferredLanguage?: string | null;
+  coinOnboardingCompleted?: boolean;
   createdAt: Date;
 }
 

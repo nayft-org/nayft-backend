@@ -38,6 +38,18 @@ export const userRepository = {
     return user;
   },
 
+  setCoinOnboardingCompleted: async (userId: string, completed: boolean): Promise<IUser> => {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { coinOnboardingCompleted: completed } },
+      { new: true }
+    ).select('-passwordHash');
+    if (!user) {
+      throw new Error('User not found');
+    }
+    return user;
+  },
+
   updateFollowingCoins: async (userId: string, coinId: string, add: boolean): Promise<IUser> => {
     const user = await User.findById(userId);
     if (!user) {

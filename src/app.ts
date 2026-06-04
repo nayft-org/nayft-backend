@@ -24,6 +24,7 @@ import chartRoutes from './modules/chart/routes';
 import portfolioRoutes from './modules/portfolio/routes';
 import portfolioIntelligenceRoutes from './modules/portfolio-intelligence/routes';
 import followRoutes from './modules/follow/routes';
+import onboardingRoutes from './modules/onboarding/routes';
 import metricsRoutes from './modules/metrics/routes';
 import notificationsRoutes, {
   notificationPreferencesRouter,
@@ -96,6 +97,7 @@ app.use('/api/charts', chartRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/portfolio/intelligence', portfolioIntelligenceRoutes);
 app.use('/api/follow', followRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/notification-preferences', notificationPreferencesRouter);

@@ -1,5 +1,4 @@
 import { coindeskApi, normalizeArticle, extractTickers } from '../../utils/coindesk';
-import { coinRepository } from '../coin/repository';
 import { NewsArticle } from './models';
 import { eventService } from '../../core/event-system';
 import type { INewsArticle } from './models/NewsArticle';
@@ -9,6 +8,7 @@ import { Reaction } from '../reaction/model';
 import { Comment } from '../comment/model';
 import { NewsBoard } from '../newsboard/model';
 import { followService } from '../follow/service';
+import { resolveFollowSymbolsForTargets } from '../follow/resolveFollowSymbols';
 
 const ALLOWED_NEWS_CATEGORIES = new Set([
   'BTC',
@@ -152,6 +152,14 @@ export const newsService = {
       query['categories.key'] = { $in: allowedCategoryKeys };
     }
 
+    if (userId) {
+      const followCoinIds = await followService.getFollowedCoinIds(userId);
+      const followedSymbols = await resolveFollowSymbolsForTargets(followCoinIds);
+      if (followedSymbols.length > 0) {
+        query['coins.symbol'] = { $nin: followedSymbols };
+      }
+    }
+
     const articles = await NewsArticle.find(query)
       .sort({ publishedAt: -1 })
       .skip(skip)
@@ -189,11 +197,7 @@ export const newsService = {
     const originByNewsId = new Map<string, 'coin' | 'user' | 'both'>();
 
     if (followCoinIds.length > 0) {
-      // Batch query instead of N+1 individual queries
-      const coinDocs = await coinRepository.findByIds(followCoinIds);
-      const symbols = coinDocs
-        .map((coin) => coin?.symbol?.toUpperCase())
-        .filter((symbol): symbol is string => Boolean(symbol));
+      const symbols = await resolveFollowSymbolsForTargets(followCoinIds);
 
       if (symbols.length > 0) {
         const coinQuery: Record<string, unknown> = {

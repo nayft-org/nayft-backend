@@ -108,10 +108,14 @@ export const labeledActiveCoinRepository = {
 
   async findByCoinId(coinId: string): Promise<{
     id: string;
+    symbol?: string;
+    name?: string;
+    internalCoinId?: string;
     image?: string;
     current_price?: number;
     market_cap?: number;
     market_cap_rank?: number;
+    price_change_percentage_24h?: number;
     fully_diluted_valuation?: number;
     total_volume?: number;
     high_24h?: number;
@@ -125,7 +129,7 @@ export const labeledActiveCoinRepository = {
     atl_date?: string;
   } | null> {
     const fields =
-      'id image current_price market_cap market_cap_rank fully_diluted_valuation total_volume high_24h low_24h circulating_supply total_supply max_supply ath ath_date atl atl_date';
+      'id symbol name internalCoinId image current_price market_cap market_cap_rank fully_diluted_valuation total_volume high_24h low_24h circulating_supply total_supply max_supply ath ath_date atl atl_date';
     const actualId = coinId.includes('=') ? coinId.split('=')[1] : coinId;
     const byId = await LabeledActiveCoin.findOne({
       id: actualId,

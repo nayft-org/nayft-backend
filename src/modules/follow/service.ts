@@ -1,6 +1,7 @@
 import { ICoin } from '../../types';
 import { authRepository } from '../auth/repository';
 import { coinRepository } from '../coin/repository';
+import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
 import { userRepository } from '../user/repository';
 import { followRepository } from './repository';
 import { publishNewFollower } from '../../core/event-system/notificationEventBridge';
@@ -15,7 +16,8 @@ const clampPagination = (page?: number, limit?: number): { page: number; limit: 
 
 /**
  * Normalize route/query coin keys the same way clients use `/coins/:coinId`
- * (canonical id, symbol, or internalCoinId). Returns null if no Mongo coin row exists.
+ * (canonical id, symbol, or internalCoinId). Falls back to labeled active coins
+ * (same source as Explore / onboarding picker) when the Coin collection has no row.
  */
 async function lookupStoredCoin(coinKey: string): Promise<ICoin | null> {
   const raw = coinKey.includes('=') ? coinKey.split('=')[1] : coinKey;
@@ -29,7 +31,25 @@ async function lookupStoredCoin(coinKey: string): Promise<ICoin | null> {
   if (!coin) {
     coin = await coinRepository.findByInternalId(trimmed);
   }
-  return coin;
+  if (coin) return coin;
+
+  const labeled = await labeledActiveCoinRepository.findByCoinId(trimmed);
+  if (!labeled) return null;
+
+  coin = await coinRepository.findById(labeled.id);
+  if (!coin && labeled.internalCoinId) {
+    coin = await coinRepository.findByInternalId(labeled.internalCoinId);
+  }
+  if (!coin && labeled.symbol) {
+    coin = await coinRepository.findBySymbol(labeled.symbol);
+  }
+  if (coin) return coin;
+
+  return {
+    coinId: labeled.id,
+    symbol: (labeled.symbol ?? trimmed).toUpperCase(),
+    name: labeled.name ?? labeled.id,
+  } as ICoin;
 }
 
 async function requireStoredCoin(coinKey: string): Promise<ICoin> {
@@ -119,24 +139,55 @@ export const followService = {
 
   getFollowedCoins: async (userId: string) => {
     const coinIds = await followRepository.findTargetIdsByFollower(userId, 'coin');
-    
+
     if (coinIds.length === 0) return [];
-    
-    // Batch fetch coins and follower counts
-    const [coins, followerCountsMap] = await Promise.all([
+
+    const [dbCoins, followerCountsMap] = await Promise.all([
       coinRepository.findByIds(coinIds),
-      followRepository.countByTargets('coin', coinIds)
+      followRepository.countByTargets('coin', coinIds),
     ]);
-    
-    return coins.map((coin) => ({
-      coinId: coin.coinId,
-      symbol: coin.symbol,
-      name: coin.name,
-      rank: coin.rank,
-      price: coin.price,
-      percentChange24h: coin.percentChange24h,
-      followersCount: followerCountsMap.get(coin.coinId) || 0,
-    }));
+
+    const byCoinId = new Map(dbCoins.map((coin) => [coin.coinId, coin]));
+    const results: Array<{
+      coinId: string;
+      symbol: string;
+      name: string;
+      rank: number;
+      price: number;
+      percentChange24h: number;
+      followersCount: number;
+    }> = [];
+
+    for (const targetId of coinIds) {
+      const coin = byCoinId.get(targetId);
+      if (coin) {
+        results.push({
+          coinId: coin.coinId,
+          symbol: coin.symbol,
+          name: coin.name,
+          rank: coin.rank,
+          price: coin.price,
+          percentChange24h: coin.percentChange24h,
+          followersCount: followerCountsMap.get(coin.coinId) || 0,
+        });
+        continue;
+      }
+
+      const labeled = await labeledActiveCoinRepository.findByCoinId(targetId);
+      if (labeled) {
+        results.push({
+          coinId: labeled.id,
+          symbol: labeled.symbol ?? targetId,
+          name: labeled.name ?? labeled.id,
+          rank: labeled.market_cap_rank ?? 0,
+          price: labeled.current_price ?? 0,
+          percentChange24h: labeled.price_change_percentage_24h ?? 0,
+          followersCount: followerCountsMap.get(targetId) || 0,
+        });
+      }
+    }
+
+    return results;
   },
 
   getFollowedUsers: async (userId: string) => {
