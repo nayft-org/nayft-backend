@@ -2,6 +2,7 @@ import { userRepository } from './repository';
 import { followService } from '../follow/service';
 import { isSupportedLanguage } from './supportedLanguages';
 import { authService } from '../auth/service';
+import { accountDeletionService } from './accountDeletion.service';
 
 export const userService = {
   getPreferences: async (userId: string): Promise<{ preferredLanguage: string | null }> => {
@@ -42,6 +43,10 @@ export const userService = {
     }
     const users = await userRepository.searchByUsername(query.trim(), limit);
     return users.map((u: any) => ({ id: u._id, username: u.username }));
+  },
+
+  deleteAccount: async (userId: string) => {
+    return accountDeletionService.deleteAccount(userId);
   },
 };
 

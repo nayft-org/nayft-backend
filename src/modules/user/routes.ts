@@ -8,6 +8,7 @@ router.get('/preferences', authenticate, userController.getPreferences);
 router.patch('/preferences', authenticate, userController.updatePreferences);
 router.get('/search', authenticate, userController.searchUsers);
 router.post('/follow/:coinId', authenticate, userController.toggleFollowCoin);
+router.delete('/me', authenticate, userController.deleteMe);
 
 export default router;
 

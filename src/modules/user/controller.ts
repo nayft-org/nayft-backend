@@ -47,5 +47,16 @@ export const userController = {
       sendError(res, error.message, 400);
     }
   },
+
+  deleteMe: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const result = await userService.deleteAccount(req.userId!);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const message = error?.message ?? 'Failed to delete account';
+      const status = message === 'User not found' ? 404 : 500;
+      sendError(res, message, status);
+    }
+  },
 };
 

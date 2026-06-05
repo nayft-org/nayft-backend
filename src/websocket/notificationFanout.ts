@@ -22,6 +22,18 @@ export function unregisterNotifyClient(ws: WebSocket, userId: string): void {
   if (set.size === 0) clientsByUser.delete(userId);
 }
 
+/** Close all local WS connections for a user (e.g. after account deletion). */
+export function disconnectNotifyClientsForUser(userId: string): void {
+  const set = clientsByUser.get(userId);
+  if (!set) return;
+  for (const ws of set) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close(1000, 'Account deleted');
+    }
+  }
+  clientsByUser.delete(userId);
+}
+
 /** Push to every connected WS for this user (local process). */
 export function broadcastNotifyToLocalClients(userId: string, message: unknown): void {
   const set = clientsByUser.get(userId);

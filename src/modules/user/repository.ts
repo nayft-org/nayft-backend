@@ -50,6 +50,11 @@ export const userRepository = {
     return user;
   },
 
+  deleteById: async (userId: string): Promise<boolean> => {
+    const result = await User.deleteOne({ _id: userId });
+    return result.deletedCount > 0;
+  },
+
   updateFollowingCoins: async (userId: string, coinId: string, add: boolean): Promise<IUser> => {
     const user = await User.findById(userId);
     if (!user) {
