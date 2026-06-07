@@ -2,6 +2,7 @@ import { redis } from '../../../config/redis';
 
 export const RISK_FACTOR_STREAM = 'risk:factor:jobs';
 export const RISK_FACTOR_GROUP = 'risk-factor-workers';
+export const RISK_FACTOR_DLQ = 'risk:factor:dlq';
 
 export type RiskFactorJobPayload = {
   buildId: string;

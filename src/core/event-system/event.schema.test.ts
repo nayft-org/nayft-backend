@@ -1,24 +1,24 @@
 import { emitEventSchema } from './event.schema';
 
 describe('emitEventSchema', () => {
-  it('validates valid payload', () => {
+  it('validates valid payload with bounded metadata', () => {
     const result = emitEventSchema.safeParse({
       featureKey: 'auth',
-      eventType: 'login',
-      metadata: { foo: 'bar' },
+      eventType: 'login_attempt',
+      metadata: { source: 'test' },
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.featureKey).toBe('auth');
-      expect(result.data.eventType).toBe('login');
-      expect(result.data.metadata).toEqual({ foo: 'bar' });
+      expect(result.data.eventType).toBe('login_attempt');
+      expect(result.data.metadata).toEqual({ source: 'test' });
     }
   });
 
   it('rejects empty featureKey', () => {
     const result = emitEventSchema.safeParse({
       featureKey: '',
-      eventType: 'login',
+      eventType: 'login_attempt',
     });
     expect(result.success).toBe(false);
   });
@@ -34,7 +34,7 @@ describe('emitEventSchema', () => {
   it('accepts optional userId', () => {
     const result = emitEventSchema.safeParse({
       featureKey: 'auth',
-      eventType: 'login',
+      eventType: 'login_attempt',
       userId: 'user-123',
     });
     expect(result.success).toBe(true);
@@ -46,11 +46,23 @@ describe('emitEventSchema', () => {
   it('defaults metadata to empty object', () => {
     const result = emitEventSchema.safeParse({
       featureKey: 'auth',
-      eventType: 'login',
+      eventType: 'login_attempt',
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.metadata).toEqual({});
+    }
+  });
+
+  it('strips invalid metadata values', () => {
+    const result = emitEventSchema.safeParse({
+      featureKey: 'auth',
+      eventType: 'login_attempt',
+      metadata: { ok: 'yes', bad: { nested: true } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.metadata).toEqual({ ok: 'yes' });
     }
   });
 });

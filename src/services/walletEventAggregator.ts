@@ -17,12 +17,14 @@ import { zerionApi } from '../utils/zerion';
 import { getExplorerTxUrl } from '../utils/explorerUrls';
 import { getTransactionCount, buildEventSummaries } from '../utils/eventSummaryBuilder';
 import { portfolioRepository } from '../modules/portfolio/repository';
+import { normalizeEnrichedData } from '../modules/portfolio/normalizers/walletEventNormalizer';
 import {
   buildMergedHoldingsForUser,
   getHoldingsBroadcastAddressesForUser,
 } from '../modules/portfolio/holdingsSync';
 import { publishWalletActivity } from '../core/event-system/notificationEventBridge';
 import { piConfig } from '../modules/portfolio-intelligence/config/piConfig';
+import { getRuntimeSwitches } from '../core/runtime-config/runtimeConfig.service';
 import { recomputeEnqueueService } from '../modules/portfolio-intelligence/services/recomputeEnqueue.service';
 import { createCorrelationId } from '../modules/portfolio-intelligence/utils/correlationId';
 import {
@@ -221,8 +223,9 @@ async function flushBuffer(key: string): Promise<void> {
   let enrichedData: Record<string, unknown> | null = null;
   let eventType: WalletEventType = events[0].type;
   let holdingsDelta: PortfolioHoldingsDelta | null = null;
+  const switches = await getRuntimeSwitches();
   try {
-    if (chainsWithActivity.size > 1) {
+    if (chainsWithActivity.size > 1 && switches.third_party_zerion_enabled) {
       // Case A: same wallet across multiple chains → Zerion
       eventType = 'multi_chain_activity';
       console.log('[WalletAggregator] Enrichment start', {
@@ -295,7 +298,7 @@ async function flushBuffer(key: string): Promise<void> {
         console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);
       }
       }
-    } else {
+    } else if (switches.third_party_alchemy_enabled) {
       // Case B: single chain → Alchemy
       console.log('[WalletAggregator] Enrichment start', {
         source: 'alchemy',
@@ -332,7 +335,7 @@ async function flushBuffer(key: string): Promise<void> {
 
     // Fetch tx status via eth_getTransactionReceipt and build explorer URL
     const txHash = primaryActivity.txHash?.trim();
-    if (txHash) {
+    if (txHash && switches.third_party_alchemy_enabled) {
       console.log('[WalletAggregator] Fetching tx receipt', {
         chain,
         address: shortAddress(address),
@@ -362,7 +365,7 @@ async function flushBuffer(key: string): Promise<void> {
       rawEventCount:     events.length,
       transactionCount,
       eventSummaries,
-      enrichedData,
+      enrichedData: normalizeEnrichedData(enrichedData),
       activity:          primaryActivity,
     });
     console.log('[WalletAggregator] Event saved', {

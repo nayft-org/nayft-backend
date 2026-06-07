@@ -25,7 +25,7 @@ async function publish(ev: NotificationDomainEvent): Promise<void> {
 
 /** Map analytics system_events into notification stream (subset). */
 export async function bridgeSystemEventToNotificationStream(payload: EmitEventPayload): Promise<void> {
-  const { featureKey, eventType, userId, metadata = {} } = payload;
+  const { featureKey, eventType, userId } = payload;
   if (!userId) return;
 
   const key = `${featureKey}:${eventType}`;
@@ -40,7 +40,6 @@ export async function bridgeSystemEventToNotificationStream(payload: EmitEventPa
   await publish(
     baseEnvelope(eventName, 'system_events', {
       userId,
-      metadata,
     })
   );
 }

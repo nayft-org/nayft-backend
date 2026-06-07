@@ -142,4 +142,17 @@ export const config = {
   exchangeSchedulerTickMs: Math.max(5_000, parseInt(process.env.EXCHANGE_SCHEDULER_TICK_MS || '20000', 10)),
   /** Max exchange connections to dequeue per tick (avoids long ticks). */
   exchangePollBatchSize: Math.max(1, parseInt(process.env.EXCHANGE_POLL_BATCH_SIZE || '8', 10)),
+  /** API key for POST /api/news/store-news ingestion */
+  newsIngestApiKey: (process.env.NEWS_INGEST_API_KEY || '').trim(),
 };
+
+const DEFAULT_JWT = 'super_secret_key_change_later';
+if (config.nodeEnv === 'production' && config.jwtSecret === DEFAULT_JWT) {
+  throw new Error('JWT_SECRET must be set in production');
+}
+if (config.nodeEnv === 'production' && !process.env.ADMIN_API_KEY?.trim()) {
+  console.warn('[Config] ADMIN_API_KEY is not set — admin routes will return 501');
+}
+if (config.nodeEnv === 'production' && config.frontendUrls.length === 1 && config.frontendUrls[0] === '*') {
+  console.warn('[Config] FRONTEND_URL=* in production — restrict CORS origins for compliance');
+}

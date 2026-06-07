@@ -7,6 +7,7 @@ export interface ISystemEvent extends Document {
   metadata: Record<string, unknown>;
   timestamp: Date;
   invalidFeature?: boolean;
+  complianceMigrationVersion?: number;
 }
 
 const systemEventSchema = new Schema<ISystemEvent>(
@@ -37,6 +38,10 @@ const systemEventSchema = new Schema<ISystemEvent>(
     invalidFeature: {
       type: Boolean,
       default: false,
+    },
+    complianceMigrationVersion: {
+      type: Number,
+      index: true,
     },
   },
   {

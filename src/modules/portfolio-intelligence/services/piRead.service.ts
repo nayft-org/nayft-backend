@@ -6,6 +6,8 @@ import type { PortfolioAnalyticsPayloadV2 } from '../contracts/piEngineContracts
 import { piRepository } from '../repository/piRepository';
 import { PortfolioAnalyticsSnapshot } from '../models/PortfolioAnalyticsSnapshot';
 import { piConfig } from '../config/piConfig';
+import { getRuntimeSwitches } from '../../../core/runtime-config/runtimeConfig.service';
+import { userRepository } from '../../user/repository';
 
 const EMPTY_METRICS: AnalyticsShellPayload = { metrics: {}, insights: [] };
 
@@ -32,6 +34,35 @@ export const piReadService = {
   },
 
   async getContext(userId: string): Promise<PortfolioContextDto> {
+    const switches = await getRuntimeSwitches();
+    if (switches.personalization_globally_disabled) {
+      return {
+        schemaVersion: PI_CONTEXT_SCHEMA_VERSION,
+        userId,
+        heldSymbols: [],
+        heldCoinIds: [],
+        weightBySymbol: {},
+        ingestRevision: 0,
+        analyticsRevision: 0,
+        stale: false,
+        staleMapping: false,
+      };
+    }
+    const userEnabled = await userRepository.getPersonalizationEnabled(userId);
+    if (!userEnabled) {
+      return {
+        schemaVersion: PI_CONTEXT_SCHEMA_VERSION,
+        userId,
+        heldSymbols: [],
+        heldCoinIds: [],
+        weightBySymbol: {},
+        ingestRevision: 0,
+        analyticsRevision: 0,
+        stale: false,
+        staleMapping: false,
+      };
+    }
+
     const v2Key = `feed:context:${userId}:v2`;
     const cachedV2 = await cacheHelpers.get<FeedContextV2>(v2Key);
     if (cachedV2) return cachedV2;

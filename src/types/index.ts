@@ -10,6 +10,8 @@ export interface IUser extends Document {
   rewardPoints: number;
   preferredLanguage?: string | null;
   coinOnboardingCompleted?: boolean;
+  personalizationEnabled?: boolean;
+  analyticsConsent?: boolean;
   createdAt: Date;
 }
 

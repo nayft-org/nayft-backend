@@ -5,6 +5,9 @@ import { piRedisKeys } from '../cache/piRedisKeys';
 import type { PiRecomputeJob, PiTrigger } from '../contracts/piContracts';
 import { piMetrics } from '../../../observability/piMetrics';
 import { createCorrelationId } from '../utils/correlationId';
+import { getRuntimeSwitches } from '../../../core/runtime-config/runtimeConfig.service';
+import { userRepository } from '../../user/repository';
+import { incrementComplianceMetric } from '../../../observability/complianceMetrics';
 
 async function isEnqueuePaused(): Promise<boolean> {
   if (!piConfig.enqueueEnabled && !piConfig.workerEnabled) return true;
@@ -29,6 +32,16 @@ export const recomputeEnqueueService = {
     options?: { correlationId?: string; bypassDebounce?: boolean; highPriority?: boolean }
   ): Promise<boolean> {
     if (!piConfig.enabled && !piConfig.workerEnabled) return false;
+    const switches = await getRuntimeSwitches();
+    if (!switches.pi_recompute_enqueue_enabled || switches.personalization_globally_disabled) {
+      incrementComplianceMetric('personalizationDisabledTotal');
+      return false;
+    }
+    const userEnabled = await userRepository.getPersonalizationEnabled(userId);
+    if (!userEnabled) {
+      incrementComplianceMetric('personalizationDisabledTotal');
+      return false;
+    }
     if (await isEnqueuePaused()) return false;
 
     const correlationId = options?.correlationId ?? createCorrelationId();

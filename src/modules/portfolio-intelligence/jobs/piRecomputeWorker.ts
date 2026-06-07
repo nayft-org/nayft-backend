@@ -12,6 +12,9 @@ import {
 } from './piRecomputeQueue.service';
 import { piRecomputeService } from '../services/piRecompute.service';
 import { connectDatabase } from '../../../config/database';
+import { getRuntimeSwitches } from '../../../core/runtime-config/runtimeConfig.service';
+import { userRepository } from '../../user/repository';
+import { incrementComplianceMetric } from '../../../observability/complianceMetrics';
 
 const CONSUMER = `pi-worker-${hostname()}-${process.pid}`;
 let lastAutoclaimAt = 0;
@@ -66,6 +69,25 @@ export async function runPiRecomputeWorker(): Promise<void> {
       } catch {
         await moveToDlq(raw, 'invalid_json');
         await ackPiJob(stream, id);
+        continue;
+      }
+
+      if (!job.userId || !job.jobSchemaVersion) {
+        await moveToDlq(raw, 'invalid_schema');
+        await ackPiJob(stream, id);
+        continue;
+      }
+
+      const switches = await getRuntimeSwitches();
+      if (!switches.pi_recompute_enqueue_enabled || switches.personalization_globally_disabled) {
+        await ackPiJob(stream, id);
+        incrementComplianceMetric('personalizationDisabledTotal');
+        continue;
+      }
+      const userEnabled = await userRepository.getPersonalizationEnabled(job.userId);
+      if (!userEnabled) {
+        await ackPiJob(stream, id);
+        incrementComplianceMetric('personalizationDisabledTotal');
         continue;
       }
 

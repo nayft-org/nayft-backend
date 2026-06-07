@@ -15,15 +15,15 @@ export const userController = {
 
   updatePreferences: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { preferredLanguage } = req.body as { preferredLanguage?: string };
-      if (typeof preferredLanguage !== 'string' || preferredLanguage.trim() === '') {
-        sendError(res, 'preferredLanguage is required', 400);
+      const body = req.body as { preferredLanguage?: string; personalizationEnabled?: boolean };
+      if (body.preferredLanguage === undefined && body.personalizationEnabled === undefined) {
+        sendError(res, 'No preferences to update', 400);
         return;
       }
-      const data = await userService.updatePreferences(req.userId!, preferredLanguage.trim());
+      const data = await userService.updatePreferences(req.userId!, body);
       sendSuccess(res, data);
-    } catch (error: any) {
-      sendError(res, error.message, 400);
+    } catch (error: unknown) {
+      sendError(res, error instanceof Error ? error.message : 'Update failed', 400);
     }
   },
 

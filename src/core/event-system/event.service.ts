@@ -1,6 +1,8 @@
 import { SystemEvent } from './event.model';
 import type { EmitEventPayload } from './event.types';
 import { featureExists } from '../feature-system/featureValidator';
+import { validateServerEvent } from './eventValidation.service';
+import { getRuntimeSwitches } from '../runtime-config/runtimeConfig.service';
 
 export const eventService = {
   /** Raw persist to MongoDB. Used by emitEvent and queue worker. */
@@ -8,7 +10,21 @@ export const eventService = {
     payload: EmitEventPayload,
     invalidFeature = false
   ): Promise<void> {
-    const { featureKey, eventType, userId, metadata = {} } = payload;
+    const switches = await getRuntimeSwitches();
+    const validated = validateServerEvent(
+      {
+        featureKey: payload.featureKey,
+        eventType: payload.eventType,
+        userId: payload.userId,
+        metadata: payload.metadata || {},
+      },
+      switches.events_schema_enforcement
+    );
+    if (!validated.accept) {
+      console.warn('[EventSystem] Server event rejected:', validated.reason, payload);
+      return;
+    }
+    const { featureKey, eventType, userId, metadata = {} } = validated.payload;
     await SystemEvent.create({
       featureKey,
       eventType,
@@ -18,13 +34,15 @@ export const eventService = {
       invalidFeature,
     });
     if (!invalidFeature) {
-      const { bridgeSystemEventToNotificationStream } = await import('./notificationEventBridge');
-      void bridgeSystemEventToNotificationStream({
-        featureKey,
-        eventType,
-        userId,
-        metadata,
-      }).catch(() => {});
+      if (switches.notification_bridge_enabled) {
+        const { bridgeSystemEventToNotificationStream } = await import('./notificationEventBridge');
+        void bridgeSystemEventToNotificationStream({
+          featureKey,
+          eventType,
+          userId,
+          metadata,
+        }).catch(() => {});
+      }
     }
   },
 

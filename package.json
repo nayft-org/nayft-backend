@@ -28,7 +28,17 @@
     "script:pi-replay-user": "ts-node --transpile-only scripts/pi-replay-user.ts",
     "pi:replay:certify": "ts-node --transpile-only scripts/pi-replay-certify.ts",
     "script:rrs-build": "ts-node --transpile-only scripts/run-rrs-build.ts",
-    "script:sync-kline-top500": "ts-node --transpile-only scripts/sync-kline-top500.ts"
+    "script:sync-kline-top500": "ts-node --transpile-only scripts/sync-kline-top500.ts",
+    "script:schema-inventory": "ts-node --transpile-only scripts/compliance/schema-inventory.ts",
+    "script:migrate-system-events": "ts-node --transpile-only scripts/compliance/migrate-system-events.ts",
+    "script:migrate-wallet-enriched-data": "ts-node --transpile-only scripts/compliance/migrate-wallet-enriched-data.ts",
+    "script:ensure-events-ttl": "ts-node --transpile-only scripts/compliance/ensure-events-ttl.ts",
+    "script:replay-dlq": "ts-node --transpile-only scripts/compliance/replay-dlq.ts",
+    "script:check-erg": "ts-node --transpile-only scripts/compliance/check-erg.ts",
+    "script:lint-event-registry": "ts-node --transpile-only scripts/compliance/lint-event-registry.ts",
+    "script:synth-auth-login": "ts-node --transpile-only scripts/compliance/synthetic-auth-login.ts",
+    "script:synth-event-ingest": "ts-node --transpile-only scripts/compliance/synthetic-event-ingest.ts",
+    "script:synth-ws-v2": "ts-node --transpile-only scripts/compliance/synthetic-ws-v2.ts"
   },
   "keywords": [
     "crypto",

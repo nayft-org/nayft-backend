@@ -4,10 +4,15 @@ import { eventController } from '../event-system/event.controller';
 import { planController } from '../plan.controller';
 import { adminAuth } from '../../middlewares/adminAuth';
 import { notificationsAdminController } from '../../modules/notifications/admin.controller';
+import { runtimeConfigController } from '../runtime-config/runtimeConfig.controller';
 
 const router = Router();
 
 router.use(adminAuth);
+
+// Runtime kill switches
+router.get('/runtime-config', runtimeConfigController.get);
+router.patch('/runtime-config', runtimeConfigController.patch);
 
 // Features API
 router.get('/features', featureController.getAll);

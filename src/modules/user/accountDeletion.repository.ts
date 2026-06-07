@@ -20,6 +20,7 @@ import { UserNotificationChannelModel } from '../notifications/models/Notificati
 import { NotificationDeliveryLogModel } from '../notifications/models/NotificationDeliveryLog';
 import { NotificationBatchModel } from '../notifications/models/NotificationBatch';
 import { DeviceSessionModel } from '../notifications/models/DeviceSession';
+import { SystemEvent } from '../../core/event-system/event.model';
 import { User } from './model';
 
 function toObjectId(userId: string): mongoose.Types.ObjectId {
@@ -57,6 +58,7 @@ export const accountDeletionRepository = {
       NotificationDeliveryLogModel.deleteMany({ userId: userOid }),
       NotificationBatchModel.deleteMany({ userId: userOid }),
       DeviceSessionModel.deleteMany({ userId: userOid }),
+      SystemEvent.deleteMany({ userId }),
     ]);
   },
 

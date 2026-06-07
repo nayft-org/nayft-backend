@@ -58,6 +58,9 @@ const corsOptions = {
     'Accept-Language',
     'X-Portfolio-Session-Mode',
     'X-Portfolio-Trigger-Reason',
+    'X-Nayft-App-Version',
+    'X-Nayft-WS-Protocol',
+    'X-Nayft-Schema-Version',
   ],
 };
 

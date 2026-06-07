@@ -5,21 +5,33 @@ import { authService } from '../auth/service';
 import { accountDeletionService } from './accountDeletion.service';
 
 export const userService = {
-  getPreferences: async (userId: string): Promise<{ preferredLanguage: string | null }> => {
+  getPreferences: async (userId: string): Promise<{ preferredLanguage: string | null; personalizationEnabled: boolean }> => {
     const preferredLanguage = await userRepository.getPreferredLanguage(userId);
-    return { preferredLanguage };
+    const personalizationEnabled = await userRepository.getPersonalizationEnabled(userId);
+    return { preferredLanguage, personalizationEnabled };
   },
 
   updatePreferences: async (
     userId: string,
-    preferredLanguage: string
-  ): Promise<{ preferredLanguage: string; token: string }> => {
-    if (!isSupportedLanguage(preferredLanguage)) {
-      throw new Error('Unsupported language');
+    patch: { preferredLanguage?: string; personalizationEnabled?: boolean }
+  ): Promise<{ preferredLanguage?: string; personalizationEnabled?: boolean; token?: string }> => {
+    const result: { preferredLanguage?: string; personalizationEnabled?: boolean; token?: string } = {};
+
+    if (typeof patch.preferredLanguage === 'string' && patch.preferredLanguage.trim()) {
+      if (!isSupportedLanguage(patch.preferredLanguage.trim())) {
+        throw new Error('Unsupported language');
+      }
+      await userRepository.setPreferredLanguage(userId, patch.preferredLanguage.trim());
+      result.preferredLanguage = patch.preferredLanguage.trim();
+      result.token = await authService.issueAccessTokenForUser(userId);
     }
-    await userRepository.setPreferredLanguage(userId, preferredLanguage);
-    const token = await authService.issueAccessTokenForUser(userId);
-    return { preferredLanguage, token };
+
+    if (typeof patch.personalizationEnabled === 'boolean') {
+      await userRepository.setPersonalizationEnabled(userId, patch.personalizationEnabled);
+      result.personalizationEnabled = patch.personalizationEnabled;
+    }
+
+    return result;
   },
 
   toggleFollowCoin: async (userId: string, coinId: string) => {

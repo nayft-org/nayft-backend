@@ -198,7 +198,10 @@ export const portfolioService = {
       featureKey: 'portfolio_tracking',
       eventType: 'wallet_added',
       userId,
-      metadata: { address: normalizedAddress, chains: normalizedChains.length },
+      metadata: {
+        walletId: (wallet._id as { toString(): string }).toString(),
+        chains: normalizedChains.length,
+      },
     }).catch(() => {});
 
     console.log('[PortfolioService] addWallet success', {

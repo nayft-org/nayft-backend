@@ -10,6 +10,8 @@ import {
 import { IWalletEvent } from '../modules/portfolio/models/WalletEvent';
 import { streamMetrics, recordOutbound, recordInbound } from '../observability/streamMetrics';
 import { verifyAccessToken } from '../middlewares/jwtPayload';
+import { incrementComplianceMetric } from '../observability/complianceMetrics';
+import { WalletAddress } from '../modules/portfolio/models/WalletAddress';
 import {
   registerNotifyClient,
   unregisterNotifyClient,
@@ -22,6 +24,13 @@ import {
   markPortfolioFanoutClient,
   setPortfolioFanoutUserId,
 } from './portfolioFanout';
+import {
+  allowWsV1QueryToken,
+  getWsRuntimeSwitches,
+  recordWsProtocolVersion,
+  rejectUnauthenticatedSubscription,
+} from './authGate';
+import { toWalletEventWsDto, type WalletEventWsDto } from './walletEventWsDto';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -45,7 +54,7 @@ interface PortfolioEnvelope {
 
 export interface WalletEventMessage extends PortfolioEnvelope {
   type: 'wallet_event';
-  event: IWalletEvent;
+  event: WalletEventWsDto;
 }
 
 export interface WalletStatusMessage extends PortfolioEnvelope {
@@ -301,7 +310,7 @@ function broadcastPortfolioRealtime(message: PortfolioRealtimeMessage): void {
     const outbound: WalletEventMessage = {
       ...nextPortfolioEnvelope(),
       type: 'wallet_event',
-      event: message.event,
+      event: toWalletEventWsDto(message.event),
     };
     broadcastPortfolioMessage(outbound, [message.event.address.toLowerCase()]);
     return;
@@ -395,19 +404,26 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url?.split('?')[0];
     if (pathname === WS_PATH) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        try {
-          const host = request.headers.host || 'localhost';
-          const u = new URL(request.url || '/', `http://${host}`);
-          const tok = u.searchParams.get('token');
-          const dec = verifyAccessToken(tok);
-          if (dec?.userId) {
-            pendingNotifyUserId.set(ws, dec.userId);
+      void allowWsV1QueryToken().then((v1Allowed) => {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          if (v1Allowed) {
+            try {
+              const host = request.headers.host || 'localhost';
+              const u = new URL(request.url || '/', `http://${host}`);
+              const tok = u.searchParams.get('token');
+              const dec = verifyAccessToken(tok);
+              if (dec?.userId) {
+                pendingNotifyUserId.set(ws, dec.userId);
+                recordWsProtocolVersion(1);
+              }
+            } catch {
+              /* ignore */
+            }
           }
-        } catch {
-          /* ignore */
-        }
-        wss.emit('connection', ws, request);
+          wss.emit('connection', ws, request);
+        });
+      }).catch(() => {
+        socket.destroy();
       });
     } else {
       socket.destroy();
@@ -435,7 +451,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       clearTimeout(idleTimer);
     };
 
-    const bindNotifyUser = (userId: string): void => {
+    const bindNotifyUser = (userId: string, protocol: 1 | 2 = 2): void => {
       const prev = wsNotifyUserId.get(ws);
       if (prev && prev !== userId) {
         unregisterNotifyClient(ws, prev);
@@ -443,6 +459,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       wsNotifyUserId.set(ws, userId);
       setPortfolioFanoutUserId(ws, userId);
       registerNotifyClient(ws, userId);
+      recordWsProtocolVersion(protocol);
       clearIdle();
       sendJson(ws, {
         channel: 'notifications',
@@ -454,13 +471,33 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
 
     const pending = pendingNotifyUserId.get(ws);
     if (pending) {
-      bindNotifyUser(pending);
+      bindNotifyUser(pending, 1);
       pendingNotifyUserId.delete(ws);
     }
+
+    void getWsRuntimeSwitches().then((switches) => {
+      if (!switches.ws_protocol_v2_required) return;
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        if (!wsNotifyUserId.get(ws)) {
+          rejectUnauthenticatedSubscription(ws, 'ws_auth required');
+        }
+      }, 5000);
+    }).catch(() => {});
 
     ws.on('message', (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+
+        if (msg.type === 'ws_auth') {
+          const token = typeof msg.token === 'string' ? msg.token : undefined;
+          const dec = verifyAccessToken(token);
+          if (dec?.userId) {
+            bindNotifyUser(dec.userId, 2);
+          } else {
+            incrementComplianceMetric('wsAuthFailuresTotal');
+          }
+        }
 
         if (msg.type === 'notification_subscribe') {
           const token =
@@ -473,7 +510,9 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
                 : undefined;
           const dec = verifyAccessToken(token);
           if (dec?.userId) {
-            bindNotifyUser(dec.userId);
+            bindNotifyUser(dec.userId, 2);
+          } else if (!wsNotifyUserId.get(ws)) {
+            rejectUnauthenticatedSubscription(ws, 'authentication required');
           }
         }
 
@@ -487,18 +526,36 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
         }
 
         if (msg.type === 'portfolio_subscribe' && Array.isArray(msg.addresses)) {
+          const userId = wsNotifyUserId.get(ws);
+          if (!userId) {
+            rejectUnauthenticatedSubscription(ws, 'portfolio requires ws_auth');
+            return;
+          }
+
           const set = getClientAddresses(ws);
           set.clear();
-          for (const a of msg.addresses) {
-            if (typeof a === 'string' && a) set.add(a.toLowerCase());
-          }
-          if (set.size > 0) {
-            clearIdle();
-            markPortfolioFanoutClient(ws as WebSocket & { portfolioFanoutSubscribed?: boolean });
-            const subscribed = [...set.values()];
-            sendPortfolioLifecycleMessage(ws, 'portfolio_subscribed', subscribed);
-            sendPortfolioLifecycleMessage(ws, 'portfolio_sync_ready', subscribed);
-          }
+          const requested = msg.addresses
+            .filter((a): a is string => typeof a === 'string' && a.length > 0)
+            .map((a) => a.toLowerCase());
+
+          void (async () => {
+            const owned = await WalletAddress.find({ userId })
+              .select('address')
+              .lean();
+            const ownedSet = new Set(owned.map((w) => String(w.address).toLowerCase()));
+            const allowed = requested.filter((a) => ownedSet.has(a));
+            if (allowed.length < requested.length) {
+              incrementComplianceMetric('portfolioSubscribeAuthzDeniedTotal');
+            }
+            for (const a of allowed) set.add(a);
+            if (set.size > 0) {
+              clearIdle();
+              markPortfolioFanoutClient(ws as WebSocket & { portfolioFanoutSubscribed?: boolean });
+              const subscribed = [...set.values()];
+              sendPortfolioLifecycleMessage(ws, 'portfolio_subscribed', subscribed);
+              sendPortfolioLifecycleMessage(ws, 'portfolio_sync_ready', subscribed);
+            }
+          })();
         }
 
         if (msg.type === 'portfolio_unsubscribe') {

@@ -6,6 +6,7 @@ import { getTranslationMetricsSnapshot } from '../../i18n/translationMetrics';
 import { getStreamMetricsSnapshot } from '../../observability/streamMetrics';
 import { notifMetrics } from '../../observability/notifMetrics';
 import { piMetrics } from '../../observability/piMetrics';
+import { getComplianceMetricsSnapshot } from '../../observability/complianceMetrics';
 
 export const metricsController = {
   getMetrics: async (_req: Request, res: Response): Promise<void> => {
@@ -80,6 +81,7 @@ export const metricsController = {
           stream,
           translation,
           notifications: { ...notifMetrics },
+          compliance: getComplianceMetricsSnapshot(),
           portfolioIntelligence: piMetrics.getSnapshot(),
           performance: {
             targets: {

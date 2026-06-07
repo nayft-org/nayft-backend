@@ -8,6 +8,7 @@ import { startBinanceTickerIngestion } from './services/binanceTickerIngestion';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
+import { bootstrapComplianceFeatures } from './core/compliance/bootstrapComplianceFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
 import { runNotificationStreamWorker } from './workers/notificationStreamWorker';
@@ -21,6 +22,15 @@ import { bootstrapPiFeatures } from './modules/portfolio-intelligence/bootstrapP
 import { runPiRecomputeWorker } from './modules/portfolio-intelligence/jobs/piRecomputeWorker';
 import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/categoryCatalogSync';
 import { piConfig } from './modules/portfolio-intelligence/config/piConfig';
+import { riskConfig } from './modules/risk/config/riskConfig';
+import { runRiskFactorWorker } from './modules/risk/jobs/riskFactorWorker';
+import {
+  computeRolloutHealthScore,
+} from './observability/rolloutHealthScore';
+import {
+  setRolloutHealthScore,
+  getComplianceMetricsSnapshot,
+} from './observability/complianceMetrics';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -32,11 +42,25 @@ const startServer = async (): Promise<void> => {
     // Connect to database
     await connectDatabase();
 
+    if (process.env.ENSURE_EVENTS_TTL_ON_BOOT === 'true') {
+      import('./core/event-system/ensureEventsTtl')
+        .then((m) => m.ensureEventsTtlIndex())
+        .catch((err) => console.error('[EventsTTL] boot ensure failed', err));
+    }
+
+    setInterval(() => {
+      setRolloutHealthScore(computeRolloutHealthScore());
+      if (config.nodeEnv !== 'production' || Math.random() < config.perfLogSampleRate) {
+        console.log('[ComplianceSnapshot]', JSON.stringify(getComplianceMetricsSnapshot()));
+      }
+    }, 60_000);
+
     await refreshCoinDictionary().catch((err) => console.error('[CoinDictionary] initial load failed', err));
     startCoinDictionaryRefresh();
 
     // Auto-register features from modules
     await bootstrapFeatures();
+    await bootstrapComplianceFeatures();
     await bootstrapPiFeatures();
 
     // Seed plans if empty
@@ -53,6 +77,11 @@ const startServer = async (): Promise<void> => {
     if (piConfig.workerEnabled) {
       setImmediate(() =>
         runPiRecomputeWorker().catch((err) => console.error('[PI Worker] Fatal:', err))
+      );
+    }
+    if (riskConfig.buildEnabled || riskConfig.shadowMode) {
+      setImmediate(() =>
+        runRiskFactorWorker().catch((err) => console.error('[RiskFactorWorker] Fatal:', err))
       );
     }
     cron.schedule('0 4 * * *', () => {

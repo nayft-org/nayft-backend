@@ -19,7 +19,11 @@ export async function runPiReconciliation(sampleSize = 100): Promise<void> {
         featureKey: 'portfolio_intelligence_foundation',
         eventType: 'portfolio_intelligence.reconciliation_drift',
         userId,
-        metadata: report as unknown as Record<string, unknown>,
+        metadata: {
+          valueDrift: report.valueDrift,
+          positionCountDrift: report.positionCountDrift,
+          userId,
+        },
       });
     }
     await piRepository.findPositionsByUser(userId);

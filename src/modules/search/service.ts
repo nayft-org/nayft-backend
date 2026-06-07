@@ -103,7 +103,8 @@ function buildCacheKey(
   userId?: string
 ): string {
   const userKey = userId || 'guest';
-  return `search:${SEARCH_CACHE_VERSION}:${query}|${segments.join(',')}|${limit}|${userKey}`;
+  const qHash = queryHash(query);
+  return `search:${SEARCH_CACHE_VERSION}:${qHash}|${segments.join(',')}|${limit}|${userKey}`;
 }
 
 function queryHash(q: string): string {

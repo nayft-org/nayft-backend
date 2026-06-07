@@ -6,6 +6,10 @@ import { eventService } from './event.service';
 import { featureExists } from '../feature-system/featureValidator';
 import { redisEventQueue, EVENT_QUEUE_KEY } from './redisEventQueue';
 import type { EmitEventPayload } from './event.types';
+import { validateIncomingClientEvent } from './eventValidation.service';
+import { getRuntimeSwitches } from '../runtime-config/runtimeConfig.service';
+import { incrementComplianceMetric } from '../../observability/complianceMetrics';
+import { emitEventSchema } from './event.schema';
 
 function isConnectionClosedError(err: unknown): boolean {
   return (
@@ -52,11 +56,38 @@ async function processOne(): Promise<boolean> {
   const [, raw] = result;
   let payload: EmitEventPayload;
   try {
-    payload = JSON.parse(raw) as EmitEventPayload;
+    const parsed = JSON.parse(raw) as unknown;
+    const schemaResult = emitEventSchema.safeParse(parsed);
+    if (!schemaResult.success) {
+      incrementComplianceMetric('invalidJsonQueueTotal');
+      await redisEventQueue.pushToDlq({ raw, reason: 'invalid_schema' } as unknown as EmitEventPayload);
+      return true;
+    }
+    payload = schemaResult.data;
   } catch {
-    console.error('[EventSystem] Invalid JSON in queue, skipping');
+    incrementComplianceMetric('invalidJsonQueueTotal');
+    await redisEventQueue.pushToDlq({ raw } as unknown as EmitEventPayload);
+    console.error('[EventSystem] Invalid JSON in queue, moved to DLQ');
     return true;
   }
+
+  const switches = await getRuntimeSwitches();
+  const validated = validateIncomingClientEvent(
+    {
+      featureKey: payload.featureKey,
+      eventType: payload.eventType,
+      userId: payload.userId,
+      metadata: payload.metadata || {},
+    },
+    switches.events_schema_enforcement
+  );
+
+  if (!validated.accept) {
+    incrementComplianceMetric('rejectedEventsTotal');
+    await redisEventQueue.pushToDlq(payload);
+    return true;
+  }
+  payload = validated.payload;
 
   const { featureKey } = payload;
   const exists = await featureExists(featureKey);
@@ -68,9 +99,11 @@ async function processOne(): Promise<boolean> {
   const toPersist = { ...payload, metadata: payload.metadata || {} };
   try {
     await persistWithRetry(toPersist, invalidFeature);
+    incrementComplianceMetric('eventsIngestAcceptedTotal');
   } catch {
     console.error(`[EventSystem] Failed to persist event after ${MAX_RETRIES} retries:`, payload);
     await redisEventQueue.pushToDlq(payload);
+    incrementComplianceMetric('dlqPushedTotal');
     console.error('[EventSystem] Moved to DLQ after retries');
   }
   return true;
@@ -79,19 +112,12 @@ async function processOne(): Promise<boolean> {
 export async function runEventWorker(): Promise<void> {
   while (!isRedisShutdownRequested()) {
     try {
+      await ensureBlockingRedisConnected();
       const processed = await processOne();
-      if (!processed) {
-        await new Promise((r) => setTimeout(r, 100));
-      }
+      if (!processed) continue;
     } catch (err) {
-      if (isRedisShutdownRequested()) break;
-      if (isConnectionClosedError(err)) {
-        console.warn('[EventSystem] Redis connection closed, reconnecting…');
-        await ensureBlockingRedisConnected();
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
-      }
-      console.error('[EventSystem] Worker error:', err);
+      if (isConnectionClosedError(err)) break;
+      console.error('[EventWorker] Error:', err);
       await new Promise((r) => setTimeout(r, 1000));
     }
   }

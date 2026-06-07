@@ -15,6 +15,7 @@ import {
   normalizeForTranslation,
 } from './translationKeys';
 import { recordTranslationEvent, recordProviderLatency } from './translationMetrics';
+import { getRuntimeSwitches } from '../core/runtime-config/runtimeConfig.service';
 import {
   TRANSLATION_MAX_CHARS_TOTAL,
   TRANSLATION_MAX_STRINGS_PER_REQUEST,
@@ -197,6 +198,11 @@ export async function translateBatch(
   ttlSeconds: number
 ): Promise<string[]> {
   if (lang === 'en' || inputs.length === 0) {
+    return inputs.map((s) => (typeof s === 'string' ? s : String(s)));
+  }
+
+  const switches = await getRuntimeSwitches();
+  if (!switches.third_party_translate_enabled) {
     return inputs.map((s) => (typeof s === 'string' ? s : String(s)));
   }
 

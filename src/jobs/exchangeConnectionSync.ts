@@ -6,6 +6,7 @@ import { decryptExchangeCredentials } from '../modules/portfolio/exchangeCrypto'
 import { IExchangeConnection } from '../modules/portfolio/models/ExchangeConnection';
 import { normalizeCoindcxTradeRow } from '../modules/portfolio/coindcxTradeNormalizer';
 import { PORTFOLIO_SCHEMA_VERSION } from '../modules/portfolio/schemaVersion';
+import { normalizeEnrichedData } from '../modules/portfolio/normalizers/walletEventNormalizer';
 import { publishWalletEventToSubscribers } from '../services/walletEventAggregator';
 
 const CHAIN = 'coindcx';
@@ -63,7 +64,7 @@ async function persistCoindcxTrade(
       rawEventCount: 1,
       transactionCount: 1,
       eventSummaries: [summary],
-      enrichedData: { source: 'coindcx', row: row.raw },
+      enrichedData: normalizeEnrichedData({ source: 'coindcx', row: row.raw }),
       sourceType:  'exchange',
       sourceId:    connectionId,
       venue:       VENUE,

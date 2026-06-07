@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { sendError } from '../utils/response';
 import { eventService } from '../core/event-system';
+import { hashRoute } from '../core/event-system/eventValidation.service';
 
 export const errorHandler = (
   err: Error,
@@ -12,11 +13,11 @@ export const errorHandler = (
   eventService.emitEvent({
     featureKey: 'system',
     eventType: 'api_error',
-    userId: (req as any).userId,
+    userId: (req as { userId?: string }).userId,
     metadata: {
-      path: req.path,
-      method: req.method,
-      message: err.message?.slice(0, 200),
+      routeHash: hashRoute(req.path),
+      errorCode: 'internal_error',
+      method: req.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS',
     },
   }).catch(() => {});
   sendError(res, err.message || 'Internal server error', 500);

@@ -50,6 +50,24 @@ export const userRepository = {
     return user;
   },
 
+  setPersonalizationEnabled: async (userId: string, enabled: boolean): Promise<IUser> => {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { personalizationEnabled: enabled } },
+      { new: true }
+    ).select('-passwordHash');
+    if (!user) {
+      throw new Error('User not found');
+    }
+    return user;
+  },
+
+  getPersonalizationEnabled: async (userId: string): Promise<boolean> => {
+    const doc = await User.findById(userId).select('personalizationEnabled').lean();
+    if (!doc) return true;
+    return (doc as { personalizationEnabled?: boolean }).personalizationEnabled !== false;
+  },
+
   deleteById: async (userId: string): Promise<boolean> => {
     const result = await User.deleteOne({ _id: userId });
     return result.deletedCount > 0;

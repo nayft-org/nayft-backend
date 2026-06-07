@@ -37,6 +37,14 @@ const userSchema = new Schema<IUser>(
       type: Boolean,
       default: false,
     },
+    personalizationEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    analyticsConsent: {
+      type: Boolean,
+      default: undefined,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
