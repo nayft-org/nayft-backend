@@ -171,7 +171,7 @@ export const ingestionService = {
     }
 
     if (result.inserted > 0 || result.updated > 0) {
-      const { bumpNewsFeedRevision } = await import('./newsFeedRevision');
+      const { bumpNewsFeedRevision } = await import('../newsFeedRevision');
       await bumpNewsFeedRevision().catch((err) => {
         console.error('[store-news] feed revision bump failed:', err);
       });
