@@ -30,7 +30,9 @@ function normalizeChartSymbol(raw: string): string {
 const INTERVAL_MS: Record<KlineInterval, number> = {
   '1m': 60 * 1000,
   '5m': 5 * 60 * 1000,
+  '15m': 15 * 60 * 1000,
   '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
   '1w': 7 * 24 * 60 * 60 * 1000,
 };
@@ -40,7 +42,9 @@ const MARKET_TREND_CACHE_TTL = 20;
 const KL_TTL: Record<KlineInterval, number> = {
   '1m': 30,
   '5m': 45,
+  '15m': 60,
   '1h': 90,
+  '4h': 120,
   '1d': 120,
   '1w': 180,
 };
@@ -102,13 +106,25 @@ async function getCmcTotalMarketCap(maxCoins: number): Promise<{
 const BINANCE_INTERVAL: Record<KlineInterval, string> = {
   '1m': '1m',
   '5m': '5m',
+  '15m': '15m',
   '1h': '1h',
+  '4h': '4h',
   '1d': '1d',
   '1w': '1w',
 };
 
-/** Public Binance klines when Mongo has no BTC candles (no worker required). */
-async function fetchBinanceBtcKlinesRest(params: {
+function toBinancePair(symbol: string): string {
+  const s = symbol.trim().toUpperCase();
+  if (!s) return '';
+  for (const suffix of QUOTE_SUFFIXES) {
+    if (s.endsWith(suffix) && s.length > suffix.length) return s;
+  }
+  return `${s}USDT`;
+}
+
+/** Public Binance klines when Mongo has no candles (no worker required). */
+async function fetchBinanceKlinesRest(params: {
+  pair: string;
   interval: KlineInterval;
   from: Date;
   to: Date;
@@ -117,7 +133,7 @@ async function fetchBinanceBtcKlinesRest(params: {
   const iv = BINANCE_INTERVAL[params.interval] ?? '1m';
   const lim = Math.min(Math.max(params.limit, 2), 1000);
   const search = new URLSearchParams({
-    symbol: 'BTCUSDT',
+    symbol: params.pair,
     interval: iv,
     startTime: String(params.from.getTime()),
     endTime: String(params.to.getTime()),
@@ -143,6 +159,16 @@ async function fetchBinanceBtcKlinesRest(params: {
   } catch {
     return null;
   }
+}
+
+/** @deprecated use fetchBinanceKlinesRest */
+async function fetchBinanceBtcKlinesRest(params: {
+  interval: KlineInterval;
+  from: Date;
+  to: Date;
+  limit: number;
+}): Promise<KlineRecord[] | null> {
+  return fetchBinanceKlinesRest({ pair: 'BTCUSDT', ...params });
 }
 
 /**
@@ -528,7 +554,19 @@ export const chartService = {
       to = new Date(params.to);
     } else {
       const days =
-        interval === '1m' ? 7 : interval === '5m' ? 30 : interval === '1h' ? 90 : interval === '1d' ? 365 : 730;
+        interval === '1m'
+          ? 7
+          : interval === '5m'
+            ? 30
+            : interval === '15m'
+              ? 14
+              : interval === '1h'
+                ? 90
+                : interval === '4h'
+                  ? 180
+                  : interval === '1d'
+                    ? 365
+                    : 730;
       to = now;
       from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     }
@@ -564,6 +602,19 @@ export const chartService = {
             to,
             limit,
           });
+        }
+        if (klines.length === 0 && exchange === 'binance') {
+          const pair = toBinancePair(symbol);
+          if (pair) {
+            klines =
+              (await fetchBinanceKlinesRest({
+                pair,
+                interval,
+                from,
+                to,
+                limit,
+              })) ?? [];
+          }
         }
         return klines;
       },

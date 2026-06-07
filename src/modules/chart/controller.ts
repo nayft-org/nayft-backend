@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
 import { MongoNetworkTimeoutError } from 'mongodb';
 import { chartService } from './service';
-import type { KlineInterval } from './model';
+import { KLINE_INTERVALS, type KlineInterval } from './model';
 import { config } from '../../config/env';
-
-const VALID_INTERVALS: KlineInterval[] = ['1m', '5m', '1h', '1d', '1w'];
 
 export const chartController = {
   getKlines: async (req: Request, res: Response) => {
@@ -21,8 +19,8 @@ export const chartController = {
         return;
       }
 
-      if (!VALID_INTERVALS.includes(interval)) {
-        res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(', ')}` });
+      if (!KLINE_INTERVALS.includes(interval)) {
+        res.status(400).json({ error: `interval must be one of: ${KLINE_INTERVALS.join(', ')}` });
         return;
       }
 
@@ -106,8 +104,8 @@ export const chartController = {
       const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
       const maxCoins = req.query.maxCoins ? parseInt(String(req.query.maxCoins), 10) : undefined;
 
-      if (!VALID_INTERVALS.includes(interval)) {
-        res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(', ')}` });
+      if (!KLINE_INTERVALS.includes(interval)) {
+        res.status(400).json({ error: `interval must be one of: ${KLINE_INTERVALS.join(', ')}` });
         return;
       }
 
@@ -145,8 +143,8 @@ export const chartController = {
       const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
       const maxCoins = req.query.maxCoins ? parseInt(String(req.query.maxCoins), 10) : undefined;
 
-      if (!VALID_INTERVALS.includes(interval)) {
-        res.status(400).json({ error: `interval must be one of: ${VALID_INTERVALS.join(', ')}` });
+      if (!KLINE_INTERVALS.includes(interval)) {
+        res.status(400).json({ error: `interval must be one of: ${KLINE_INTERVALS.join(', ')}` });
         return;
       }
 

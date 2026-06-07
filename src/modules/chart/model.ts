@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type KlineInterval = '1m' | '5m' | '1h' | '1d' | '1w';
+export const KLINE_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const;
+export type KlineInterval = (typeof KLINE_INTERVALS)[number];
 
 export interface IOhlcvMeta {
   exchange: string;
@@ -25,7 +26,7 @@ const ohlcvKlineSchema = new Schema<IOhlcvKline>(
     meta: {
       exchange: { type: String, required: true },
       symbol: { type: String, required: true },
-      interval: { type: String, required: true, enum: ['1m', '5m', '1h', '1d', '1w'] },
+      interval: { type: String, required: true, enum: [...KLINE_INTERVALS] },
     },
     openTime: { type: Date, required: true },
     open: { type: Number, required: true },
