@@ -5,6 +5,7 @@ import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository
 import { userRepository } from '../user/repository';
 import { followRepository } from './repository';
 import { publishNewFollower } from '../../core/event-system/notificationEventBridge';
+import { resolveBatchFromSnapshots } from '../coin/coinSnapshotResolve';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -187,7 +188,30 @@ export const followService = {
       }
     }
 
-    return results;
+    if (results.length === 0) return [];
+
+    const snapshotRows = await resolveBatchFromSnapshots(
+      results.flatMap((r) => [r.coinId, r.symbol])
+    );
+    const byCoinIdSnap = new Map(snapshotRows.map((r) => [r.coinId.toLowerCase(), r]));
+    const bySymbolSnap = new Map(snapshotRows.map((r) => [r.symbol.toLowerCase(), r]));
+
+    return results.map((row) => {
+      const snap =
+        byCoinIdSnap.get(row.coinId.toLowerCase()) ??
+        bySymbolSnap.get(row.symbol.toLowerCase());
+      return {
+        ...row,
+        coinId: snap?.coinId ?? row.coinId,
+        symbol: snap?.symbol ?? row.symbol,
+        name: snap?.name ?? row.name,
+        rank: snap?.marketCapRank ?? row.rank,
+        price: snap?.price ?? row.price,
+        percentChange24h: snap?.percentChange24h ?? row.percentChange24h,
+        image: snap?.image,
+        marketCapRank: snap?.marketCapRank,
+      };
+    });
   },
 
   getFollowedUsers: async (userId: string) => {

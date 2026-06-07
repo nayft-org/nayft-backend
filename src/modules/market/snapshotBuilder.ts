@@ -6,7 +6,7 @@ import { streamConfig } from '../../config/streamConfig';
 import { config } from '../../config/env';
 import { chartRepository } from '../chart/repository';
 import { Coin } from '../coin/model';
-import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
+import { attachImagesToCoins } from '../coin/coinSnapshotResolve';
 import { marketRepository } from './repository';
 import type { MarketSnapshotV2, SnapshotRow, SparklinePayload } from './snapshotTypes';
 import {
@@ -32,24 +32,7 @@ interface RawCoin {
   volume24h: number;
 }
 
-async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(T & { image?: string })[]> {
-  if (coins.length === 0) return coins;
-  const lowerSymbols = coins.map((c) => c.symbol.toLowerCase());
-  const docs = await LabeledActiveCoin.find(
-    {
-      provider: config.coinDataPrimarySnapshotProvider,
-      symbol: { $in: lowerSymbols },
-    },
-    { symbol: 1, image: 1, _id: 0 }
-  )
-    .lean()
-    .exec();
-  const imageMap = new Map<string, string>();
-  for (const doc of docs) {
-    if (doc.image) imageMap.set(doc.symbol.toLowerCase(), doc.image);
-  }
-  return coins.map((c) => ({ ...c, image: imageMap.get(c.symbol.toLowerCase()) }));
-}
+const attachImages = attachImagesToCoins;
 
 async function attachInternalCoinIds<T extends { coinId: string }>(
   coins: T[]

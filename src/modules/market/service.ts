@@ -2,7 +2,7 @@ import { coinmarketcapApi } from '../../utils/coinmarketcap';
 import { randomUUID } from 'crypto';
 import { marketRepository } from './repository';
 import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository';
-import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
+import { attachImagesToCoins } from '../coin/coinSnapshotResolve';
 import { Coin } from '../coin/model';
 import { cacheHelpers } from '../../config/redis';
 import { config } from '../../config/env';
@@ -43,28 +43,7 @@ const mapCoinMarketCapData = (cmcData: any): any[] => {
   }));
 };
 
-/** Enrich a list of coins with image URLs from coin_market_snapshots, keyed by symbol.
- *  coin_market_snapshots stores symbols in lowercase (CoinGecko convention), so we
- *  normalise both sides to lowercase for a fast $in index hit.
- */
-async function attachImages<T extends { symbol: string }>(coins: T[]): Promise<(T & { image?: string })[]> {
-  if (coins.length === 0) return coins;
-  const lowerSymbols = coins.map((c) => c.symbol.toLowerCase());
-  const docs = await LabeledActiveCoin.find(
-    {
-      provider: config.coinDataPrimarySnapshotProvider,
-      symbol: { $in: lowerSymbols },
-    },
-    { symbol: 1, image: 1, _id: 0 }
-  ).lean().exec() as { symbol: string; image?: string }[];
-
-  const imageMap = new Map<string, string>();
-  for (const doc of docs) {
-    if (doc.image) imageMap.set(doc.symbol.toLowerCase(), doc.image);
-  }
-
-  return coins.map((c) => ({ ...c, image: imageMap.get(c.symbol.toLowerCase()) }));
-}
+const attachImages = attachImagesToCoins;
 
 async function attachInternalCoinIds<T extends { coinId: string }>(
   coins: T[]

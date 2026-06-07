@@ -10,6 +10,7 @@ import { marketRepository } from '../market/repository';
 import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
 import { identityResolver } from './identityResolver';
+import { resolveBatchFromSnapshots } from './coinSnapshotResolve';
 
 function looksLikeCoinGeckoId(id: string): boolean {
   if (!id || id.length < 2) return false;
@@ -327,19 +328,19 @@ export const coinService = {
     return coinDto;
   },
 
-  /** Batch DB lookup for related coins on news feed (max 50 ids). */
+  /** Batch resolve coin refs (symbols, CoinGecko ids) from `coin_market_snapshots` for news/UI hydration. */
   getCoinsByIds: async (coinIds: string[]) => {
-    const unique = [...new Set(coinIds.map((id) => String(id).trim()).filter(Boolean))].slice(0, 50);
-    if (unique.length === 0) return [];
-    const coins = await coinRepository.findByIds(unique);
-    return coins.map((c) => ({
+    const resolved = await resolveBatchFromSnapshots(coinIds);
+    return resolved.map((c) => ({
       internalCoinId: c.internalCoinId,
       coinId: c.coinId,
       symbol: c.symbol,
       name: c.name,
-      rank: c.rank,
+      rank: c.marketCapRank ?? 0,
       price: c.price,
       percentChange24h: c.percentChange24h,
+      image: c.image,
+      marketCapRank: c.marketCapRank,
     }));
   },
 
