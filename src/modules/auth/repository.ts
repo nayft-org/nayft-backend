@@ -31,8 +31,29 @@ export const authRepository = {
     email: string;
     passwordHash: string;
     username: string;
+    emailVerified?: boolean;
+    emailVerifiedAt?: Date | null;
   }): Promise<IUser> => {
     const user = new User(userData);
     return user.save();
+  },
+
+  markEmailVerified: async (id: string): Promise<void> => {
+    await User.findByIdAndUpdate(id, {
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    });
+  },
+
+  updateVerificationSent: async (id: string): Promise<void> => {
+    await User.findByIdAndUpdate(id, { lastVerificationSentAt: new Date() });
+  },
+
+  grandfatherExistingUsers: async (): Promise<number> => {
+    const result = await User.updateMany(
+      { $or: [{ emailVerified: { $exists: false } }, { emailVerified: null }] },
+      { $set: { emailVerified: true, emailVerifiedAt: new Date() } }
+    );
+    return result.modifiedCount;
   },
 };

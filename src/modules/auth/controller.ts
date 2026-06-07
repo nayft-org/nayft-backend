@@ -23,8 +23,57 @@ export const authController = {
 
   signup: async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await authService.signup(req.body);
+      const locale = (req as Request & { resolvedLanguage?: string }).resolvedLanguage || 'en';
+      const result = await authService.signup(req.body, {
+        locale,
+        ip: req.ip,
+      });
       sendSuccess(res, result, 201);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  verifyEmail: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { code } = req.body;
+      if (!code || typeof code !== 'string') {
+        sendError(res, 'Verification code is required', 400);
+        return;
+      }
+      const result = await authService.verifyEmail(req.userId!, code);
+      res.setHeader('Cache-Control', 'no-store');
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status =
+        error.code === 'VERIFICATION_CODE_EXPIRED'
+          ? 410
+          : error.code === 'VERIFICATION_LOCKED' || error.code === 'VERIFICATION_RESEND_COOLDOWN'
+            ? 429
+            : 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  resendVerification: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const locale = (req as AuthRequest & { resolvedLanguage?: string }).resolvedLanguage || 'en';
+      const result = await authService.resendVerification(req.userId!, { locale, ip: req.ip });
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status =
+        error.code === 'VERIFICATION_RESEND_COOLDOWN' || error.code === 'VERIFICATION_RESEND_LIMIT'
+          ? 429
+          : 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  getVerificationStatus: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const status = await authService.getVerificationStatus(req.userId!);
+      res.setHeader('Cache-Control', 'no-store');
+      sendSuccess(res, status);
     } catch (error: any) {
       sendError(res, error.message, 400);
     }

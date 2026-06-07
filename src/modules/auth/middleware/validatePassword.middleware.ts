@@ -36,15 +36,25 @@ function emitPasswordViolation(
     })
   );
 
+  const metadata = {
+    level: validation.level,
+    violations: validation.violations.join(','),
+    endpoint,
+  };
+
   eventService
     .emitEvent({
       featureKey: 'auth',
       eventType: 'password_validation_failed',
-      metadata: {
-        level: validation.level,
-        violations: validation.violations.join(','),
-        endpoint,
-      },
+      metadata,
+    })
+    .catch(() => {});
+
+  eventService
+    .emitEvent({
+      featureKey: 'auth',
+      eventType: 'password_strength_rejected',
+      metadata,
     })
     .catch(() => {});
 }

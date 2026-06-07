@@ -78,6 +78,25 @@ router.post(
 
 router.get('/me', authenticate, authController.getMe);
 
+router.post(
+  '/verify-email',
+  authRateLimiter,
+  authenticate,
+  [
+    body('code')
+      .isString()
+      .trim()
+      .matches(/^\d{6}$/)
+      .withMessage('Code must be 6 digits'),
+  ],
+  handleExpressValidationErrors,
+  authController.verifyEmail
+);
+
+router.post('/resend-verification', authRateLimiter, authenticate, authController.resendVerification);
+
+router.get('/verification-status', authenticate, authController.getVerificationStatus);
+
 router.post('/google', authRateLimiter, authController.googleSignIn);
 
 export default router;

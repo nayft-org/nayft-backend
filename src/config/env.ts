@@ -20,6 +20,23 @@ export const config = {
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   jwtSecret: process.env.JWT_SECRET || 'super_secret_key_change_later',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  /** Shorter TTL for unverified users (matches OTP window). */
+  jwtUnverifiedExpiresIn: process.env.JWT_UNVERIFIED_EXPIRES_IN || '24h',
+  verificationCodeSecret:
+    process.env.VERIFICATION_CODE_SECRET ||
+    (process.env.NODE_ENV === 'production' ? '' : process.env.JWT_SECRET || 'dev_verification_secret'),
+  emailVerificationDebugLog:
+    (process.env.NODE_ENV || 'development') !== 'production' &&
+    process.env.EMAIL_VERIFICATION_DEBUG_LOG !== 'false',
+  mailtrapApiToken: (process.env.MAILTRAP_API_TOKEN || '').trim(),
+  mailtrapSenderEmail: (process.env.MAILTRAP_SENDER_EMAIL || 'noreply@mail.nayft.com').trim(),
+  mailtrapSenderName: (process.env.MAILTRAP_SENDER_NAME || 'NAYFT').trim(),
+  emailProvider: (process.env.EMAIL_PROVIDER || 'noop').trim().toLowerCase() as 'mailtrap' | 'smtp' | 'noop',
+  /** Transactional verification emails are sent only in production. Dev uses console OTP logging. */
+  shouldSendVerificationEmail:
+    (process.env.NODE_ENV || 'development') === 'production' &&
+    (process.env.EMAIL_PROVIDER || 'noop').trim().toLowerCase() === 'mailtrap' &&
+    Boolean((process.env.MAILTRAP_API_TOKEN || '').trim()),
   cmcApiKey: process.env.CMC_API_KEY || '7c5caaa1d15946799fdc96a8a12ad759',
   cmcBaseUrl: process.env.CMC_BASE_URL || 'https://pro-api.coinmarketcap.com',
   coindeskApiKey: process.env.COIN_DESK_API_KEY || '',
@@ -149,6 +166,12 @@ export const config = {
 const DEFAULT_JWT = 'super_secret_key_change_later';
 if (config.nodeEnv === 'production' && config.jwtSecret === DEFAULT_JWT) {
   throw new Error('JWT_SECRET must be set in production');
+}
+if (config.nodeEnv === 'production' && !config.verificationCodeSecret) {
+  throw new Error('VERIFICATION_CODE_SECRET must be set in production');
+}
+if (config.nodeEnv === 'production' && process.env.EMAIL_VERIFICATION_DEBUG_LOG === 'true') {
+  throw new Error('EMAIL_VERIFICATION_DEBUG_LOG must not be enabled in production');
 }
 if (config.nodeEnv === 'production' && !process.env.ADMIN_API_KEY?.trim()) {
   console.warn('[Config] ADMIN_API_KEY is not set — admin routes will return 501');

@@ -33,6 +33,18 @@ const userSchema = new Schema<IUser>(
       required: false,
       default: undefined,
     },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+    lastVerificationSentAt: {
+      type: Date,
+      default: null,
+    },
     coinOnboardingCompleted: {
       type: Boolean,
       default: false,

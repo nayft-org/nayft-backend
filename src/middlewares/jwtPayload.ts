@@ -5,16 +5,20 @@ import { config } from '../config/env';
 export interface AccessTokenPayload {
   userId: string;
   preferredLanguage?: string | null;
+  emailVerified?: boolean;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {
+  const emailVerified = payload.emailVerified ?? true;
+  const expiresIn = emailVerified ? config.jwtExpiresIn : config.jwtUnverifiedExpiresIn;
   return jwt.sign(
     {
       userId: payload.userId,
       preferredLanguage: payload.preferredLanguage ?? null,
+      emailVerified,
     },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn } as SignOptions
+    { expiresIn } as SignOptions
   );
 }
 

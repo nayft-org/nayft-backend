@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/auth';
+import { requireEmailVerified } from '../auth/middleware/requireEmailVerified';
 import { piContextController } from './controllers/piContext.controller';
 
 const router = Router();
+const piAuth = [authenticate, requireEmailVerified];
 
-router.get('/context', authenticate, piContextController.getContext);
-router.get('/snapshot/latest', authenticate, piContextController.getLatestSnapshot);
-router.get('/summary', authenticate, piContextController.getSummary);
-router.get('/insights', authenticate, piContextController.getInsights);
-router.post('/recompute', authenticate, piContextController.manualRecompute);
+router.get('/context', piAuth, piContextController.getContext);
+router.get('/snapshot/latest', piAuth, piContextController.getLatestSnapshot);
+router.get('/summary', piAuth, piContextController.getSummary);
+router.get('/insights', piAuth, piContextController.getInsights);
+router.post('/recompute', piAuth, piContextController.manualRecompute);
 
 export default router;

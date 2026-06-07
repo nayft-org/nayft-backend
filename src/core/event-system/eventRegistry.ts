@@ -29,6 +29,40 @@ export const SERVER_EVENT_DEFINITIONS = {
   'auth:strong_password_created': z.object({
     scoreBand: z.enum(['3', '4']),
   }),
+  'auth:verification_sent': z.object({
+    locale: z.string().max(8),
+    correlationId: z.string().max(64),
+  }),
+  'auth:verification_success': z.object({
+    correlationId: z.string().max(64),
+  }),
+  'auth:verification_otp_failed': z.object({
+    reason: z.enum(['invalid', 'expired', 'locked']),
+    attemptNumber: z.number().int().nonnegative(),
+    correlationId: z.string().max(64),
+  }),
+  'auth:verification_expired': z.object({
+    correlationId: z.string().max(64),
+  }),
+  'auth:verification_resend': z.object({
+    attemptNumber: z.number().int().positive(),
+    correlationId: z.string().max(64),
+  }),
+  'auth:verification_resend_spam': z.object({
+    reason: z.string().max(32),
+  }),
+  'auth:verification_bypass_attempt': z.object({
+    routeHash: z.string().max(64),
+  }),
+  'auth:email_delivery_failed': z.object({
+    purpose: z.string().max(32),
+    correlationId: z.string().max(64),
+  }),
+  'auth:password_strength_rejected': z.object({
+    level: z.enum(['poor', 'low', 'strong']),
+    violations: z.string().max(200),
+    endpoint: z.enum(['signup', 'change-password', 'reset-password']),
+  }),
   'news_feed:article_viewed': z.object({
     newsId: z.string().regex(objectIdRegex),
   }),

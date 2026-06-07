@@ -11,6 +11,7 @@
     "worker:streams": "node dist/workers/streamIngestion.js",
     "lint": "eslint src --ext .ts",
     "test": "jest",
+    "script:check-verification-logging": "ts-node --transpile-only scripts/compliance/check-verification-logging.ts",
     "script:migrate-follows": "ts-node --transpile-only scripts/migrate-follows.ts",
     "script:create-indexes": "ts-node --transpile-only scripts/create-indexes.ts",
     "script:set-admin-key": "ts-node --transpile-only scripts/set-admin-key-mongo.ts",

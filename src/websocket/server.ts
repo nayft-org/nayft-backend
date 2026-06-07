@@ -10,6 +10,8 @@ import {
 import { IWalletEvent } from '../modules/portfolio/models/WalletEvent';
 import { streamMetrics, recordOutbound, recordInbound } from '../observability/streamMetrics';
 import { verifyAccessToken } from '../middlewares/jwtPayload';
+import { isEmailVerificationEnforced } from '../modules/auth/authVerification.config';
+import { authRepository } from '../modules/auth/repository';
 import { incrementComplianceMetric } from '../observability/complianceMetrics';
 import { WalletAddress } from '../modules/portfolio/models/WalletAddress';
 import {
@@ -452,6 +454,14 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
       clearTimeout(idleTimer);
     };
 
+    const rejectIfUnverifiedForWs = async (userId: string): Promise<boolean> => {
+      if (!(await isEmailVerificationEnforced())) return false;
+      const user = await authRepository.findById(userId);
+      if (user?.emailVerified) return false;
+      rejectUnauthenticatedSubscription(ws, 'email verification required');
+      return true;
+    };
+
     const bindNotifyUser = (userId: string, protocol: 1 | 2 = 2): void => {
       const prev = wsNotifyUserId.get(ws);
       if (prev && prev !== userId) {
@@ -498,7 +508,9 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
           const token = typeof msg.token === 'string' ? msg.token : undefined;
           const dec = verifyAccessToken(token);
           if (dec?.userId) {
-            bindNotifyUser(dec.userId, 2);
+            void rejectIfUnverifiedForWs(dec.userId).then((rejected) => {
+              if (!rejected) bindNotifyUser(dec.userId, 2);
+            });
           } else {
             incrementComplianceMetric('wsAuthFailuresTotal');
           }
@@ -515,7 +527,9 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
                 : undefined;
           const dec = verifyAccessToken(token);
           if (dec?.userId) {
-            bindNotifyUser(dec.userId, 2);
+            void rejectIfUnverifiedForWs(dec.userId).then((rejected) => {
+              if (!rejected) bindNotifyUser(dec.userId, 2);
+            });
           } else if (!wsNotifyUserId.get(ws)) {
             rejectUnauthenticatedSubscription(ws, 'authentication required');
           }
@@ -537,9 +551,21 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
             return;
           }
 
+          void rejectIfUnverifiedForWs(userId).then((rejected) => {
+            if (rejected) return;
+            handlePortfolioSubscribe();
+          });
+          return;
+        }
+
+        function handlePortfolioSubscribe(): void {
+          const userId = wsNotifyUserId.get(ws);
+          if (!userId) return;
+
           const set = getClientAddresses(ws);
           set.clear();
-          const requested = msg.addresses
+          const addresses = Array.isArray(msg.addresses) ? msg.addresses : [];
+          const requested = addresses
             .filter((a): a is string => typeof a === 'string' && a.length > 0)
             .map((a) => a.toLowerCase());
 

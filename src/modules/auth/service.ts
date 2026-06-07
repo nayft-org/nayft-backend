@@ -10,9 +10,52 @@ import { signAccessToken } from '../../middlewares/jwtPayload';
 import { config } from '../../config/env';
 import { validatePasswordForSignup } from './passwordValidation.service';
 import { authMetrics } from '../../observability/authMetrics';
+import { verificationService } from './verification/verification.service';
+import { emailService } from '../email/email.service';
+
+function buildTokenForUser(user: IUser): string {
+  return signAccessToken({
+    userId: user._id.toString(),
+    preferredLanguage: user.preferredLanguage ?? null,
+    emailVerified: user.emailVerified ?? false,
+  });
+}
+
+async function issueVerificationForSignup(
+  user: IUser,
+  locale: string,
+  ip?: string
+): Promise<{ emailDeliveryStatus: 'queued' | 'skipped' | 'failed' }> {
+  const issued = await verificationService.issueCode(user._id.toString(), 'email_signup', {
+    email: user.email,
+    username: user.username,
+    locale,
+    ip,
+  });
+
+  let emailDeliveryStatus: 'queued' | 'skipped' | 'failed' = 'skipped';
+  if (config.shouldSendVerificationEmail) {
+    await emailService.enqueueVerificationEmail({
+      userId: user._id.toString(),
+      purpose: 'email_signup',
+      email: user.email,
+      username: user.username,
+      code: issued.code,
+      locale,
+      correlationId: issued.correlationId,
+      issuedAt: new Date(),
+    });
+    emailDeliveryStatus = 'queued';
+  }
+
+  return { emailDeliveryStatus };
+}
 
 export const authService = {
-  signup: async (signupDto: SignupDto): Promise<{ user: IUser; token: string }> => {
+  signup: async (
+    signupDto: SignupDto,
+    options: { locale?: string; ip?: string } = {}
+  ): Promise<{ user: IUser; token: string; emailDeliveryStatus?: 'queued' | 'skipped' | 'failed' }> => {
     const { email, password, username } = signupDto;
 
     const passwordCheck = validatePasswordForSignup(password, { email, username });
@@ -34,21 +77,26 @@ export const authService = {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create user
     const user = await authRepository.create({
       email: email.toLowerCase(),
       passwordHash,
       username,
+      emailVerified: false,
+      emailVerifiedAt: null,
     });
 
     const migrated = await onboardingService.ensureCoinOnboardingMigrated(user);
     const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
+    (userObj as IUser).emailVerified = false;
 
-    const token = signAccessToken({
-      userId: user._id.toString(),
-      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
-    });
+    const { emailDeliveryStatus } = await issueVerificationForSignup(
+      userObj as IUser,
+      options.locale || 'en',
+      options.ip
+    );
+
+    const token = buildTokenForUser(userObj as IUser);
 
     authMetrics.passwordSignupAcceptedTotal += 1;
 
@@ -66,7 +114,125 @@ export const authService = {
       metadata: { scoreBand: passwordCheck.score >= 4 ? '4' : '3' },
     }).catch(() => {});
 
-    return { user: userObj as IUser, token };
+    return { user: userObj as IUser, token, emailDeliveryStatus };
+  },
+
+  verifyEmail: async (
+    userId: string,
+    code: string
+  ): Promise<{ user: IUser; token: string }> => {
+    const result = await verificationService.verifyCode(userId, 'email_signup', code);
+    if (!result.ok) {
+      if (result.reason === 'expired') {
+        authMetrics.verificationExpiredTotal += 1;
+        eventService.emitEvent({
+          featureKey: 'auth',
+          eventType: 'verification_expired',
+          userId,
+          metadata: { correlationId: result.correlationId || '' },
+        }).catch(() => {});
+        throw Object.assign(new Error('This verification code has expired'), {
+          code: 'VERIFICATION_CODE_EXPIRED',
+        });
+      }
+      if (result.reason === 'locked') {
+        authMetrics.verificationLockedTotal += 1;
+        throw Object.assign(new Error('Too many verification attempts'), {
+          code: 'VERIFICATION_LOCKED',
+        });
+      }
+      authMetrics.verificationFailedTotal += 1;
+      eventService.emitEvent({
+        featureKey: 'auth',
+        eventType: 'verification_otp_failed',
+        userId,
+        metadata: {
+          reason: result.reason,
+          attemptNumber: result.attemptNumber ?? 0,
+          correlationId: result.correlationId || '',
+        },
+      }).catch(() => {});
+      throw Object.assign(new Error('Incorrect verification code'), {
+        code: 'VERIFICATION_CODE_INVALID',
+      });
+    }
+
+    const user = await authRepository.findById(userId);
+    if (!user) throw new Error('User not found');
+
+    const token = buildTokenForUser(user);
+    authMetrics.verificationSuccessTotal += 1;
+
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'verification_success',
+      userId,
+      metadata: { correlationId: result.correlationId },
+    }).catch(() => {});
+
+    return { user, token };
+  },
+
+  resendVerification: async (
+    userId: string,
+    options: { locale?: string; ip?: string } = {}
+  ): Promise<{ message: string; expiresAt: Date }> => {
+    const user = await authRepository.findById(userId);
+    if (!user) throw new Error('User not found');
+
+    const result = await verificationService.resendCode(userId, 'email_signup', {
+      email: user.email,
+      username: user.username,
+      locale: options.locale || user.preferredLanguage || 'en',
+      ip: options.ip,
+    });
+
+    if (!result.ok) {
+      if (result.reason === 'already_verified') {
+        throw Object.assign(new Error('Email is already verified'), { code: 'ALREADY_VERIFIED' });
+      }
+      if (result.reason === 'cooldown') {
+        throw Object.assign(
+          new Error(`Resend available in ${result.cooldownSeconds ?? 60} seconds`),
+          { code: 'VERIFICATION_RESEND_COOLDOWN' }
+        );
+      }
+      authMetrics.verificationResendSpamTotal += 1;
+      eventService.emitEvent({
+        featureKey: 'auth',
+        eventType: 'verification_resend_spam',
+        userId,
+        metadata: { reason: result.reason },
+      }).catch(() => {});
+      throw Object.assign(new Error('Resend limit exceeded'), { code: 'VERIFICATION_RESEND_LIMIT' });
+    }
+
+    if (config.shouldSendVerificationEmail) {
+      await emailService.enqueueVerificationEmail({
+        userId,
+        purpose: 'email_signup',
+        email: user.email,
+        username: user.username,
+        code: result.code,
+        locale: options.locale || user.preferredLanguage || 'en',
+        correlationId: result.correlationId,
+        issuedAt: new Date(),
+      });
+    }
+
+    authMetrics.verificationResendTotal += 1;
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'verification_resend',
+      userId,
+      metadata: { attemptNumber: result.attemptNumber, correlationId: result.correlationId },
+    }).catch(() => {});
+
+    return { message: 'A new verification code has been sent', expiresAt: result.expiresAt };
+  },
+
+  getVerificationStatus: async (userId: string) => {
+    return verificationService.getVerificationStatus(userId, 'email_signup');
   },
 
   changePassword: async (
@@ -129,10 +295,7 @@ export const authService = {
     const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
 
-    const token = signAccessToken({
-      userId: user._id.toString(),
-      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
-    });
+    const token = buildTokenForUser(userObj as IUser);
 
     eventService.emitEvent({
       featureKey: 'auth',
@@ -159,10 +322,7 @@ export const authService = {
       throw new Error('User not found');
     }
     const u = user as IUser;
-    return signAccessToken({
-      userId: user._id.toString(),
-      preferredLanguage: u.preferredLanguage ?? null,
-    });
+    return buildTokenForUser(u);
   },
 
   googleSignIn: async (idToken: string): Promise<{ user: IUser; token: string }> => {
@@ -201,17 +361,23 @@ export const authService = {
       // so password-login for Google-only accounts always fails safely.
       const sentinelHash = await bcrypt.hash(randomUUID(), 10);
 
-      user = await authRepository.create({ email, passwordHash: sentinelHash, username });
+      user = await authRepository.create({
+        email,
+        passwordHash: sentinelHash,
+        username,
+        emailVerified: payload.email_verified === true,
+        emailVerifiedAt: payload.email_verified === true ? new Date() : null,
+      });
+    } else if (payload.email_verified === true && !user.emailVerified) {
+      await authRepository.markEmailVerified(user._id.toString());
+      user = (await authRepository.findById(user._id.toString()))!;
     }
 
     const migrated = await onboardingService.ensureCoinOnboardingMigrated(user);
     const userObj = migrated.toObject();
     delete (userObj as any).passwordHash;
 
-    const token = signAccessToken({
-      userId: user._id.toString(),
-      preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
-    });
+    const token = buildTokenForUser(userObj as IUser);
 
     eventService.emitEvent({
       featureKey: 'auth',

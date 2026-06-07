@@ -8,6 +8,9 @@ import { startBinanceTickerIngestion } from './services/binanceTickerIngestion';
 import { runKlineDownsampler } from './services/streams/jobs/klineDownsampler';
 import { streamConfig } from './config/streamConfig';
 import { bootstrapFeatures } from './core/bootstrapFeatures';
+import { bootstrapAuthVerificationFeatures } from './modules/auth/bootstrapAuthFeatures';
+import { runEmailWorker } from './modules/email/emailWorker';
+import { authRepository } from './modules/auth/repository';
 import { bootstrapComplianceFeatures } from './core/compliance/bootstrapComplianceFeatures';
 import { bootstrapPlans } from './core/bootstrapPlans';
 import { runEventWorker } from './core/event-system/eventWorker';
@@ -67,6 +70,11 @@ const startServer = async (): Promise<void> => {
 
     // Auto-register features from modules
     await bootstrapFeatures();
+    await bootstrapAuthVerificationFeatures();
+    const grandfathered = await authRepository.grandfatherExistingUsers();
+    if (grandfathered > 0) {
+      console.log(`[Auth] Grandfathered ${grandfathered} existing users as emailVerified`);
+    }
     await bootstrapComplianceFeatures();
     await bootstrapPiFeatures();
 
@@ -75,6 +83,7 @@ const startServer = async (): Promise<void> => {
 
     // Start event queue worker (non-blocking)
     setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
+    setImmediate(() => runEmailWorker().catch((err) => console.error('[EmailWorker] Fatal:', err)));
     setImmediate(() =>
       runNotificationStreamWorker().catch((err) => console.error('[NotificationStreamWorker] Fatal:', err))
     );
