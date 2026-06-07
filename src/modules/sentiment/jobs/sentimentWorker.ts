@@ -112,6 +112,8 @@ async function processStreamMessage(id: string, payloadJson: string): Promise<vo
       externalId: job.externalId,
       durationMs: Date.now() - started,
     });
+    const { scheduleNewsFeedChanged } = await import('../../news/realtime');
+    scheduleNewsFeedChanged();
   } catch (err) {
     sentimentMetrics.jobsFailedTotal += 1;
     console.error('[SentimentWorker] process failed', err);

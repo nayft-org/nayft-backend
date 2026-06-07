@@ -9,7 +9,7 @@ import { CoinMaster } from '../models/CoinMaster';
 import { ingestionRepository } from './repository';
 import type { INewsArticle, INewsArticleCategory } from '../models/NewsArticle';
 import { buildNewsCoinDerivationContext, deriveNewsArticleCoins, normalizeSymbol } from './coinDerivation';
-import { publishNewsInserted } from '../realtime';
+import { notifyNewsFeedChanged } from '../realtime';
 import { computeArticleContentHash } from '../../sentiment/utils/contentHash';
 import { enqueueSentimentJobs } from '../../sentiment/services/sentimentQueue.service';
 import { sentimentConfig } from '../../sentiment/config/sentimentConfig';
@@ -164,16 +164,12 @@ export const ingestionService = {
       });
     }
 
-    if (result.inserted > 0) {
-      publishNewsInserted(result.inserted).catch((err) => {
-        console.error('[news-realtime] publish failed:', err);
-      });
-    }
-
     if (result.inserted > 0 || result.updated > 0) {
-      const { bumpNewsFeedRevision } = await import('../newsFeedRevision');
-      await bumpNewsFeedRevision().catch((err) => {
-        console.error('[store-news] feed revision bump failed:', err);
+      notifyNewsFeedChanged({
+        inserted: result.inserted,
+        updated: result.updated,
+      }).catch((err) => {
+        console.error('[store-news] feed notify failed:', err);
       });
     }
 
