@@ -19,10 +19,10 @@ export const redis = new Redis(config.redisUrl, {
 });
 
 /**
- * Separate connection for BRPOP and other blocking commands. Sharing the main
- * client with BRPOP ties up the connection for the block timeout and is more
- * fragile when the socket drops. maxRetriesPerRequest: null matches ioredis
- * guidance for blocking commands.
+ * Separate connection for BRPOP, XREADGROUP BLOCK, and other blocking commands.
+ * Never run blocking reads on `redis` — they monopolize the shared socket and stall
+ * cache GET/SET used by API handlers (e.g. /api/news waiting 5–25s behind XREAD BLOCK).
+ * maxRetriesPerRequest: null matches ioredis guidance for blocking commands.
  */
 export const redisBlocking = redis.duplicate({
   maxRetriesPerRequest: null,

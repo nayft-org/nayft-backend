@@ -31,6 +31,10 @@ import {
   setRolloutHealthScore,
   getComplianceMetricsSnapshot,
 } from './observability/complianceMetrics';
+import {
+  refreshRuntimeConfigSnapshot,
+  startRuntimeConfigRefreshLoop,
+} from './core/runtime-config/runtimeConfig.service';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -41,6 +45,9 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+
+    await refreshRuntimeConfigSnapshot();
+    startRuntimeConfigRefreshLoop(10_000);
 
     if (process.env.ENSURE_EVENTS_TTL_ON_BOOT === 'true') {
       import('./core/event-system/ensureEventsTtl')

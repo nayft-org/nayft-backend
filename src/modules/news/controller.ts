@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { Request, Response } from 'express';
 import { newsService } from './service';
 import { coinService } from '../coin/service';
@@ -6,7 +7,8 @@ import { getNewsUpstreamLogContext } from '../../utils/coindesk';
 import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { eventService } from '../../core/event-system';
-import { withResponseCache, buildNewsListKey, buildNewsFollowingKey } from '../../utils/responseCache';
+import { buildNewsListKey, buildNewsFollowingKey } from '../../utils/responseCache';
+import { serveNewsFeedResponse } from './newsFeedResponse';
 import {
   translateNewsArticleDtos,
   translateSingleNewsArticle,
@@ -15,6 +17,7 @@ import {
 
 export const newsController = {
   getAllNews: async (req: AuthRequest, res: Response): Promise<void> => {
+    const started = performance.now();
     try {
       const filterby = (req.query.filterby as string)?.toLowerCase();
       const coinid = req.query.coinid as string | undefined;
@@ -37,20 +40,24 @@ export const newsController = {
         : [];
       const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
       const userScope = req.userId ?? 'anon';
-      const { data: newsEn } = await withResponseCache({
-        cacheKey: buildNewsListKey({ userScope, page, limit, categoriesSig }),
-        ttlSeconds: 45,
+      const lang = req.resolvedLanguage ?? 'en';
+
+      await serveNewsFeedResponse({
+        req,
+        res,
+        entityCacheKey: buildNewsListKey({ userScope, page, limit, categoriesSig }),
         metricsKind: 'news:list',
+        lang,
         fetcher: () => newsService.getAllNews(page, limit, categories, req.userId),
+        started,
       });
-      const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
-      sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
     }
   },
 
   getFollowingNews: async (req: AuthRequest, res: Response): Promise<void> => {
+    const started = performance.now();
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -65,20 +72,23 @@ export const newsController = {
             .filter(Boolean)
         : [];
       const categoriesSig = categories.length ? [...categories].sort().join(',') : 'all';
-      const { data: newsEn } = await withResponseCache({
-        cacheKey: buildNewsFollowingKey({
+      const lang = req.resolvedLanguage ?? 'en';
+
+      await serveNewsFeedResponse({
+        req,
+        res,
+        entityCacheKey: buildNewsFollowingKey({
           userId: req.userId!,
           page,
           limit,
           mode,
           categoriesSig,
         }),
-        ttlSeconds: 45,
         metricsKind: 'news:following',
+        lang,
         fetcher: () => newsService.getFollowingNews(req.userId!, page, limit, categories, mode),
+        started,
       });
-      const news = await translateNewsArticleDtos(newsEn, req.resolvedLanguage);
-      sendSuccess(res, { news });
     } catch (error: any) {
       sendError(res, error.message, 500);
     }
@@ -100,7 +110,6 @@ export const newsController = {
     console.info('[store-news] POST /api/news/store-news', upstreamCtx);
     try {
       const result = await ingestionService.storeNews();
-      // Registered feature key (see feature_registry); avoids invalidFeature and ensures trends match admin filters.
       try {
         await eventService.emitEvent({
           featureKey: 'news_feed',

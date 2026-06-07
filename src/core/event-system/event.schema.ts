@@ -23,6 +23,7 @@ export const emitEventSchema = z.object({
     .optional()
     .default({})
     .transform(parseBoundedMetadata),
+  preValidated: z.boolean().optional(),
 });
 
 export type EmitEventSchemaInput = z.infer<typeof emitEventSchema>;

@@ -1,31 +1,24 @@
 import type WebSocket from 'ws';
 import type { RuntimeKillSwitches } from '../core/runtime-config/runtimeConfig.types';
-import { getRuntimeSwitches } from '../core/runtime-config/runtimeConfig.service';
+import { getRuntimeSwitchesSync } from '../core/runtime-config/runtimeConfig.service';
 import { incrementComplianceMetric } from '../observability/complianceMetrics';
 
-let cachedSwitches: RuntimeKillSwitches | null = null;
-let cachedAt = 0;
-const SWITCH_TTL_MS = 10_000;
-
 export async function getWsRuntimeSwitches(): Promise<RuntimeKillSwitches> {
-  const now = Date.now();
-  if (cachedSwitches && now - cachedAt < SWITCH_TTL_MS) {
-    return cachedSwitches;
-  }
-  cachedSwitches = await getRuntimeSwitches();
-  cachedAt = now;
-  return cachedSwitches;
+  return getRuntimeSwitchesSync();
 }
 
 export function invalidateWsRuntimeSwitchCache(): void {
-  cachedSwitches = null;
-  cachedAt = 0;
+  /* snapshot managed by runtimeConfig.service refresh loop */
+}
+
+/** Sync read for WS upgrade hot path. */
+export function allowWsV1QueryTokenSync(): boolean {
+  return getRuntimeSwitchesSync().ws_protocol_v1_enabled;
 }
 
 /** Whether query-string JWT may bind user on connect (WS v1). */
 export async function allowWsV1QueryToken(): Promise<boolean> {
-  const switches = await getWsRuntimeSwitches();
-  return switches.ws_protocol_v1_enabled;
+  return allowWsV1QueryTokenSync();
 }
 
 /** Track v1 vs v2 auth path for metrics. */

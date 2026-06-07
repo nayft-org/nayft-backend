@@ -4,7 +4,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { AuthRequest } from '../../types';
 import { emitEventSchema } from './event.schema';
 import { redisEventQueue } from './redisEventQueue';
-import { getRuntimeSwitches } from '../runtime-config/runtimeConfig.service';
+import { getRuntimeSwitchesSync } from '../runtime-config/runtimeConfig.service';
 import { validateIncomingClientEvent } from './eventValidation.service';
 import { incrementComplianceMetric } from '../../observability/complianceMetrics';
 
@@ -16,7 +16,7 @@ import { incrementComplianceMetric } from '../../observability/complianceMetrics
 export const eventPublicController = {
   track: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const switches = await getRuntimeSwitches();
+      const switches = getRuntimeSwitchesSync();
 
       if (!switches.events_ingest_enabled || !switches.client_analytics_server_accept) {
         incrementComplianceMetric('eventsIngestDisabledTotal');

@@ -10,6 +10,9 @@ import { NewsBoard } from '../newsboard/model';
 import { followService } from '../follow/service';
 import { resolveFollowSymbolsForTargets } from '../follow/resolveFollowSymbols';
 
+const LIST_PROJECTION =
+  'externalId title subtitle imageUrl sourceUrl publishedAt source categories coins metrics sentiment sentimentStatus sentimentAnalysis';
+
 const ALLOWED_NEWS_CATEGORIES = new Set([
   'BTC',
   'ETH',
@@ -161,6 +164,7 @@ export const newsService = {
     }
 
     const articles = await NewsArticle.find(query)
+      .select(LIST_PROJECTION)
       .sort({ publishedAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -190,45 +194,51 @@ export const newsService = {
             .map((c) => c.toLowerCase())
         : [];
 
-    const followCoinIds = mode === 'users' ? [] : await followService.getFollowedCoinIds(userId);
-    const followUserIds = mode === 'coin' ? [] : await followService.getFollowedUserIds(userId);
+    const [followCoinIds, followUserIds] = await Promise.all([
+      mode === 'users' ? Promise.resolve([] as string[]) : followService.getFollowedCoinIds(userId),
+      mode === 'coin' ? Promise.resolve([] as string[]) : followService.getFollowedUserIds(userId),
+    ]);
 
     const candidateExternalIds = new Set<string>();
     const originByNewsId = new Map<string, 'coin' | 'user' | 'both'>();
 
-    if (followCoinIds.length > 0) {
-      const symbols = await resolveFollowSymbolsForTargets(followCoinIds);
+    const coinBranch =
+      followCoinIds.length > 0
+        ? (async () => {
+            const symbols = await resolveFollowSymbolsForTargets(followCoinIds);
+            if (symbols.length === 0) return;
+            const coinQuery: Record<string, unknown> = {
+              status: 'active',
+              'coins.symbol': { $in: symbols },
+            };
+            if (allowedCategoryKeys.length > 0) {
+              coinQuery['categories.key'] = { $in: allowedCategoryKeys };
+            }
+            const coinArticles = await NewsArticle.find(coinQuery)
+              .sort({ publishedAt: -1 })
+              .limit(limit * 2)
+              .select('externalId')
+              .lean<Array<{ externalId: string }>>();
+            for (const article of coinArticles) {
+              candidateExternalIds.add(article.externalId);
+              originByNewsId.set(article.externalId, 'coin');
+            }
+          })()
+        : Promise.resolve();
 
-      if (symbols.length > 0) {
-        const coinQuery: Record<string, unknown> = {
-          status: 'active',
-          'coins.symbol': { $in: symbols },
-        };
-        if (allowedCategoryKeys.length > 0) {
-          coinQuery['categories.key'] = { $in: allowedCategoryKeys };
-        }
+    const userBranch =
+      followUserIds.length > 0
+        ? (async () => {
+            const recentUserNewsIds = await getRecentNewsIdsEngagedByUsers(followUserIds, limit * 3);
+            for (const newsId of recentUserNewsIds) {
+              candidateExternalIds.add(newsId);
+              const existingOrigin = originByNewsId.get(newsId);
+              originByNewsId.set(newsId, existingOrigin === 'coin' ? 'both' : 'user');
+            }
+          })()
+        : Promise.resolve();
 
-        const coinArticles = await NewsArticle.find(coinQuery)
-          .sort({ publishedAt: -1 })
-          .limit(limit * 3)
-          .select('externalId')
-          .lean<Array<{ externalId: string }>>();
-
-        for (const article of coinArticles) {
-          candidateExternalIds.add(article.externalId);
-          originByNewsId.set(article.externalId, 'coin');
-        }
-      }
-    }
-
-    if (followUserIds.length > 0) {
-      const recentUserNewsIds = await getRecentNewsIdsEngagedByUsers(followUserIds, limit * 4);
-      for (const newsId of recentUserNewsIds) {
-        candidateExternalIds.add(newsId);
-        const existingOrigin = originByNewsId.get(newsId);
-        originByNewsId.set(newsId, existingOrigin === 'coin' ? 'both' : 'user');
-      }
-    }
+    await Promise.all([coinBranch, userBranch]);
 
     if (candidateExternalIds.size === 0) {
       return [];
@@ -244,6 +254,7 @@ export const newsService = {
 
     const skip = (Math.max(1, page) - 1) * Math.max(1, limit);
     const articles = await NewsArticle.find(query)
+      .select(LIST_PROJECTION)
       .sort({ publishedAt: -1 })
       .skip(skip)
       .limit(limit)

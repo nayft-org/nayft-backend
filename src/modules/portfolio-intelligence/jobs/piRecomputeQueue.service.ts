@@ -1,4 +1,4 @@
-import { redis } from '../../../config/redis';
+import { redis, redisBlocking } from '../../../config/redis';
 import { piConfig } from '../config/piConfig';
 import { piRedisKeys } from '../cache/piRedisKeys';
 
@@ -19,7 +19,7 @@ export async function readPiJobs(
 ): Promise<Array<{ id: string; job: string; stream: string }>> {
   const streams = [piRedisKeys.recomputeHigh, piRedisKeys.recomputeStream];
   for (const stream of streams) {
-    const rows = await redis.xreadgroup(
+    const rows = await redisBlocking.xreadgroup(
       'GROUP',
       piConfig.consumerGroup,
       consumerName,

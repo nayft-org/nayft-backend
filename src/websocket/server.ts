@@ -25,12 +25,16 @@ import {
   setPortfolioFanoutUserId,
 } from './portfolioFanout';
 import {
-  allowWsV1QueryToken,
+  allowWsV1QueryTokenSync,
   getWsRuntimeSwitches,
   recordWsProtocolVersion,
   rejectUnauthenticatedSubscription,
 } from './authGate';
 import { toWalletEventWsDto, type WalletEventWsDto } from './walletEventWsDto';
+import {
+  getOwnedAddressesCached,
+  prefetchOwnedAddresses,
+} from './walletOwnershipCache';
 
 const WS_PATH = '/ws';
 const SUBSCRIBE_IDLE_MS = 5000;
@@ -404,26 +408,23 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url?.split('?')[0];
     if (pathname === WS_PATH) {
-      void allowWsV1QueryToken().then((v1Allowed) => {
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          if (v1Allowed) {
-            try {
-              const host = request.headers.host || 'localhost';
-              const u = new URL(request.url || '/', `http://${host}`);
-              const tok = u.searchParams.get('token');
-              const dec = verifyAccessToken(tok);
-              if (dec?.userId) {
-                pendingNotifyUserId.set(ws, dec.userId);
-                recordWsProtocolVersion(1);
-              }
-            } catch {
-              /* ignore */
+      const v1Allowed = allowWsV1QueryTokenSync();
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        if (v1Allowed) {
+          try {
+            const host = request.headers.host || 'localhost';
+            const u = new URL(request.url || '/', `http://${host}`);
+            const tok = u.searchParams.get('token');
+            const dec = verifyAccessToken(tok);
+            if (dec?.userId) {
+              pendingNotifyUserId.set(ws, dec.userId);
+              recordWsProtocolVersion(1);
             }
+          } catch {
+            /* ignore */
           }
-          wss.emit('connection', ws, request);
-        });
-      }).catch(() => {
-        socket.destroy();
+        }
+        wss.emit('connection', ws, request);
       });
     } else {
       socket.destroy();
@@ -467,6 +468,10 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
         type: 'notification_subscribed',
         userId,
       });
+      void prefetchOwnedAddresses(userId, async () => {
+        const rows = await WalletAddress.find({ userId }).select('address').lean();
+        return rows.map((w) => String(w.address));
+      }).catch(() => {});
     };
 
     const pending = pendingNotifyUserId.get(ws);
@@ -538,11 +543,7 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
             .filter((a): a is string => typeof a === 'string' && a.length > 0)
             .map((a) => a.toLowerCase());
 
-          void (async () => {
-            const owned = await WalletAddress.find({ userId })
-              .select('address')
-              .lean();
-            const ownedSet = new Set(owned.map((w) => String(w.address).toLowerCase()));
+          const applySubscription = (ownedSet: Set<string>): void => {
             const allowed = requested.filter((a) => ownedSet.has(a));
             if (allowed.length < requested.length) {
               incrementComplianceMetric('portfolioSubscribeAuthzDeniedTotal');
@@ -555,6 +556,20 @@ export function attachWebSocketServer(httpServer: HttpServer): void {
               sendPortfolioLifecycleMessage(ws, 'portfolio_subscribed', subscribed);
               sendPortfolioLifecycleMessage(ws, 'portfolio_sync_ready', subscribed);
             }
+          };
+
+          const cached = getOwnedAddressesCached(userId);
+          if (cached) {
+            applySubscription(cached);
+            return;
+          }
+
+          void (async () => {
+            const ownedSet = await prefetchOwnedAddresses(userId, async () => {
+              const owned = await WalletAddress.find({ userId }).select('address').lean();
+              return owned.map((w) => String(w.address));
+            });
+            applySubscription(ownedSet);
           })();
         }
 

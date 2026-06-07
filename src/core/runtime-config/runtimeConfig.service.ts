@@ -11,6 +11,15 @@ let memoryCache: RuntimeConfigDocument | null = null;
 let memoryCacheAt = 0;
 const MEMORY_TTL_MS = 10_000;
 
+let switchSnapshot: RuntimeKillSwitches = { ...DEFAULT_RUNTIME_SWITCHES };
+let snapshotVersion = 0;
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+
+function syncSwitchSnapshot(cfg: RuntimeConfigDocument): void {
+  switchSnapshot = { ...cfg.switches };
+  snapshotVersion += 1;
+}
+
 function buildDefaultConfig(): RuntimeConfigDocument {
   return {
     version: 1,
@@ -67,6 +76,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfigDocument> {
   if (fromRedis) {
     memoryCache = fromRedis;
     memoryCacheAt = now;
+    syncSwitchSnapshot(fromRedis);
     return fromRedis;
   }
 
@@ -74,6 +84,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfigDocument> {
   if (fromMongo) {
     memoryCache = fromMongo;
     memoryCacheAt = now;
+    syncSwitchSnapshot(fromMongo);
     try {
       await redis.set(RUNTIME_CONFIG_REDIS_KEY, JSON.stringify(fromMongo), 'EX', 30);
     } catch {
@@ -85,7 +96,29 @@ export async function getRuntimeConfig(): Promise<RuntimeConfigDocument> {
   const defaults = buildDefaultConfig();
   memoryCache = defaults;
   memoryCacheAt = now;
+  syncSwitchSnapshot(defaults);
   return defaults;
+}
+
+/** Zero I/O hot-path read of kill switches (refreshed every 10s). */
+export function getRuntimeSwitchesSync(): RuntimeKillSwitches {
+  return switchSnapshot;
+}
+
+export function getSnapshotVersion(): number {
+  return snapshotVersion;
+}
+
+export async function refreshRuntimeConfigSnapshot(): Promise<void> {
+  const cfg = await getRuntimeConfig();
+  syncSwitchSnapshot(cfg);
+}
+
+export function startRuntimeConfigRefreshLoop(intervalMs = 10_000): void {
+  if (refreshInterval) return;
+  refreshInterval = setInterval(() => {
+    void refreshRuntimeConfigSnapshot().catch(() => {});
+  }, intervalMs);
 }
 
 export async function getRuntimeSwitches(): Promise<RuntimeKillSwitches> {
@@ -128,6 +161,7 @@ export async function patchRuntimeConfig(
   await redis.set(RUNTIME_CONFIG_REDIS_KEY, JSON.stringify(next), 'EX', 30);
   memoryCache = next;
   memoryCacheAt = Date.now();
+  syncSwitchSnapshot(next);
   return next;
 }
 

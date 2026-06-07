@@ -6,9 +6,15 @@ import { accountDeletionService } from './accountDeletion.service';
 
 export const userService = {
   getPreferences: async (userId: string): Promise<{ preferredLanguage: string | null; personalizationEnabled: boolean }> => {
-    const preferredLanguage = await userRepository.getPreferredLanguage(userId);
-    const personalizationEnabled = await userRepository.getPersonalizationEnabled(userId);
-    return { preferredLanguage, personalizationEnabled };
+    const doc = await userRepository.findById(userId);
+    if (!doc) {
+      return { preferredLanguage: null, personalizationEnabled: true };
+    }
+    const raw = doc as { preferredLanguage?: string | null; personalizationEnabled?: boolean };
+    return {
+      preferredLanguage: raw.preferredLanguage ?? null,
+      personalizationEnabled: raw.personalizationEnabled !== false,
+    };
   },
 
   updatePreferences: async (

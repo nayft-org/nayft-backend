@@ -34,6 +34,7 @@ import {
 import { emitHoldingsDeltaUpdate, emitWalletStatusUpdate } from '../../services/walletEventAggregator';
 import { recomputeEnqueueService } from '../portfolio-intelligence/services/recomputeEnqueue.service';
 import { piConfig } from '../portfolio-intelligence/config/piConfig';
+import { walletOwnershipCacheInvalidation } from '../../runtime/cacheInvalidation';
 
 function shortAddress(address: string | undefined | null): string {
   if (!address) return 'n/a';
@@ -142,6 +143,7 @@ export const portfolioService = {
       throw error;
     }
     await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
+    walletOwnershipCacheInvalidation.onWalletAddressesChanged(userId);
 
     if (piConfig.enqueueEnabled || piConfig.workerEnabled) {
       void recomputeEnqueueService.enqueue(userId, 'wallet_change', { bypassDebounce: true });
@@ -256,6 +258,7 @@ export const portfolioService = {
     const deleted = await portfolioRepository.deleteWallet(walletId, userId);
     if (!deleted) throw new Error('Wallet not found');
     await portfolioRepository.deleteHoldingsByUser(userId).catch(() => {});
+    walletOwnershipCacheInvalidation.onWalletAddressesChanged(userId);
 
     console.log('[PortfolioService] removeWallet success', {
       userId,

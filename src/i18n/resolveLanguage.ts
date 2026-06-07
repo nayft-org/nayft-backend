@@ -6,6 +6,24 @@ import {
   type SupportedLanguage,
 } from '../modules/user/supportedLanguages';
 
+let multiLangCached: { value: boolean; expires: number } | null = null;
+const MULTI_LANG_CACHE_MS = 60_000;
+
+async function isMultiLanguageActive(): Promise<boolean> {
+  const now = Date.now();
+  if (multiLangCached && multiLangCached.expires > now) {
+    return multiLangCached.value;
+  }
+  let active = false;
+  try {
+    active = await featureService.isActive('multi_language');
+  } catch {
+    active = false;
+  }
+  multiLangCached = { value: active, expires: now + MULTI_LANG_CACHE_MS };
+  return active;
+}
+
 /**
  * Parses Accept-Language (RFC 7231) and returns first supported base language tag.
  */
@@ -39,7 +57,7 @@ export function resolveLanguageMiddleware(req: Request, _res: Response, next: Ne
   void (async () => {
     let multiLang = false;
     try {
-      multiLang = await featureService.isActive('multi_language');
+      multiLang = await isMultiLanguageActive();
     } catch {
       multiLang = false;
     }

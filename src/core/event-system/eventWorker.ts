@@ -7,7 +7,7 @@ import { featureExists } from '../feature-system/featureValidator';
 import { redisEventQueue, EVENT_QUEUE_KEY } from './redisEventQueue';
 import type { EmitEventPayload } from './event.types';
 import { validateIncomingClientEvent } from './eventValidation.service';
-import { getRuntimeSwitches } from '../runtime-config/runtimeConfig.service';
+import { getRuntimeSwitchesSync } from '../runtime-config/runtimeConfig.service';
 import { incrementComplianceMetric } from '../../observability/complianceMetrics';
 import { emitEventSchema } from './event.schema';
 
@@ -49,7 +49,9 @@ async function persistWithRetry(
   throw lastError;
 }
 
-async function processOne(): Promise<boolean> {
+async function processOne(
+  switches = getRuntimeSwitchesSync()
+): Promise<boolean> {
   const result = await redisBlocking.brpop(EVENT_QUEUE_KEY, 5);
   if (!result) return false;
 
@@ -71,7 +73,6 @@ async function processOne(): Promise<boolean> {
     return true;
   }
 
-  const switches = await getRuntimeSwitches();
   const validated = validateIncomingClientEvent(
     {
       featureKey: payload.featureKey,
@@ -90,13 +91,21 @@ async function processOne(): Promise<boolean> {
   payload = validated.payload;
 
   const { featureKey } = payload;
-  const exists = await featureExists(featureKey);
-  const invalidFeature = !exists;
-  if (invalidFeature) {
-    console.warn(`[EventSystem] Invalid featureKey: ${featureKey}`);
+  const isSystemEvent = featureKey.startsWith('system');
+  let invalidFeature = false;
+  if (!isSystemEvent) {
+    const exists = await featureExists(featureKey);
+    invalidFeature = !exists;
+    if (invalidFeature) {
+      console.warn(`[EventSystem] Invalid featureKey: ${featureKey}`);
+    }
   }
 
-  const toPersist = { ...payload, metadata: payload.metadata || {} };
+  const toPersist = {
+    ...payload,
+    metadata: payload.metadata || {},
+    preValidated: true,
+  };
   try {
     await persistWithRetry(toPersist, invalidFeature);
     incrementComplianceMetric('eventsIngestAcceptedTotal');
@@ -110,10 +119,11 @@ async function processOne(): Promise<boolean> {
 }
 
 export async function runEventWorker(): Promise<void> {
+  await ensureBlockingRedisConnected();
   while (!isRedisShutdownRequested()) {
     try {
-      await ensureBlockingRedisConnected();
-      const processed = await processOne();
+      const switches = getRuntimeSwitchesSync();
+      const processed = await processOne(switches);
       if (!processed) continue;
     } catch (err) {
       if (isConnectionClosedError(err)) break;

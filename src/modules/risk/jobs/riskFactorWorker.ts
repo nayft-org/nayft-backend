@@ -1,4 +1,4 @@
-import { redis } from '../../../config/redis';
+import { redis, redisBlocking } from '../../../config/redis';
 import { connectDatabase } from '../../../config/database';
 import { loadFrozenUniverse } from '../universe/rrsUniverse.service';
 import {
@@ -56,7 +56,7 @@ export async function runRiskFactorWorker(): Promise<void> {
   console.log('[RiskFactorWorker] started', WORKER_NAME);
 
   for (;;) {
-    const batches = (await redis.xreadgroup(
+    const batches = (await redisBlocking.xreadgroup(
       'GROUP',
       RISK_FACTOR_GROUP,
       WORKER_NAME,

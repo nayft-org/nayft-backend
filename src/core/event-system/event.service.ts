@@ -2,7 +2,7 @@ import { SystemEvent } from './event.model';
 import type { EmitEventPayload } from './event.types';
 import { featureExists } from '../feature-system/featureValidator';
 import { validateServerEvent } from './eventValidation.service';
-import { getRuntimeSwitches } from '../runtime-config/runtimeConfig.service';
+import { getRuntimeSwitchesSync } from '../runtime-config/runtimeConfig.service';
 
 export const eventService = {
   /** Raw persist to MongoDB. Used by emitEvent and queue worker. */
@@ -10,21 +10,28 @@ export const eventService = {
     payload: EmitEventPayload,
     invalidFeature = false
   ): Promise<void> {
-    const switches = await getRuntimeSwitches();
-    const validated = validateServerEvent(
-      {
-        featureKey: payload.featureKey,
-        eventType: payload.eventType,
-        userId: payload.userId,
-        metadata: payload.metadata || {},
-      },
-      switches.events_schema_enforcement
-    );
-    if (!validated.accept) {
-      console.warn('[EventSystem] Server event rejected:', validated.reason, payload);
-      return;
+    const switches = getRuntimeSwitchesSync();
+    let featureKey = payload.featureKey;
+    let eventType = payload.eventType;
+    let userId = payload.userId;
+    let metadata = payload.metadata || {};
+
+    if (!payload.preValidated) {
+      const validated = validateServerEvent(
+        {
+          featureKey: payload.featureKey,
+          eventType: payload.eventType,
+          userId: payload.userId,
+          metadata,
+        },
+        switches.events_schema_enforcement
+      );
+      if (!validated.accept) {
+        console.warn('[EventSystem] Server event rejected:', validated.reason, payload);
+        return;
+      }
+      ({ featureKey, eventType, userId, metadata = {} } = validated.payload);
     }
-    const { featureKey, eventType, userId, metadata = {} } = validated.payload;
     await SystemEvent.create({
       featureKey,
       eventType,
