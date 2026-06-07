@@ -9,12 +9,26 @@ export const CLIENT_EVENT_DEFINITIONS = {
   'auth:login_attempt': z.object({}).strict(),
   'auth:google_login_attempt': z.object({}).strict(),
   'auth:navigate_to_register': z.object({}).strict(),
+  'auth:weak_password_attempt': z.object({
+    strengthLevel: z.enum(['poor', 'low']),
+    violationCount: z.number().int().nonnegative(),
+  }),
 } as const;
 
 export const SERVER_EVENT_DEFINITIONS = {
-  'auth:signup': z.object({}).strict(),
+  'auth:signup': z.object({
+    passwordStrength: z.enum(['strong']).optional(),
+  }).strict(),
   'auth:login': z.object({}).strict(),
   'auth:google_login': z.object({}).strict(),
+  'auth:password_validation_failed': z.object({
+    level: z.enum(['poor', 'low', 'strong']),
+    violations: z.string().max(200),
+    endpoint: z.enum(['signup', 'change-password', 'reset-password']),
+  }),
+  'auth:strong_password_created': z.object({
+    scoreBand: z.enum(['3', '4']),
+  }),
   'news_feed:article_viewed': z.object({
     newsId: z.string().regex(objectIdRegex),
   }),
@@ -62,6 +76,7 @@ const MAX_METADATA_KEYS = 10;
 
 const WALLET_REGEX = /0x[a-fA-F0-9]{40}/;
 const EMAIL_REGEX = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+const PASSWORD_LIKE_REGEX = /password|passwd|pwd/i;
 
 export function eventRegistryKey(featureKey: string, eventType: string): string {
   return `${featureKey}:${eventType}`;
@@ -113,7 +128,7 @@ function boundMetadata(metadata: Record<string, unknown>): Record<string, unknow
   for (const k of keys) {
     const v = metadata[k];
     if (typeof v === 'string') {
-      if (WALLET_REGEX.test(v) || EMAIL_REGEX.test(v)) continue;
+      if (WALLET_REGEX.test(v) || EMAIL_REGEX.test(v) || PASSWORD_LIKE_REGEX.test(k)) continue;
       out[k] = v.slice(0, 200);
     } else if (typeof v === 'number' || typeof v === 'boolean' || v === null) {
       out[k] = v;

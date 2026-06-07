@@ -14,6 +14,14 @@ export const authRepository = {
     return User.findById(id).select('-passwordHash');
   },
 
+  findByIdWithPassword: async (id: string): Promise<IUser | null> => {
+    return User.findById(id);
+  },
+
+  updatePassword: async (id: string, passwordHash: string): Promise<void> => {
+    await User.findByIdAndUpdate(id, { passwordHash });
+  },
+
   findByIds: async (ids: string[]): Promise<IUser[]> => {
     if (ids.length === 0) return [];
     return User.find({ _id: { $in: ids } }).select('-passwordHash');

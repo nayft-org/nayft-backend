@@ -19,3 +19,17 @@ export const sendError = (res: Response, error: string, statusCode: number = 400
   res.status(statusCode).json(response);
 };
 
+export const sendPolicyError = (
+  res: Response,
+  error: string,
+  statusCode: number = 400,
+  data?: Record<string, unknown>
+): void => {
+  const response: ApiResponse = {
+    success: false,
+    data,
+    error,
+  };
+  res.status(statusCode).json(response);
+};
+

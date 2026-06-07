@@ -8,10 +8,17 @@ import { onboardingService } from '../onboarding/service';
 import { eventService } from '../../core/event-system';
 import { signAccessToken } from '../../middlewares/jwtPayload';
 import { config } from '../../config/env';
+import { validatePasswordForSignup } from './passwordValidation.service';
+import { authMetrics } from '../../observability/authMetrics';
 
 export const authService = {
   signup: async (signupDto: SignupDto): Promise<{ user: IUser; token: string }> => {
     const { email, password, username } = signupDto;
+
+    const passwordCheck = validatePasswordForSignup(password, { email, username });
+    if (!passwordCheck.valid) {
+      throw new Error('Password does not meet strength requirements');
+    }
 
     // Check if user exists
     const existingUser = await authRepository.findByEmail(email);
@@ -43,14 +50,64 @@ export const authService = {
       preferredLanguage: (userObj as IUser).preferredLanguage ?? null,
     });
 
+    authMetrics.passwordSignupAcceptedTotal += 1;
+
     eventService.emitEvent({
       featureKey: 'auth',
       eventType: 'signup',
       userId: user._id.toString(),
-      metadata: {},
+      metadata: { passwordStrength: 'strong' },
+    }).catch(() => {});
+
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'strong_password_created',
+      userId: user._id.toString(),
+      metadata: { scoreBand: passwordCheck.score >= 4 ? '4' : '3' },
     }).catch(() => {});
 
     return { user: userObj as IUser, token };
+  },
+
+  changePassword: async (
+    userId: string,
+    body: { currentPassword: string; newPassword: string }
+  ): Promise<void> => {
+    const user = await authRepository.findByIdWithPassword(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const isValid = await bcrypt.compare(body.currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new Error('Current password is incorrect');
+    }
+
+    const passwordCheck = validatePasswordForSignup(body.newPassword, {
+      email: user.email,
+      username: user.username,
+    });
+    if (!passwordCheck.valid) {
+      throw new Error('New password does not meet strength requirements');
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 10);
+    await authRepository.updatePassword(userId, passwordHash);
+
+    eventService.emitEvent({
+      featureKey: 'auth',
+      eventType: 'strong_password_created',
+      userId,
+      metadata: { scoreBand: passwordCheck.score >= 4 ? '4' : '3' },
+    }).catch(() => {});
+  },
+
+  resetPassword: async (_body: {
+    token: string;
+    email: string;
+    newPassword: string;
+  }): Promise<void> => {
+    throw new Error('Password reset is not yet available');
   },
 
   login: async (loginDto: LoginDto): Promise<{ user: IUser; token: string }> => {

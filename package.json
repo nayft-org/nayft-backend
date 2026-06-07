@@ -49,6 +49,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@nayft/password-policy": "file:./packages/nayft-password-policy",
+    "@zxcvbn-ts/core": "^3.0.4",
+    "@zxcvbn-ts/language-common": "^3.0.4",
+    "@zxcvbn-ts/language-en": "^3.0.2",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",

@@ -1,0 +1,14 @@
+{
+  "name": "@nayft/password-policy",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@zxcvbn-ts/core": "^3.0.4",
+    "@zxcvbn-ts/language-common": "^3.0.4",
+    "@zxcvbn-ts/language-en": "^3.0.2",
+    "zod": "^4.3.6"
+  }
+}
