@@ -20,12 +20,19 @@ function syncSwitchSnapshot(cfg: RuntimeConfigDocument): void {
   snapshotVersion += 1;
 }
 
+function defaultMinAppVersion(): string {
+  if (process.env.MIN_APP_VERSION?.trim()) {
+    return process.env.MIN_APP_VERSION.trim();
+  }
+  return process.env.NODE_ENV === 'production' ? '1.0.0' : '0.0.0';
+}
+
 function buildDefaultConfig(): RuntimeConfigDocument {
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
     switches: { ...DEFAULT_RUNTIME_SWITCHES },
-    minAppVersion: '1.0.0',
+    minAppVersion: defaultMinAppVersion(),
   };
 }
 
