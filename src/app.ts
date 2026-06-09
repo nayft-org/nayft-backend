@@ -37,9 +37,10 @@ import riskRoutes from './modules/risk/routes';
 import riskAdminRoutes from './modules/risk/adminRoutes';
 import publicFeatureRoutes from './core/public/routes';
 import { authenticate } from './middlewares/auth';
-import { redis } from './config/redis';
+import { getRedisDiagnostics, redis } from './config/redis';
 import { validateEmailRuntimeConfig } from './modules/email/emailRuntimeValidation';
 import { emailRedisKeys } from './modules/email/email.redisKeys';
+import { getBootTraceSnapshot } from './observability/bootTrace';
 
 const app: Application = express();
 
@@ -89,6 +90,8 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/ready', async (_req, res) => {
+  const startedAt = Date.now();
+  const boot = getBootTraceSnapshot();
   const requireEmailChecks =
     config.emailProvider === 'mailtrap' ||
     (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
@@ -124,10 +127,34 @@ app.get('/ready', async (_req, res) => {
       checks.emailWorkerHeartbeatReason = err instanceof Error ? err.message : 'heartbeat_check_failed';
     }
   }
-  const ok = checks.mongo && checks.redis && checks.emailRuntime && checks.emailWorkerHeartbeat;
+  const ok =
+    checks.mongo &&
+    checks.redis &&
+    checks.emailRuntime &&
+    checks.emailWorkerHeartbeat &&
+    !Boolean(boot.failed);
+  const reason =
+    !checks.mongo
+      ? 'MongoDB not connected'
+      : !checks.redis
+        ? `Redis check failed: ${String(checks.redisReason || 'unknown')}`
+        : !checks.emailRuntime
+          ? `Email runtime invalid: ${String(checks.emailRuntimeReason || 'unknown')}`
+          : !checks.emailWorkerHeartbeat
+            ? `Email worker heartbeat missing: ${String(checks.emailWorkerHeartbeatReason || 'unknown')}`
+            : boot.failed
+              ? `Boot failed at ${String(boot.currentPhase)}: ${String(boot.failureReason || 'unknown')}`
+              : 'ok';
   res.status(ok ? 200 : 503).json({
     status: ok ? 'ready' : 'not_ready',
+    phase: String(boot.currentPhase || 'unknown'),
+    reason,
+    startupElapsedMs: boot.startupElapsedMs,
+    readinessCheckMs: Date.now() - startedAt,
+    traceId: boot.traceId,
     timestamp: new Date().toISOString(),
+    boot,
+    redis: getRedisDiagnostics(),
     checks,
   });
 });

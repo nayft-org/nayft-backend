@@ -29,6 +29,14 @@ import { riskConfig } from './modules/risk/config/riskConfig';
 import { runRiskFactorWorker } from './modules/risk/jobs/riskFactorWorker';
 import { assertEmailRuntimeConfigOrThrow } from './modules/email/emailRuntimeValidation';
 import {
+  completeBootPhase,
+  failBootPhase,
+  markBootWarn,
+  markShutdown,
+  startBootPhase,
+  withBootPhase,
+} from './observability/bootTrace';
+import {
   computeRolloutHealthScore,
 } from './observability/rolloutHealthScore';
 import {
@@ -45,19 +53,45 @@ let stopInlineTickerRef: (() => void) | null = null;
 /** Stops the colocated exchange poll loop when set. */
 let stopExchangePollRef: (() => void) | null = null;
 
-const startServer = async (): Promise<void> => {
-  try {
-    // Connect to database
-    await connectDatabase();
-    assertEmailRuntimeConfigOrThrow();
+function sanitizeFatal(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/(token|secret|password|apikey|api_key|authorization)\s*[:=]\s*([^\s,;]+)/gi, '$1=[REDACTED]')
+    .slice(0, 500);
+}
 
-    await refreshRuntimeConfigSnapshot();
-    startRuntimeConfigRefreshLoop(10_000);
+process.on('unhandledRejection', (reason) => {
+  failBootPhase('unhandled_rejection', reason, { reason: sanitizeFatal(reason) });
+});
+
+process.on('uncaughtException', (err) => {
+  failBootPhase('uncaught_exception', err, { reason: sanitizeFatal(err) });
+  process.exit(1);
+});
+
+const startServer = async (): Promise<void> => {
+  startBootPhase('boot_start', { nodeEnv: config.nodeEnv, pid: process.pid });
+  try {
+    await withBootPhase('env_validation', async () => {
+      assertEmailRuntimeConfigOrThrow();
+    });
+
+    await withBootPhase('mongo_connect', async () => {
+      await connectDatabase();
+    });
+
+    await withBootPhase('runtime_config_init', async () => {
+      await refreshRuntimeConfigSnapshot();
+      startRuntimeConfigRefreshLoop(10_000);
+    });
 
     if (process.env.ENSURE_EVENTS_TTL_ON_BOOT === 'true') {
       import('./core/event-system/ensureEventsTtl')
         .then((m) => m.ensureEventsTtlIndex())
-        .catch((err) => console.error('[EventsTTL] boot ensure failed', err));
+        .catch((err) => {
+          markBootWarn('events_ttl_boot', err instanceof Error ? err.message : String(err));
+          console.error('[EventsTTL] boot ensure failed', err);
+        });
     }
 
     setInterval(() => {
@@ -67,41 +101,67 @@ const startServer = async (): Promise<void> => {
       }
     }, 60_000);
 
-    await refreshCoinDictionary().catch((err) => console.error('[CoinDictionary] initial load failed', err));
-    startCoinDictionaryRefresh();
+    await withBootPhase('coin_dictionary_init', async () => {
+      await refreshCoinDictionary();
+      startCoinDictionaryRefresh();
+    }).catch((err) => {
+      markBootWarn('coin_dictionary_init', err instanceof Error ? err.message : String(err));
+    });
 
-    // Auto-register features from modules
-    await bootstrapFeatures();
-    await bootstrapAuthVerificationFeatures();
-    const grandfathered = await authRepository.grandfatherExistingUsers();
-    if (grandfathered > 0) {
-      console.log(`[Auth] Grandfathered ${grandfathered} existing users as emailVerified`);
-    }
-    await bootstrapComplianceFeatures();
-    await bootstrapPiFeatures();
+    await withBootPhase('feature_bootstrap', async () => {
+      await bootstrapFeatures();
+      await bootstrapAuthVerificationFeatures();
+      const grandfathered = await authRepository.grandfatherExistingUsers();
+      if (grandfathered > 0) {
+        console.log(`[Auth] Grandfathered ${grandfathered} existing users as emailVerified`);
+      }
+      await bootstrapComplianceFeatures();
+      await bootstrapPiFeatures();
+    });
 
-    // Seed plans if empty
-    await bootstrapPlans();
+    await withBootPhase('plan_bootstrap', async () => {
+      await bootstrapPlans();
+    });
 
     // Start event queue worker (non-blocking)
-    setImmediate(() => runEventWorker().catch((err) => console.error('[EventWorker] Fatal:', err)));
-    setImmediate(() => runEmailWorker().catch((err) => console.error('[EmailWorker] Fatal:', err)));
+    startBootPhase('worker_init');
+    setImmediate(() => runEventWorker().catch((err) => {
+      failBootPhase('worker_event', err);
+      console.error('[EventWorker] Fatal:', err);
+    }));
+    setImmediate(() => runEmailWorker().catch((err) => {
+      failBootPhase('worker_email', err);
+      console.error('[EmailWorker] Fatal:', err);
+    }));
     setImmediate(() =>
-      runNotificationStreamWorker().catch((err) => console.error('[NotificationStreamWorker] Fatal:', err))
+      runNotificationStreamWorker().catch((err) => {
+        failBootPhase('worker_notification_stream', err);
+        console.error('[NotificationStreamWorker] Fatal:', err);
+      })
     );
     setImmediate(() =>
-      runSentimentStreamWorker().catch((err) => console.error('[SentimentWorker] Fatal:', err))
+      runSentimentStreamWorker().catch((err) => {
+        failBootPhase('worker_sentiment', err);
+        console.error('[SentimentWorker] Fatal:', err);
+      })
     );
     if (piConfig.workerEnabled) {
       setImmediate(() =>
-        runPiRecomputeWorker().catch((err) => console.error('[PI Worker] Fatal:', err))
+        runPiRecomputeWorker().catch((err) => {
+          failBootPhase('worker_pi_recompute', err);
+          console.error('[PI Worker] Fatal:', err);
+        })
       );
     }
     if (riskConfig.buildEnabled || riskConfig.shadowMode) {
       setImmediate(() =>
-        runRiskFactorWorker().catch((err) => console.error('[RiskFactorWorker] Fatal:', err))
+        runRiskFactorWorker().catch((err) => {
+          failBootPhase('worker_risk_factor', err);
+          console.error('[RiskFactorWorker] Fatal:', err);
+        })
       );
     }
+    completeBootPhase('worker_init');
     cron.schedule('0 4 * * *', () => {
       runCategoryCatalogSync().catch((err) => console.error('[PI CategorySync]', err));
     });
@@ -119,8 +179,11 @@ const startServer = async (): Promise<void> => {
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
     // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.
     // When running `dev:worker:streams` separately, set DISABLE_INLINE_TICKER_INGESTION=true to avoid duplicate Binance connections.
-    const httpServer = http.createServer(app);
-    attachWebSocketServer(httpServer);
+    const httpServer = await withBootPhase('http_server_init', async () => {
+      const server = http.createServer(app);
+      attachWebSocketServer(server);
+      return server;
+    });
     if (process.env.DISABLE_INLINE_TICKER_INGESTION === 'true') {
       stopInlineTickerRef = null;
       console.log(
@@ -153,14 +216,18 @@ const startServer = async (): Promise<void> => {
 
     const port = config.port;
     const host = config.host;
+    startBootPhase('http_listen');
     httpServer.listen(port, host, () => {
+      completeBootPhase('http_listen', { host, port });
       console.log(`🚀 Server listening on http://${host}:${port}`);
       console.log(`📡 Environment: ${config.nodeEnv}`);
       console.log(`🔗 API: http://${host}:${port}/api`);
       console.log(`🔌 WebSocket: ws://${host}:${port}/ws`);
       console.log(`📈 Charts: http://${host}:${port}/api/charts/klines`);
+      completeBootPhase('boot_start', { host, port, nodeEnv: config.nodeEnv });
     });
   } catch (error) {
+    failBootPhase('boot_start', error, { reason: sanitizeFatal(error) });
     console.error('Failed to start server:', error);
     process.exit(1);
   }
@@ -181,11 +248,13 @@ function shutdownExchangePoll(): void {
 }
 
 process.on('SIGINT', () => {
+  markShutdown('SIGINT');
   shutdownInlineTicker();
   shutdownExchangePoll();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
+  markShutdown('SIGTERM');
   shutdownInlineTicker();
   shutdownExchangePoll();
   process.exit(0);

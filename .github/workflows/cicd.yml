@@ -209,8 +209,10 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
+          DIAG_DIR="${GITHUB_WORKSPACE}/deploy-diagnostics"
+          mkdir -p "${DIAG_DIR}"
           echo "--- compose ps ---"
-          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps.txt"
 
           echo "--- waiting for backend readiness ---"
           for i in $(seq 1 30); do
@@ -218,30 +220,63 @@ jobs:
             if [[ "${status_code}" == "200" ]]; then
               echo "Backend ready after ${i} attempt(s)"
               cat /tmp/backend-ready.json
+              cat /tmp/backend-ready.json > "${DIAG_DIR}/ready-final.json"
               echo
               exit 0
             fi
             echo "Attempt ${i}: /ready returned HTTP ${status_code}"
+            {
+              echo "attempt=${i} status=${status_code} ts=$(date -Is)"
+              [[ -s /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json
+              echo
+            } >> "${DIAG_DIR}/ready-attempts.log"
             if [[ -s /tmp/backend-ready.json ]]; then
               echo "Readiness payload:"
               cat /tmp/backend-ready.json
             fi
             if (( i % 5 == 0 )); then
               echo "--- docker inspect health (crypto-backend) ---"
-              ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State.Health}}' || true
+              ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State.Health}}' \
+                | tee -a "${DIAG_DIR}/backend-health-inspect.log" || true
+              echo "--- docker inspect health (crypto-stream-worker) ---"
+              ${DOCKER_WRAP}docker inspect crypto-stream-worker --format '{{json .State.Health}}' \
+                | tee -a "${DIAG_DIR}/stream-worker-health-inspect.log" || true
               echo "--- recent backend logs ---"
-              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=80 backend || true
+              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=120 backend \
+                | tee -a "${DIAG_DIR}/backend-tail.log" || true
             fi
             sleep 2
           done
 
           echo "::error::Backend did not become healthy within 60s"
           echo "--- final backend inspect ---"
-          ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State}}' || true
+          ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State}}' \
+            | tee "${DIAG_DIR}/backend-state.json" || true
+          echo "--- final stream-worker inspect ---"
+          ${DOCKER_WRAP}docker inspect crypto-stream-worker --format '{{json .State}}' \
+            | tee "${DIAG_DIR}/stream-worker-state.json" || true
           echo "--- final readiness payload (if any) ---"
           [[ -f /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json || true
-          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=80 backend stream-worker
+          [[ -f /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json > "${DIAG_DIR}/ready-final.json" || true
+          echo "--- docker stats snapshot ---"
+          ${DOCKER_WRAP}docker stats --no-stream | tee "${DIAG_DIR}/docker-stats.txt" || true
+          echo "--- backend logs (tail 500) ---"
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=500 backend \
+            | tee "${DIAG_DIR}/backend-logs-tail500.txt" || true
+          echo "--- stream-worker logs (tail 500) ---"
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=500 stream-worker \
+            | tee "${DIAG_DIR}/stream-worker-logs-tail500.txt" || true
+          echo "--- docker compose ps (final) ---"
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps-final.txt" || true
           exit 1
+
+      - name: Upload deployment diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-diagnostics-${{ github.run_id }}
+          path: ${{ github.workspace }}/deploy-diagnostics
+          retention-days: 14
 
       - name: Cleanup workspace secrets
         if: always()

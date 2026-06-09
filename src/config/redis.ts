@@ -1,6 +1,12 @@
 import Redis from 'ioredis';
 import { config } from './env';
 
+let redisLastError: string | null = null;
+let redisLastConnectedAt: string | null = null;
+let redisReconnectCount = 0;
+let redisBlockingLastError: string | null = null;
+let redisBlockingReconnectCount = 0;
+
 // Create Redis client with retry strategy
 export const redis = new Redis(config.redisUrl, {
   maxRetriesPerRequest: 3,
@@ -36,22 +42,28 @@ export function isRedisShutdownRequested(): boolean {
 
 // Redis connection event handlers
 redis.on('connect', () => {
+  redisLastConnectedAt = new Date().toISOString();
+  redisLastError = null;
   console.log('✅ Redis connected');
 });
 
 redis.on('error', (err) => {
+  redisLastError = err.message;
   console.error('❌ Redis error:', err.message);
 });
 
 redis.on('reconnecting', () => {
+  redisReconnectCount += 1;
   console.log('🔄 Redis reconnecting...');
 });
 
 redisBlocking.on('error', (err) => {
+  redisBlockingLastError = err.message;
   console.error('❌ Redis (blocking) error:', err.message);
 });
 
 redisBlocking.on('reconnecting', () => {
+  redisBlockingReconnectCount += 1;
   console.log('🔄 Redis (blocking) reconnecting...');
 });
 
@@ -119,3 +131,15 @@ export const cacheHelpers = {
 };
 
 export default redis;
+
+export function getRedisDiagnostics(): Record<string, unknown> {
+  return {
+    redisStatus: redis.status,
+    redisBlockingStatus: redisBlocking.status,
+    redisLastError,
+    redisBlockingLastError,
+    redisReconnectCount,
+    redisBlockingReconnectCount,
+    redisLastConnectedAt,
+  };
+}
