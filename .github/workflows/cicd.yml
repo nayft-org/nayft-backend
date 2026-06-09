@@ -224,69 +224,122 @@ jobs:
           DEPLOY_EXIT_CODE="${{ steps.deploy_stack.outputs.deploy_exit_code }}"
           DEPLOY_EXIT_CODE="${DEPLOY_EXIT_CODE:-1}"
           echo "deploy_exit_code=${DEPLOY_EXIT_CODE}" | tee "${DIAG_DIR}/deploy-status.txt"
-          echo "--- compose ps ---"
+          echo "=============================="
+          echo "DOCKER COMPOSE PS"
+          echo "=============================="
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps.txt"
 
-          echo "--- waiting for backend readiness ---"
+          echo "=============================="
+          echo "READINESS RETRY LOOP"
+          echo "=============================="
           ready_ok=0
-          for i in $(seq 1 30); do
+          max_attempts=30
+          attempt_interval_sec=2
+          for i in $(seq 1 "${max_attempts}"); do
             status_code="$(curl -sS -o /tmp/backend-ready.json -w '%{http_code}' http://127.0.0.1:4001/ready || true)"
             if [[ "${status_code}" == "200" ]]; then
-              echo "Backend ready after ${i} attempt(s)"
+              echo "Readiness check attempt ${i}/${max_attempts}: HTTP ${status_code} (ready)"
+              echo "FULL /ready RESPONSE:"
               cat /tmp/backend-ready.json
               cat /tmp/backend-ready.json > "${DIAG_DIR}/ready-final.json"
               ready_ok=1
               break
             fi
-            echo "Attempt ${i}: /ready returned HTTP ${status_code}"
+            echo "Readiness check attempt ${i}/${max_attempts}: HTTP ${status_code} (not ready)"
+            if [[ -s /tmp/backend-ready.json ]]; then
+              node -e "const fs=require('fs');const raw=fs.readFileSync('/tmp/backend-ready.json','utf8');try{const j=JSON.parse(raw);console.log('Reason:',j.reason||'unknown');console.log('FailureCategory:',j.failureCategory||'UNKNOWN');console.log('Phase:',j.phase||'unknown');console.log('FailedChecks:',JSON.stringify(j.checks||{}));}catch{console.log('Reason: invalid_json_response');}" || true
+            fi
             {
-              echo "attempt=${i} status=${status_code} ts=$(date -Is)"
+              echo "attempt=${i}/${max_attempts} status=${status_code} ts=$(date -Is)"
               [[ -s /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json
               echo
             } >> "${DIAG_DIR}/ready-attempts.log"
             if [[ -s /tmp/backend-ready.json ]]; then
-              echo "Readiness payload:"
+              echo "FULL /ready RESPONSE:"
               cat /tmp/backend-ready.json
             fi
             if (( i % 5 == 0 )); then
-              echo "--- docker inspect health (crypto-backend) ---"
+              echo "=============================="
+              echo "DOCKER HEALTH HISTORY SNAPSHOT"
+              echo "=============================="
               ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State.Health}}' \
                 | tee -a "${DIAG_DIR}/backend-health-inspect.log" || true
-              echo "--- docker inspect health (crypto-stream-worker) ---"
               ${DOCKER_WRAP}docker inspect crypto-stream-worker --format '{{json .State.Health}}' \
                 | tee -a "${DIAG_DIR}/stream-worker-health-inspect.log" || true
-              echo "--- recent backend logs ---"
-              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=120 backend \
+              echo "=============================="
+              echo "BACKEND LOGS SNAPSHOT (TAIL 200)"
+              echo "=============================="
+              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=200 backend \
                 | tee -a "${DIAG_DIR}/backend-tail.log" || true
+              echo "=============================="
+              echo "WORKER LOGS SNAPSHOT (TAIL 200)"
+              echo "=============================="
+              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=200 stream-worker \
+                | tee -a "${DIAG_DIR}/stream-worker-tail.log" || true
             fi
-            sleep 2
+            if [[ "${i}" -eq "${max_attempts}" ]]; then
+              echo "Readiness timeout reached after ${max_attempts} attempts at ${attempt_interval_sec}s interval."
+            fi
+            sleep "${attempt_interval_sec}"
           done
+
+          if [[ ! -f /tmp/backend-ready.json ]]; then
+            echo '{}' > /tmp/backend-ready.json
+          fi
+          node -e "const fs=require('fs');const raw=fs.readFileSync('/tmp/backend-ready.json','utf8');let j={};try{j=JSON.parse(raw||'{}')}catch{};const checks=j.checks||{};const failed=Object.entries(checks).filter(([,v])=>v===false).map(([k])=>k);const latestPhase=j.phase||'unknown';const lastSuccess=(j.boot&&Array.isArray(j.boot.phases)?j.boot.phases.filter(p=>p.status==='ok').slice(-1)[0]?.phase:null)||'unknown';console.log('==============================');console.log('READINESS FAILURE CLASSIFICATION');console.log('==============================');console.log('READINESS FAILURE CATEGORY:');console.log(j.failureCategory||'UNKNOWN');console.log('');console.log('FAILED CHECKS:');console.log(failed.length?failed.map(k=>k+'=false').join('\\n'):'none');console.log('');console.log('STARTUP PHASE:');console.log(latestPhase);console.log('');console.log('LAST SUCCESSFUL PHASE:');console.log(lastSuccess);console.log('');console.log('REASON:');console.log(j.reason||'unknown');if(j.bootFailure|| (j.boot && j.boot.bootFailure)){const b=j.bootFailure||j.boot.bootFailure;console.log('');console.log('BOOT FAILURE:');console.log('Phase: '+(b.phase||'unknown'));console.log('Component: '+(b.component||'unknown'));console.log('Reason: '+(b.reason||'unknown'));console.log('Timestamp: '+(b.timestamp||'unknown'));} " | tee "${DIAG_DIR}/readiness-classification.txt"
 
           if [[ "${ready_ok}" -eq 1 ]]; then
             echo "READY_OK=1" | tee -a "${DIAG_DIR}/deploy-status.txt"
           else
-            echo "::error::Backend did not become healthy within 60s"
+            echo "::error::Backend did not become healthy within readiness window"
             echo "READY_OK=0" | tee -a "${DIAG_DIR}/deploy-status.txt"
           fi
-          echo "--- final backend inspect ---"
+
+          echo "=============================="
+          echo "READINESS RESPONSE (RAW)"
+          echo "=============================="
+          cat /tmp/backend-ready.json | tee "${DIAG_DIR}/ready-final.json"
+
+          echo "=============================="
+          echo "DOCKER HEALTH HISTORY (RAW)"
+          echo "=============================="
+          ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State.Health}}' \
+            | tee "${DIAG_DIR}/backend-health-inspect.log" || true
+          ${DOCKER_WRAP}docker inspect crypto-stream-worker --format '{{json .State.Health}}' \
+            | tee "${DIAG_DIR}/stream-worker-health-inspect.log" || true
+
+          echo "=============================="
+          echo "BACKEND LOGS (TAIL 200)"
+          echo "=============================="
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=200 backend \
+            | tee "${DIAG_DIR}/backend-logs-tail200.txt" || true
+
+          echo "=============================="
+          echo "WORKER LOGS (TAIL 200)"
+          echo "=============================="
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=200 stream-worker \
+            | tee "${DIAG_DIR}/stream-worker-logs-tail200.txt" || true
+
+          echo "=============================="
+          echo "FINAL CONTAINER STATE"
+          echo "=============================="
           ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State}}' \
             | tee "${DIAG_DIR}/backend-state.json" || true
-          echo "--- final stream-worker inspect ---"
           ${DOCKER_WRAP}docker inspect crypto-stream-worker --format '{{json .State}}' \
             | tee "${DIAG_DIR}/stream-worker-state.json" || true
-          echo "--- final readiness payload (if any) ---"
-          [[ -f /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json || true
-          [[ -f /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json > "${DIAG_DIR}/ready-final.json" || true
-          echo "--- docker stats snapshot ---"
+
+          echo "=============================="
+          echo "DOCKER STATS SNAPSHOT"
+          echo "=============================="
           ${DOCKER_WRAP}docker stats --no-stream | tee "${DIAG_DIR}/docker-stats.txt" || true
-          echo "--- backend logs (tail 500) ---"
-          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=500 backend \
-            | tee "${DIAG_DIR}/backend-logs-tail500.txt" || true
-          echo "--- stream-worker logs (tail 500) ---"
-          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=500 stream-worker \
-            | tee "${DIAG_DIR}/stream-worker-logs-tail500.txt" || true
-          echo "--- docker compose ps (final) ---"
+
+          echo "=============================="
+          echo "DOCKER COMPOSE PS (FINAL)"
+          echo "=============================="
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps-final.txt" || true
+
+          # Allow buffered logs to flush before step exits.
+          sleep 2
           if [[ "${DEPLOY_EXIT_CODE}" -ne 0 || "${ready_ok}" -ne 1 ]]; then
             exit 1
           fi
