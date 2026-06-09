@@ -214,16 +214,32 @@ jobs:
 
           echo "--- waiting for backend readiness ---"
           for i in $(seq 1 30); do
-            if curl -sfS http://127.0.0.1:4001/ready >/dev/null; then
+            status_code="$(curl -sS -o /tmp/backend-ready.json -w '%{http_code}' http://127.0.0.1:4001/ready || true)"
+            if [[ "${status_code}" == "200" ]]; then
               echo "Backend ready after ${i} attempt(s)"
-              curl -sfS http://127.0.0.1:4001/ready
+              cat /tmp/backend-ready.json
               echo
               exit 0
+            fi
+            echo "Attempt ${i}: /ready returned HTTP ${status_code}"
+            if [[ -s /tmp/backend-ready.json ]]; then
+              echo "Readiness payload:"
+              cat /tmp/backend-ready.json
+            fi
+            if (( i % 5 == 0 )); then
+              echo "--- docker inspect health (crypto-backend) ---"
+              ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State.Health}}' || true
+              echo "--- recent backend logs ---"
+              ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=80 backend || true
             fi
             sleep 2
           done
 
           echo "::error::Backend did not become healthy within 60s"
+          echo "--- final backend inspect ---"
+          ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State}}' || true
+          echo "--- final readiness payload (if any) ---"
+          [[ -f /tmp/backend-ready.json ]] && cat /tmp/backend-ready.json || true
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" logs --tail=80 backend stream-worker
           exit 1
 

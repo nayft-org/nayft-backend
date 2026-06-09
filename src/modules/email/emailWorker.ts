@@ -10,10 +10,6 @@ export async function runEmailWorker(): Promise<void> {
   const workerId = `${process.pid}`;
   emailLogger.info('email_worker_started', { workerId });
   const queue = getEmailQueueAdapter();
-  const restored = await queue.requeueStuckProcessing(200);
-  if (restored > 0) {
-    emailLogger.warn('email_worker_requeued_stuck_jobs', { workerId, restored });
-  }
   const sendHeartbeat = () =>
     redis
       .set(emailRedisKeys.workerHeartbeat, JSON.stringify({ workerId, at: new Date().toISOString() }), 'EX', emailConfig.workerHeartbeatTtlSec)
@@ -23,7 +19,24 @@ export async function runEmailWorker(): Promise<void> {
           error: err instanceof Error ? err.message : 'unknown',
         });
       });
-  await sendHeartbeat();
+
+  for (;;) {
+    try {
+      const restored = await queue.requeueStuckProcessing(200);
+      if (restored > 0) {
+        emailLogger.warn('email_worker_requeued_stuck_jobs', { workerId, restored });
+      }
+      break;
+    } catch (err) {
+      emailLogger.error('email_worker_startup_requeue_failed', {
+        workerId,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  await sendHeartbeat().catch(() => {});
   const heartbeatTimer = setInterval(() => {
     void sendHeartbeat();
   }, emailConfig.workerHeartbeatRefreshMs);

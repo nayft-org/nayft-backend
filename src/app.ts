@@ -92,23 +92,36 @@ app.get('/ready', async (_req, res) => {
   const requireEmailChecks =
     config.emailProvider === 'mailtrap' ||
     (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
-  const checks = {
+  const checks: Record<string, unknown> = {
     mongo: mongoose.connection.readyState === 1,
     redis: false,
     emailRuntime: !requireEmailChecks,
     emailWorkerHeartbeat: !requireEmailChecks,
+    emailRuntimeReason: 'skipped',
+    emailWorkerHeartbeatReason: 'skipped',
   };
   try {
     checks.redis = (await redis.ping()) === 'PONG';
-  } catch {
+  } catch (err) {
     checks.redis = false;
+    checks.redisReason = err instanceof Error ? err.message : 'ping_failed';
   }
   if (requireEmailChecks) {
-    checks.emailRuntime = validateEmailRuntimeConfig().ok;
+    const runtime = validateEmailRuntimeConfig();
+    checks.emailRuntime = runtime.ok;
+    checks.emailRuntimeReason = runtime.ok ? 'ok' : runtime.reason || 'invalid_email_runtime';
     try {
-      checks.emailWorkerHeartbeat = Boolean(await redis.get(emailRedisKeys.workerHeartbeat));
-    } catch {
+      const heartbeatRaw = await redis.get(emailRedisKeys.workerHeartbeat);
+      checks.emailWorkerHeartbeat = Boolean(heartbeatRaw);
+      checks.emailWorkerHeartbeatReason = heartbeatRaw ? 'ok' : 'missing';
+      if (heartbeatRaw) {
+        const parsed = JSON.parse(heartbeatRaw) as { workerId?: string; at?: string };
+        checks.emailWorkerId = parsed.workerId || 'unknown';
+        checks.emailWorkerHeartbeatAt = parsed.at || 'unknown';
+      }
+    } catch (err) {
       checks.emailWorkerHeartbeat = false;
+      checks.emailWorkerHeartbeatReason = err instanceof Error ? err.message : 'heartbeat_check_failed';
     }
   }
   const ok = checks.mongo && checks.redis && checks.emailRuntime && checks.emailWorkerHeartbeat;
