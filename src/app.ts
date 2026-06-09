@@ -89,22 +89,27 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/ready', async (_req, res) => {
+  const requireEmailChecks =
+    config.emailProvider === 'mailtrap' ||
+    (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
   const checks = {
     mongo: mongoose.connection.readyState === 1,
     redis: false,
-    emailRuntime: false,
-    emailWorkerHeartbeat: false,
+    emailRuntime: !requireEmailChecks,
+    emailWorkerHeartbeat: !requireEmailChecks,
   };
   try {
     checks.redis = (await redis.ping()) === 'PONG';
   } catch {
     checks.redis = false;
   }
-  checks.emailRuntime = validateEmailRuntimeConfig().ok;
-  try {
-    checks.emailWorkerHeartbeat = Boolean(await redis.get(emailRedisKeys.workerHeartbeat));
-  } catch {
-    checks.emailWorkerHeartbeat = false;
+  if (requireEmailChecks) {
+    checks.emailRuntime = validateEmailRuntimeConfig().ok;
+    try {
+      checks.emailWorkerHeartbeat = Boolean(await redis.get(emailRedisKeys.workerHeartbeat));
+    } catch {
+      checks.emailWorkerHeartbeat = false;
+    }
   }
   const ok = checks.mongo && checks.redis && checks.emailRuntime && checks.emailWorkerHeartbeat;
   res.status(ok ? 200 : 503).json({

@@ -14,7 +14,7 @@ export async function runEmailWorker(): Promise<void> {
   if (restored > 0) {
     emailLogger.warn('email_worker_requeued_stuck_jobs', { workerId, restored });
   }
-  const heartbeatTimer = setInterval(() => {
+  const sendHeartbeat = () =>
     redis
       .set(emailRedisKeys.workerHeartbeat, JSON.stringify({ workerId, at: new Date().toISOString() }), 'EX', emailConfig.workerHeartbeatTtlSec)
       .catch((err) => {
@@ -23,6 +23,9 @@ export async function runEmailWorker(): Promise<void> {
           error: err instanceof Error ? err.message : 'unknown',
         });
       });
+  await sendHeartbeat();
+  const heartbeatTimer = setInterval(() => {
+    void sendHeartbeat();
   }, emailConfig.workerHeartbeatRefreshMs);
   for (;;) {
     try {

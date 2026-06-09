@@ -2,7 +2,7 @@ import { config } from '../../config/env';
 import { emailLogger } from './email.logger';
 
 function isStrictProduction(): boolean {
-  return config.nodeEnv === 'production' || (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
+  return (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
 }
 
 export function validateEmailRuntimeConfig(): { ok: boolean; reason?: string } {
@@ -25,8 +25,17 @@ export function assertEmailRuntimeConfigOrThrow(): void {
   const result = validateEmailRuntimeConfig();
   if (!result.ok) {
     const reason = result.reason || 'Invalid email runtime config';
+    const shouldFailStartup = config.emailProvider === 'mailtrap' || isStrictProduction();
     emailLogger.error('email_runtime_config_invalid', { reason, provider: config.emailProvider, nodeEnv: config.nodeEnv });
-    throw new Error(reason);
+    if (shouldFailStartup) {
+      throw new Error(reason);
+    }
+    emailLogger.warn('email_runtime_config_degraded_mode', {
+      reason,
+      provider: config.emailProvider,
+      nodeEnv: config.nodeEnv,
+    });
+    return;
   }
   emailLogger.info('email_runtime_config_valid', { provider: config.emailProvider, nodeEnv: config.nodeEnv });
 }

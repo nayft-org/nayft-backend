@@ -173,8 +173,12 @@ if (config.nodeEnv === 'production' && !config.verificationCodeSecret) {
 if (config.nodeEnv === 'production' && process.env.EMAIL_VERIFICATION_DEBUG_LOG === 'true') {
   throw new Error('EMAIL_VERIFICATION_DEBUG_LOG must not be enabled in production');
 }
-if (config.nodeEnv === 'production' && (config.emailProvider === 'noop' || config.emailProvider === 'mock')) {
-  throw new Error('EMAIL_PROVIDER noop/mock is not allowed in production');
+if (
+  config.nodeEnv === 'production' &&
+  (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true' &&
+  (config.emailProvider === 'noop' || config.emailProvider === 'mock')
+) {
+  throw new Error('EMAIL_PROVIDER noop/mock is not allowed in production when strict validation is enabled');
 }
 if (config.nodeEnv === 'production' && !process.env.ADMIN_API_KEY?.trim()) {
   console.warn('[Config] ADMIN_API_KEY is not set — admin routes will return 501');
