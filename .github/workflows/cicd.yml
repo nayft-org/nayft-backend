@@ -143,19 +143,52 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Validate workspace env file"
-          for key in MONGO_URI JWT_SECRET EMAIL_PROVIDER; do
+          for key in MONGO_URI JWT_SECRET EMAIL_PROVIDER VERIFICATION_CODE_SECRET; do
             if ! grep -qE "^${key}=" "${dest}"; then
               echo "::error::Required key ${key} is missing from ${dest}"
               exit 1
             fi
+            value="$(grep -E "^${key}=" "${dest}" | tail -n1 | cut -d= -f2-)"
+            if [[ -z "${value// }" ]]; then
+              echo "::error::Required key ${key} is empty in ${dest}"
+              exit 1
+            fi
           done
+          jwt_secret_value="$(grep -E '^JWT_SECRET=' "${dest}" | tail -n1 | cut -d= -f2-)"
+          if [[ "${jwt_secret_value}" == "super_secret_key_change_later" ]]; then
+            echo "::error::JWT_SECRET is using the insecure default value; set a real production secret."
+            exit 1
+          fi
+          verification_secret_value="$(grep -E '^VERIFICATION_CODE_SECRET=' "${dest}" | tail -n1 | cut -d= -f2-)"
+          if [[ "${verification_secret_value}" == "super_secret_key_change_later" ]]; then
+            echo "::error::VERIFICATION_CODE_SECRET must not use insecure default-like values."
+            exit 1
+          fi
           if grep -qE '^EMAIL_PROVIDER=mailtrap$' "${dest}"; then
             for key in MAILTRAP_API_TOKEN MAILTRAP_SENDER_EMAIL; do
-              if ! grep -qE "^${key}=" "${dest}"; then
-                echo "::error::Required key ${key} is missing for mailtrap provider"
+              value="$(grep -E "^${key}=" "${dest}" | tail -n1 | cut -d= -f2- || true)"
+              if [[ -z "${value// }" ]]; then
+                echo "::error::Required key ${key} is missing/empty for mailtrap provider"
                 exit 1
               fi
             done
+          fi
+          if grep -qE '^EMAIL_STRICT_PROVIDER_VALIDATION=true$' "${dest}"; then
+            email_provider_value="$(grep -E '^EMAIL_PROVIDER=' "${dest}" | tail -n1 | cut -d= -f2-)"
+            if [[ "${email_provider_value}" == "noop" || "${email_provider_value}" == "mock" ]]; then
+              echo "::error::EMAIL_PROVIDER=${email_provider_value} is invalid when strict provider validation is enabled."
+              exit 1
+            fi
+          fi
+          if grep -qE '^EMAIL_VERIFICATION_DEBUG_LOG=true$' "${dest}"; then
+            echo "::error::EMAIL_VERIFICATION_DEBUG_LOG=true is not allowed in production."
+            exit 1
+          fi
+          if ! grep -qE '^ADMIN_API_KEY=' "${dest}"; then
+            echo "::warning::ADMIN_API_KEY is missing from ${dest}; admin routes may be unavailable."
+          fi
+          if grep -qE '^FRONTEND_URL=\*$' "${dest}"; then
+            echo "::warning::FRONTEND_URL=* is permissive in production."
           fi
           echo "Required keys present (values not printed)."
           echo "::endgroup::"
@@ -247,7 +280,22 @@ jobs:
             fi
             echo "Readiness check attempt ${i}/${max_attempts}: HTTP ${status_code} (not ready)"
             if [[ -s /tmp/backend-ready.json ]]; then
-              node -e "const fs=require('fs');const raw=fs.readFileSync('/tmp/backend-ready.json','utf8');try{const j=JSON.parse(raw);console.log('Reason:',j.reason||'unknown');console.log('FailureCategory:',j.failureCategory||'UNKNOWN');console.log('Phase:',j.phase||'unknown');console.log('FailedChecks:',JSON.stringify(j.checks||{}));}catch{console.log('Reason: invalid_json_response');}" || true
+              if command -v python3 >/dev/null 2>&1; then
+                python3 - <<'PY' || true
+import json
+try:
+    with open('/tmp/backend-ready.json', 'r', encoding='utf-8') as f:
+        j = json.load(f)
+    print('Reason:', j.get('reason', 'unknown'))
+    print('FailureCategory:', j.get('failureCategory', 'UNKNOWN'))
+    print('Phase:', j.get('phase', 'unknown'))
+    print('FailedChecks:', json.dumps(j.get('checks', {})))
+except Exception:
+    print('Reason: invalid_json_response')
+PY
+              else
+                echo "Readiness parser unavailable (python3 missing); using raw payload."
+              fi
             fi
             {
               echo "attempt=${i}/${max_attempts} status=${status_code} ts=$(date -Is)"
@@ -286,7 +334,60 @@ jobs:
           if [[ ! -f /tmp/backend-ready.json ]]; then
             echo '{}' > /tmp/backend-ready.json
           fi
-          node -e "const fs=require('fs');const raw=fs.readFileSync('/tmp/backend-ready.json','utf8');let j={};try{j=JSON.parse(raw||'{}')}catch{};const checks=j.checks||{};const failed=Object.entries(checks).filter(([,v])=>v===false).map(([k])=>k);const latestPhase=j.phase||'unknown';const lastSuccess=(j.boot&&Array.isArray(j.boot.phases)?j.boot.phases.filter(p=>p.status==='ok').slice(-1)[0]?.phase:null)||'unknown';console.log('==============================');console.log('READINESS FAILURE CLASSIFICATION');console.log('==============================');console.log('READINESS FAILURE CATEGORY:');console.log(j.failureCategory||'UNKNOWN');console.log('');console.log('FAILED CHECKS:');console.log(failed.length?failed.map(k=>k+'=false').join('\\n'):'none');console.log('');console.log('STARTUP PHASE:');console.log(latestPhase);console.log('');console.log('LAST SUCCESSFUL PHASE:');console.log(lastSuccess);console.log('');console.log('REASON:');console.log(j.reason||'unknown');if(j.bootFailure|| (j.boot && j.boot.bootFailure)){const b=j.bootFailure||j.boot.bootFailure;console.log('');console.log('BOOT FAILURE:');console.log('Phase: '+(b.phase||'unknown'));console.log('Component: '+(b.component||'unknown'));console.log('Reason: '+(b.reason||'unknown'));console.log('Timestamp: '+(b.timestamp||'unknown'));} " | tee "${DIAG_DIR}/readiness-classification.txt"
+          if command -v python3 >/dev/null 2>&1; then
+            python3 - <<'PY' | tee "${DIAG_DIR}/readiness-classification.txt"
+import json
+from pathlib import Path
+
+path = Path('/tmp/backend-ready.json')
+try:
+    j = json.loads(path.read_text(encoding='utf-8') or '{}')
+except Exception:
+    j = {}
+
+checks = j.get('checks') or {}
+failed = [f"{k}=false" for k, v in checks.items() if v is False]
+latest_phase = j.get('phase') or 'unknown'
+boot = j.get('boot') or {}
+boot_phases = boot.get('phases') if isinstance(boot, dict) else []
+last_success = 'unknown'
+if isinstance(boot_phases, list):
+    ok_phases = [p.get('phase') for p in boot_phases if isinstance(p, dict) and p.get('status') == 'ok' and p.get('phase')]
+    if ok_phases:
+        last_success = ok_phases[-1]
+boot_failure = j.get('bootFailure') or (boot.get('bootFailure') if isinstance(boot, dict) else None)
+
+print('==============================')
+print('READINESS FAILURE CLASSIFICATION')
+print('==============================')
+print('READINESS FAILURE CATEGORY:')
+print(j.get('failureCategory') or 'UNKNOWN')
+print('')
+print('FAILED CHECKS:')
+print('\n'.join(failed) if failed else 'none')
+print('')
+print('STARTUP PHASE:')
+print(latest_phase)
+print('')
+print('LAST SUCCESSFUL PHASE:')
+print(last_success)
+print('')
+print('REASON:')
+print(j.get('reason') or 'unknown')
+if isinstance(boot_failure, dict):
+    print('')
+    print('BOOT FAILURE:')
+    print(f"Phase: {boot_failure.get('phase', 'unknown')}")
+    print(f"Component: {boot_failure.get('component', 'unknown')}")
+    print(f"Reason: {boot_failure.get('reason', 'unknown')}")
+    print(f"Timestamp: {boot_failure.get('timestamp', 'unknown')}")
+PY
+          else
+            echo "==============================" | tee "${DIAG_DIR}/readiness-classification.txt"
+            echo "READINESS FAILURE CLASSIFICATION" | tee -a "${DIAG_DIR}/readiness-classification.txt"
+            echo "==============================" | tee -a "${DIAG_DIR}/readiness-classification.txt"
+            echo "python3 not available; showing raw /ready payload only." | tee -a "${DIAG_DIR}/readiness-classification.txt"
+          fi
 
           if [[ "${ready_ok}" -eq 1 ]]; then
             echo "READY_OK=1" | tee -a "${DIAG_DIR}/deploy-status.txt"
