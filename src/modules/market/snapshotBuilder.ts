@@ -3,7 +3,6 @@ import zlib from 'zlib';
 import pLimit from 'p-limit';
 import { redis } from '../../config/redis';
 import { streamConfig } from '../../config/streamConfig';
-import { config } from '../../config/env';
 import { chartRepository } from '../chart/repository';
 import { Coin } from '../coin/model';
 import { attachImagesToCoins } from '../coin/coinSnapshotResolve';

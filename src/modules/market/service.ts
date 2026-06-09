@@ -5,7 +5,6 @@ import { labeledActiveCoinRepository } from '../coin/labeledActiveCoinRepository
 import { attachImagesToCoins } from '../coin/coinSnapshotResolve';
 import { Coin } from '../coin/model';
 import { cacheHelpers } from '../../config/redis';
-import { config } from '../../config/env';
 
 const MARKET_CACHE_TTL = 120; // 2 minutes
 

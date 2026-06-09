@@ -1,5 +1,6 @@
 import type { KlineInterval } from '../modules/chart/model';
 import { klineRetentionDays } from './streamConfig';
+import type { KlineInterval as StreamKlineInterval } from './streamConfig';
 
 function parsePositiveInt(envKey: string, fallback: number): number {
   const raw = process.env[envKey];
@@ -20,7 +21,13 @@ export function klineRetentionDaysForInterval(interval: KlineInterval | '1w'): n
   if (interval === '1w') {
     return parsePositiveInt('KLINE_RETENTION_1W_DAYS', klineRetentionDays['1d']);
   }
-  return klineRetentionDays[interval];
+  if (interval === '15m') {
+    return parsePositiveInt('KLINE_RETENTION_15M_DAYS', klineRetentionDays['5m']);
+  }
+  if (interval === '4h') {
+    return parsePositiveInt('KLINE_RETENTION_4H_DAYS', klineRetentionDays['1h']);
+  }
+  return klineRetentionDays[interval as StreamKlineInterval];
 }
 
 const root = (process.env.OHLCV_ARCHIVE_ROOT || '').trim();

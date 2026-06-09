@@ -36,7 +36,7 @@ export function validatePasswordForSignup(
 ): PasswordEvaluationResult {
   const result = validatePassword(password, context);
   if (!passwordPolicyConfig.blockCommon && result.violations.includes('COMMON_PASSWORD')) {
-    const filtered = result.violations.filter((v) => v !== 'COMMON_PASSWORD');
+    const filtered = result.violations.filter((v: string) => v !== 'COMMON_PASSWORD');
     return {
       ...result,
       violations: filtered,
