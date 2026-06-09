@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import compression from 'compression';
+import mongoose from 'mongoose';
 import { config } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
 import { notFound } from './middlewares/notFound';
@@ -36,6 +37,9 @@ import riskRoutes from './modules/risk/routes';
 import riskAdminRoutes from './modules/risk/adminRoutes';
 import publicFeatureRoutes from './core/public/routes';
 import { authenticate } from './middlewares/auth';
+import { redis } from './config/redis';
+import { validateEmailRuntimeConfig } from './modules/email/emailRuntimeValidation';
+import { emailRedisKeys } from './modules/email/email.redisKeys';
 
 const app: Application = express();
 
@@ -82,6 +86,32 @@ app.use(resolveLanguageMiddleware);
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/ready', async (_req, res) => {
+  const checks = {
+    mongo: mongoose.connection.readyState === 1,
+    redis: false,
+    emailRuntime: false,
+    emailWorkerHeartbeat: false,
+  };
+  try {
+    checks.redis = (await redis.ping()) === 'PONG';
+  } catch {
+    checks.redis = false;
+  }
+  checks.emailRuntime = validateEmailRuntimeConfig().ok;
+  try {
+    checks.emailWorkerHeartbeat = Boolean(await redis.get(emailRedisKeys.workerHeartbeat));
+  } catch {
+    checks.emailWorkerHeartbeat = false;
+  }
+  const ok = checks.mongo && checks.redis && checks.emailRuntime && checks.emailWorkerHeartbeat;
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ready' : 'not_ready',
+    timestamp: new Date().toISOString(),
+    checks,
+  });
 });
 
 // API Routes

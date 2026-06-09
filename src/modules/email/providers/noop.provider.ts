@@ -1,7 +1,7 @@
 import type { TransactionalEmailPayload } from '../email.types';
 
 export const noopEmailProvider = {
-  async sendTransactional(_payload: TransactionalEmailPayload): Promise<{ messageId: string }> {
-    return { messageId: 'noop' };
+  async sendTransactional(_payload: TransactionalEmailPayload): Promise<{ messageId: string; statusCode: number }> {
+    return { messageId: 'noop', statusCode: 200 };
   },
 };

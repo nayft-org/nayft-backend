@@ -7,11 +7,13 @@ import { resolveKlineSymbols } from '../config/klineSymbolResolver';
 import { registerAdapter, startStreams, stopStreams } from '../services/streams/registry';
 import { BinanceKlineAdapter } from '../services/streams/adapters';
 import { startBinanceTickerIngestion } from '../services/binanceTickerIngestion';
+import { assertEmailRuntimeConfigOrThrow } from '../modules/email/emailRuntimeValidation';
 
 let stopTicker: (() => void) | null = null;
 
 async function main(): Promise<void> {
   await connectDatabase();
+  assertEmailRuntimeConfigOrThrow();
   const klineSymbols = await resolveKlineSymbols();
   registerAdapter('binance', new BinanceKlineAdapter());
   startStreams(klineSymbols);

@@ -5,6 +5,7 @@ import { planController } from '../plan.controller';
 import { adminAuth } from '../../middlewares/adminAuth';
 import { notificationsAdminController } from '../../modules/notifications/admin.controller';
 import { runtimeConfigController } from '../runtime-config/runtimeConfig.controller';
+import { emailAdminController } from '../../modules/email/email.admin.controller';
 
 const router = Router();
 
@@ -27,5 +28,9 @@ router.get('/events/feature/:featureKey', eventController.getByFeature);
 
 // Notifications ops / observability
 router.get('/notifications/health', notificationsAdminController.health);
+router.get('/email/health', emailAdminController.health);
+router.get('/email/dlq', emailAdminController.peekDlq);
+router.get('/email/jobs/:jobId', emailAdminController.inspectJob);
+router.post('/email/replay/:jobId', emailAdminController.replayDlqJob);
 
 export default router;

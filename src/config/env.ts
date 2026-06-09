@@ -31,7 +31,7 @@ export const config = {
   mailtrapApiToken: (process.env.MAILTRAP_API_TOKEN || '').trim(),
   mailtrapSenderEmail: (process.env.MAILTRAP_SENDER_EMAIL || 'noreply@mail.nayft.com').trim(),
   mailtrapSenderName: (process.env.MAILTRAP_SENDER_NAME || 'NAYFT').trim(),
-  emailProvider: (process.env.EMAIL_PROVIDER || 'noop').trim().toLowerCase() as 'mailtrap' | 'smtp' | 'noop',
+  emailProvider: (process.env.EMAIL_PROVIDER || 'noop').trim().toLowerCase() as 'mailtrap' | 'smtp' | 'noop' | 'mock',
   /** Transactional verification emails are sent only in production. Dev uses console OTP logging. */
   shouldSendVerificationEmail:
     (process.env.NODE_ENV || 'development') === 'production' &&
@@ -172,6 +172,9 @@ if (config.nodeEnv === 'production' && !config.verificationCodeSecret) {
 }
 if (config.nodeEnv === 'production' && process.env.EMAIL_VERIFICATION_DEBUG_LOG === 'true') {
   throw new Error('EMAIL_VERIFICATION_DEBUG_LOG must not be enabled in production');
+}
+if (config.nodeEnv === 'production' && (config.emailProvider === 'noop' || config.emailProvider === 'mock')) {
+  throw new Error('EMAIL_PROVIDER noop/mock is not allowed in production');
 }
 if (config.nodeEnv === 'production' && !process.env.ADMIN_API_KEY?.trim()) {
   console.warn('[Config] ADMIN_API_KEY is not set — admin routes will return 501');

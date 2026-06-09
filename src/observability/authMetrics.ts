@@ -16,6 +16,12 @@ export const authMetrics = {
   emailDeliveryExhaustedTotal: 0,
   emailQueueDepth: 0,
   emailDlqDepth: 0,
+  emailProcessingDepth: 0,
+  emailProviderAcceptedTotal: 0,
+  emailProviderRejectedTotal: 0,
+  emailLockCollisionTotal: 0,
+  emailRetryScheduledTotal: 0,
+  emailRetryExhaustedTotal: 0,
 };
 
 export function getAuthMetricsSnapshot(): Record<string, unknown> {
@@ -35,5 +41,11 @@ export function getAuthMetricsSnapshot(): Record<string, unknown> {
     emailDeliveryExhaustedTotal: authMetrics.emailDeliveryExhaustedTotal,
     emailQueueDepth: authMetrics.emailQueueDepth,
     emailDlqDepth: authMetrics.emailDlqDepth,
+    emailProcessingDepth: authMetrics.emailProcessingDepth,
+    emailProviderAcceptedTotal: authMetrics.emailProviderAcceptedTotal,
+    emailProviderRejectedTotal: authMetrics.emailProviderRejectedTotal,
+    emailLockCollisionTotal: authMetrics.emailLockCollisionTotal,
+    emailRetryScheduledTotal: authMetrics.emailRetryScheduledTotal,
+    emailRetryExhaustedTotal: authMetrics.emailRetryExhaustedTotal,
   };
 }

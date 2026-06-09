@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import type { EmailJobStatus } from './email.types';
+import type { EmailDeliveryTruth, EmailJobStatus, EmailProviderName } from './email.types';
 import type { VerificationPurpose } from '../auth/verification/types';
 
 export interface IEmailJob extends mongoose.Document {
@@ -9,7 +9,18 @@ export interface IEmailJob extends mongoose.Document {
   idempotencyKey: string;
   correlationId: string;
   status: EmailJobStatus;
+  deliveryTruth: EmailDeliveryTruth;
   attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt: Date | null;
+  lastAttemptAt: Date | null;
+  lockOwner: string | null;
+  provider: EmailProviderName | null;
+  providerStatusCode: number | null;
+  providerLatencyMs: number | null;
+  providerAttemptedAt: Date | null;
+  replayRequestId: string | null;
+  traceId: string;
   providerMessageId: string | null;
   lastError: string | null;
   createdAt: Date;
@@ -28,10 +39,25 @@ const emailJobSchema = new Schema<IEmailJob>(
     correlationId: { type: String, required: true },
     status: {
       type: String,
-      enum: ['pending', 'sent', 'failed', 'dlq'],
+      enum: ['pending', 'processing', 'retrying', 'sent', 'failed', 'dlq', 'cancelled', 'abandoned'],
       default: 'pending',
     },
+    deliveryTruth: {
+      type: String,
+      enum: ['queued', 'processing', 'provider_accepted', 'provider_rejected', 'delivered', 'bounced', 'suppressed', 'failed'],
+      default: 'queued',
+    },
     attemptCount: { type: Number, default: 0 },
+    maxAttempts: { type: Number, default: 5 },
+    nextAttemptAt: { type: Date, default: null },
+    lastAttemptAt: { type: Date, default: null },
+    lockOwner: { type: String, default: null },
+    provider: { type: String, enum: ['mailtrap', 'mock', 'noop'], default: null },
+    providerStatusCode: { type: Number, default: null },
+    providerLatencyMs: { type: Number, default: null },
+    providerAttemptedAt: { type: Date, default: null },
+    replayRequestId: { type: String, default: null },
+    traceId: { type: String, required: true },
     providerMessageId: { type: String, default: null },
     lastError: { type: String, default: null },
   },
@@ -39,6 +65,9 @@ const emailJobSchema = new Schema<IEmailJob>(
 );
 
 emailJobSchema.index({ status: 1, createdAt: 1 });
+emailJobSchema.index({ deliveryTruth: 1, createdAt: 1 });
+emailJobSchema.index({ userId: 1, createdAt: -1 });
+emailJobSchema.index({ correlationId: 1 }, { unique: false });
 emailJobSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 3600 });
 
 export const EmailJob = mongoose.model<IEmailJob>('EmailJob', emailJobSchema);

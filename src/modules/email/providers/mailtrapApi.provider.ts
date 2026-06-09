@@ -4,7 +4,7 @@ import type { TransactionalEmailPayload } from '../email.types';
 const MAILTRAP_SEND_URL = 'https://send.api.mailtrap.io/api/send';
 
 export const mailtrapApiProvider = {
-  async sendTransactional(payload: TransactionalEmailPayload): Promise<{ messageId: string }> {
+  async sendTransactional(payload: TransactionalEmailPayload): Promise<{ messageId: string; statusCode: number }> {
     if (!config.mailtrapApiToken) {
       throw new Error('MAILTRAP_API_TOKEN is not configured');
     }
@@ -35,6 +35,6 @@ export const mailtrapApiProvider = {
     }
 
     const data = (await response.json().catch(() => ({}))) as { message_ids?: string[] };
-    return { messageId: data.message_ids?.[0] || 'unknown' };
+    return { messageId: data.message_ids?.[0] || 'unknown', statusCode: response.status };
   },
 };

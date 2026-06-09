@@ -1,6 +1,24 @@
 import type { VerificationPurpose } from '../auth/verification/types';
 
-export type EmailJobStatus = 'pending' | 'sent' | 'failed' | 'dlq';
+export type EmailJobStatus =
+  | 'pending'
+  | 'processing'
+  | 'retrying'
+  | 'sent'
+  | 'failed'
+  | 'dlq'
+  | 'cancelled'
+  | 'abandoned';
+
+export type EmailDeliveryTruth =
+  | 'queued'
+  | 'processing'
+  | 'provider_accepted'
+  | 'provider_rejected'
+  | 'delivered'
+  | 'bounced'
+  | 'suppressed'
+  | 'failed';
 
 export type TransactionalEmailPayload = {
   to: string;
@@ -23,4 +41,9 @@ export type VerificationEmailJob = {
   idempotencyKey: string;
   attempt: number;
   enqueuedAt: string;
+  replayRequestId?: string;
 };
+
+export type EmailProviderName = 'mailtrap' | 'mock' | 'noop';
+
+export type EmailAttemptClassification = 'transient' | 'permanent' | 'poison';

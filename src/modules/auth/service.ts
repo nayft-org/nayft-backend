@@ -176,7 +176,7 @@ export const authService = {
   resendVerification: async (
     userId: string,
     options: { locale?: string; ip?: string } = {}
-  ): Promise<{ message: string; expiresAt: Date }> => {
+  ): Promise<{ message: string; expiresAt: Date; emailDeliveryStatus: 'queued' | 'skipped' }> => {
     const user = await authRepository.findById(userId);
     if (!user) throw new Error('User not found');
 
@@ -207,6 +207,7 @@ export const authService = {
       throw Object.assign(new Error('Resend limit exceeded'), { code: 'VERIFICATION_RESEND_LIMIT' });
     }
 
+    let emailDeliveryStatus: 'queued' | 'skipped' = 'skipped';
     if (config.shouldSendVerificationEmail) {
       await emailService.enqueueVerificationEmail({
         userId,
@@ -218,6 +219,7 @@ export const authService = {
         correlationId: result.correlationId,
         issuedAt: new Date(),
       });
+      emailDeliveryStatus = 'queued';
     }
 
     authMetrics.verificationResendTotal += 1;
@@ -228,7 +230,14 @@ export const authService = {
       metadata: { attemptNumber: result.attemptNumber, correlationId: result.correlationId },
     }).catch(() => {});
 
-    return { message: 'A new verification code has been sent', expiresAt: result.expiresAt };
+    return {
+      message:
+        emailDeliveryStatus === 'queued'
+          ? 'Verification email queued for delivery'
+          : 'Verification email delivery is disabled for this environment',
+      expiresAt: result.expiresAt,
+      emailDeliveryStatus,
+    };
   },
 
   getVerificationStatus: async (userId: string) => {

@@ -27,6 +27,7 @@ import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/ca
 import { piConfig } from './modules/portfolio-intelligence/config/piConfig';
 import { riskConfig } from './modules/risk/config/riskConfig';
 import { runRiskFactorWorker } from './modules/risk/jobs/riskFactorWorker';
+import { assertEmailRuntimeConfigOrThrow } from './modules/email/emailRuntimeValidation';
 import {
   computeRolloutHealthScore,
 } from './observability/rolloutHealthScore';
@@ -48,6 +49,7 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+    assertEmailRuntimeConfigOrThrow();
 
     await refreshRuntimeConfigSnapshot();
     startRuntimeConfigRefreshLoop(10_000);

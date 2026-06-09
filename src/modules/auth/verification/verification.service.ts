@@ -10,7 +10,7 @@ import {
 } from './verificationCode.util';
 import { verificationRateLimit } from './verificationRateLimit';
 import { logVerificationCodeForDev } from './verificationDebugLog';
-import type { EmailDeliveryStatus, VerificationFailReason, VerificationPurpose } from './types';
+import type { VerificationFailReason, VerificationPurpose } from './types';
 
 const OTP_TTL_SECONDS = 24 * 3600;
 const OTP_TTL_HOURS = 24;
@@ -44,7 +44,6 @@ export type IssueCodeResult = {
   code: string;
   correlationId: string;
   expiresAt: Date;
-  emailDeliveryStatus: EmailDeliveryStatus;
 };
 
 export const verificationService = {
@@ -89,7 +88,6 @@ export const verificationService = {
       code,
       correlationId,
       expiresAt,
-      emailDeliveryStatus: 'queued',
     };
   },
 
