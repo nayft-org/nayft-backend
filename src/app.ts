@@ -40,9 +40,17 @@ import { authenticate } from './middlewares/auth';
 import { getRedisDiagnostics, redis } from './config/redis';
 import { validateEmailRuntimeConfig } from './modules/email/emailRuntimeValidation';
 import { emailRedisKeys } from './modules/email/email.redisKeys';
+import { getEmailWorkerRuntimeState } from './modules/email/emailWorker';
 import { getBootTraceSnapshot } from './observability/bootTrace';
 
 const app: Application = express();
+
+function sanitizeReadinessReason(input: unknown): string {
+  const raw = typeof input === 'string' ? input : input instanceof Error ? input.message : String(input ?? 'unknown');
+  return raw
+    .replace(/(token|secret|password|apikey|api_key|authorization)\s*[:=]\s*([^\s,;]+)/gi, '$1=[REDACTED]')
+    .slice(0, 300);
+}
 
 // CORS Configuration
 const isWildcard = config.frontendUrls.length === 1 && config.frontendUrls[0] === '*';
@@ -92,14 +100,27 @@ app.get('/health', (_req, res) => {
 app.get('/ready', async (_req, res) => {
   const startedAt = Date.now();
   const boot = getBootTraceSnapshot();
+  const workerRuntime = getEmailWorkerRuntimeState();
   const requireEmailChecks =
     config.emailProvider === 'mailtrap' ||
     (process.env.EMAIL_STRICT_PROVIDER_VALIDATION || '').toLowerCase() === 'true';
-  const checks: Record<string, unknown> = {
+  const checks: {
+    mongo: boolean;
+    redis: boolean;
+    emailRuntime: boolean;
+    emailWorkerHeartbeat: boolean;
+    bootFailed: boolean;
+    emailRuntimeReason: string;
+    emailWorkerHeartbeatReason: string;
+    redisReason?: string;
+    emailWorkerId?: string;
+    emailWorkerHeartbeatAt?: string;
+  } = {
     mongo: mongoose.connection.readyState === 1,
     redis: false,
     emailRuntime: !requireEmailChecks,
     emailWorkerHeartbeat: !requireEmailChecks,
+    bootFailed: Boolean(boot.failed),
     emailRuntimeReason: 'skipped',
     emailWorkerHeartbeatReason: 'skipped',
   };
@@ -107,12 +128,14 @@ app.get('/ready', async (_req, res) => {
     checks.redis = (await redis.ping()) === 'PONG';
   } catch (err) {
     checks.redis = false;
-    checks.redisReason = err instanceof Error ? err.message : 'ping_failed';
+    checks.redisReason = sanitizeReadinessReason(err instanceof Error ? err.message : 'ping_failed');
   }
   if (requireEmailChecks) {
     const runtime = validateEmailRuntimeConfig();
     checks.emailRuntime = runtime.ok;
-    checks.emailRuntimeReason = runtime.ok ? 'ok' : runtime.reason || 'invalid_email_runtime';
+    checks.emailRuntimeReason = runtime.ok
+      ? 'ok'
+      : sanitizeReadinessReason(runtime.reason || 'invalid_email_runtime');
     try {
       const heartbeatRaw = await redis.get(emailRedisKeys.workerHeartbeat);
       checks.emailWorkerHeartbeat = Boolean(heartbeatRaw);
@@ -124,7 +147,9 @@ app.get('/ready', async (_req, res) => {
       }
     } catch (err) {
       checks.emailWorkerHeartbeat = false;
-      checks.emailWorkerHeartbeatReason = err instanceof Error ? err.message : 'heartbeat_check_failed';
+      checks.emailWorkerHeartbeatReason = sanitizeReadinessReason(
+        err instanceof Error ? err.message : 'heartbeat_check_failed'
+      );
     }
   }
   const ok =
@@ -132,30 +157,60 @@ app.get('/ready', async (_req, res) => {
     checks.redis &&
     checks.emailRuntime &&
     checks.emailWorkerHeartbeat &&
-    !Boolean(boot.failed);
+    !checks.bootFailed;
+  let failureCategory = 'READY';
   const reason =
     !checks.mongo
-      ? 'MongoDB not connected'
+      ? ((failureCategory = 'READINESS_MONGO_FAILED'), 'MongoDB not connected')
       : !checks.redis
-        ? `Redis check failed: ${String(checks.redisReason || 'unknown')}`
+        ? ((failureCategory = 'READINESS_REDIS_FAILED'),
+          `Redis check failed: ${String(checks.redisReason || 'unknown')}`)
         : !checks.emailRuntime
-          ? `Email runtime invalid: ${String(checks.emailRuntimeReason || 'unknown')}`
+          ? ((failureCategory = 'READINESS_EMAIL_RUNTIME_FAILED'),
+            `Email runtime invalid: ${String(checks.emailRuntimeReason || 'unknown')}`)
           : !checks.emailWorkerHeartbeat
-            ? `Email worker heartbeat missing: ${String(checks.emailWorkerHeartbeatReason || 'unknown')}`
-            : boot.failed
-              ? `Boot failed at ${String(boot.currentPhase)}: ${String(boot.failureReason || 'unknown')}`
+            ? ((failureCategory = 'READINESS_WORKER_HEARTBEAT_FAILED'),
+              `Email worker heartbeat missing: ${String(checks.emailWorkerHeartbeatReason || 'unknown')}`)
+            : checks.bootFailed
+              ? ((failureCategory = 'READINESS_BOOT_FAILED'),
+                `Boot failed at ${String(boot.currentPhase)}: ${sanitizeReadinessReason(
+                  String(boot.failureReason || 'unknown')
+                )}`)
               : 'ok';
+  const workerStatus = (() => {
+    if (!requireEmailChecks) return 'not_required';
+    if (checks.emailWorkerHeartbeat) return 'healthy';
+    if (workerRuntime.startupStatus === 'retrying_startup') return 'retrying';
+    if (workerRuntime.startupStatus === 'running') return 'running_without_heartbeat';
+    return workerRuntime.startupStatus;
+  })();
   res.status(ok ? 200 : 503).json({
-    status: ok ? 'ready' : 'not_ready',
+    status: ok ? 'ready' : 'unhealthy',
     phase: String(boot.currentPhase || 'unknown'),
-    reason,
+    failureCategory,
+    reason: sanitizeReadinessReason(reason),
     startupElapsedMs: boot.startupElapsedMs,
     readinessCheckMs: Date.now() - startedAt,
     traceId: boot.traceId,
     timestamp: new Date().toISOString(),
+    bootFailure: boot.bootFailure || null,
     boot,
     redis: getRedisDiagnostics(),
     checks,
+    worker: {
+      initialized: workerRuntime.initialized,
+      heartbeat: Boolean(checks.emailWorkerHeartbeat),
+      lastHeartbeat: workerRuntime.lastHeartbeatAt,
+      status: workerStatus,
+      startupRetryCount: workerRuntime.startupRetryCount,
+      workerId: workerRuntime.workerId || undefined,
+      startupError: workerRuntime.lastStartupError
+        ? sanitizeReadinessReason(workerRuntime.lastStartupError)
+        : undefined,
+      heartbeatError: workerRuntime.lastHeartbeatError
+        ? sanitizeReadinessReason(workerRuntime.lastHeartbeatError)
+        : undefined,
+    },
   });
 });
 

@@ -6,6 +6,7 @@ let redisLastConnectedAt: string | null = null;
 let redisReconnectCount = 0;
 let redisBlockingLastError: string | null = null;
 let redisBlockingReconnectCount = 0;
+const redisFirstConnectStartedAtMs = Date.now();
 
 // Create Redis client with retry strategy
 export const redis = new Redis(config.redisUrl, {
@@ -45,6 +46,7 @@ redis.on('connect', () => {
   redisLastConnectedAt = new Date().toISOString();
   redisLastError = null;
   console.log('✅ Redis connected');
+  console.log(`⏱️ Redis connection established after ${Date.now() - redisFirstConnectStartedAtMs}ms`);
 });
 
 redis.on('error', (err) => {

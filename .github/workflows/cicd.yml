@@ -198,31 +198,45 @@ jobs:
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" build backend
 
       - name: Deploy production stack
+        id: deploy_stack
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cd "${GITHUB_WORKSPACE}"
           # Full stack down — partial down can leave a stale project network.
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
-          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
+          deploy_exit_code=0
+          ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" up -d --force-recreate || deploy_exit_code=$?
+          echo "deploy_exit_code=${deploy_exit_code}" >> "${GITHUB_OUTPUT}"
+          if [[ "${deploy_exit_code}" -ne 0 ]]; then
+            echo "::warning::Deploy command failed with exit code ${deploy_exit_code}; running diagnostics."
+          fi
 
-      - name: Verify deployment
+      - name: Verify deployment and collect diagnostics
+        id: verify_and_diagnose
+        if: always()
+        continue-on-error: true
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
           DIAG_DIR="${GITHUB_WORKSPACE}/deploy-diagnostics"
           mkdir -p "${DIAG_DIR}"
+          DEPLOY_EXIT_CODE="${{ steps.deploy_stack.outputs.deploy_exit_code }}"
+          DEPLOY_EXIT_CODE="${DEPLOY_EXIT_CODE:-1}"
+          echo "deploy_exit_code=${DEPLOY_EXIT_CODE}" | tee "${DIAG_DIR}/deploy-status.txt"
           echo "--- compose ps ---"
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps.txt"
 
           echo "--- waiting for backend readiness ---"
+          ready_ok=0
           for i in $(seq 1 30); do
             status_code="$(curl -sS -o /tmp/backend-ready.json -w '%{http_code}' http://127.0.0.1:4001/ready || true)"
             if [[ "${status_code}" == "200" ]]; then
               echo "Backend ready after ${i} attempt(s)"
               cat /tmp/backend-ready.json
               cat /tmp/backend-ready.json > "${DIAG_DIR}/ready-final.json"
-              echo
-              exit 0
+              ready_ok=1
+              break
             fi
             echo "Attempt ${i}: /ready returned HTTP ${status_code}"
             {
@@ -248,7 +262,12 @@ jobs:
             sleep 2
           done
 
-          echo "::error::Backend did not become healthy within 60s"
+          if [[ "${ready_ok}" -eq 1 ]]; then
+            echo "READY_OK=1" | tee -a "${DIAG_DIR}/deploy-status.txt"
+          else
+            echo "::error::Backend did not become healthy within 60s"
+            echo "READY_OK=0" | tee -a "${DIAG_DIR}/deploy-status.txt"
+          fi
           echo "--- final backend inspect ---"
           ${DOCKER_WRAP}docker inspect crypto-backend --format '{{json .State}}' \
             | tee "${DIAG_DIR}/backend-state.json" || true
@@ -268,15 +287,33 @@ jobs:
             | tee "${DIAG_DIR}/stream-worker-logs-tail500.txt" || true
           echo "--- docker compose ps (final) ---"
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" ps | tee "${DIAG_DIR}/compose-ps-final.txt" || true
-          exit 1
+          if [[ "${DEPLOY_EXIT_CODE}" -ne 0 || "${ready_ok}" -ne 1 ]]; then
+            exit 1
+          fi
 
       - name: Upload deployment diagnostics artifact
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deploy-diagnostics-${{ github.run_id }}
           path: ${{ github.workspace }}/deploy-diagnostics
           retention-days: 14
+
+      - name: Final deployment result
+        if: always()
+        run: |
+          set -euo pipefail
+          deploy_exit_code="${{ steps.deploy_stack.outputs.deploy_exit_code }}"
+          deploy_exit_code="${deploy_exit_code:-1}"
+          verify_outcome="${{ steps.verify_and_diagnose.outcome }}"
+          if [[ "${deploy_exit_code}" != "0" ]]; then
+            echo "::error::Deploy command failed with exit code ${deploy_exit_code}"
+            exit 1
+          fi
+          if [[ "${verify_outcome}" != "success" ]]; then
+            echo "::error::Deployment diagnostics indicate backend was not ready."
+            exit 1
+          fi
 
       - name: Cleanup workspace secrets
         if: always()

@@ -4,6 +4,7 @@ import { config } from './env';
 export const connectDatabase = async (): Promise<void> => {
   try {
     const { mongoUri } = config;
+    const startedAt = Date.now();
     await mongoose.connect(mongoUri, {
       maxPoolSize: 50,
       minPoolSize: 5,
@@ -15,6 +16,7 @@ export const connectDatabase = async (): Promise<void> => {
       retryWrites: true,
     });
     console.log('✅ MongoDB connected successfully');
+    console.log(`⏱️ MongoDB connection established after ${Date.now() - startedAt}ms`);
     console.log(
       `📊 Connection pool: min=5, max=50; socketTimeoutMS=${config.mongoSocketTimeoutMs} serverSelectionMS=${config.mongoServerSelectionTimeoutMs}`
     );

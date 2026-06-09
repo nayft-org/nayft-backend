@@ -84,13 +84,7 @@ services:
         condition: service_healthy
     restart: always
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:4001/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: ["CMD", "node", "scripts/healthcheck-ready.mjs"]
       interval: 30s
       timeout: 10s
       retries: 5

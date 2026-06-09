@@ -19,6 +19,9 @@ let currentPhase = 'boot_init';
 let bootFailed = false;
 let bootFailureReason = '';
 let bootFailureStack = '';
+let bootFailurePhase = '';
+let bootFailureComponent = '';
+let bootFailedAt: string | null = null;
 let shutdownReason = '';
 
 function sanitizeReason(input: string): string {
@@ -94,6 +97,11 @@ export function failBootPhase(phase: string, err: unknown, meta: Record<string, 
   bootFailed = true;
   bootFailureReason = reason;
   bootFailureStack = err instanceof Error ? (err.stack || '').slice(0, 2_000) : '';
+  if (!bootFailurePhase) {
+    bootFailurePhase = phase;
+    bootFailureComponent = phase.split('_')[0] || 'boot';
+    bootFailedAt = new Date().toISOString();
+  }
   phaseLog('FAILED', phase, { durationMs, reason, meta, stack: bootFailureStack || undefined });
 }
 
@@ -131,6 +139,14 @@ export function getBootTraceSnapshot(): Record<string, unknown> {
     failed: bootFailed,
     failureReason: bootFailureReason || null,
     failureStack: bootFailureStack || null,
+    bootFailure: bootFailed
+      ? {
+          phase: bootFailurePhase || currentPhase,
+          component: bootFailureComponent || 'boot',
+          reason: bootFailureReason || null,
+          timestamp: bootFailedAt,
+        }
+      : null,
     shutdownReason: shutdownReason || null,
     phases: phaseEntries,
   };

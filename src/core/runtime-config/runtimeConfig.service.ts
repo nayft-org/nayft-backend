@@ -124,7 +124,10 @@ export async function refreshRuntimeConfigSnapshot(): Promise<void> {
 export function startRuntimeConfigRefreshLoop(intervalMs = 10_000): void {
   if (refreshInterval) return;
   refreshInterval = setInterval(() => {
-    void refreshRuntimeConfigSnapshot().catch(() => {});
+    void refreshRuntimeConfigSnapshot().catch((err) => {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn('[RuntimeConfig] refresh loop failed', reason);
+    });
   }, intervalMs);
 }
 

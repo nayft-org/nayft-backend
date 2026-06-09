@@ -47,6 +47,8 @@ import {
   refreshRuntimeConfigSnapshot,
   startRuntimeConfigRefreshLoop,
 } from './core/runtime-config/runtimeConfig.service';
+import { redis } from './config/redis';
+import { emailRedisKeys } from './modules/email/email.redisKeys';
 
 /** Set when inline ticker runs; used for graceful shutdown on SIGINT/SIGTERM. */
 let stopInlineTickerRef: (() => void) | null = null;
@@ -60,6 +62,26 @@ function sanitizeFatal(err: unknown): string {
     .slice(0, 500);
 }
 
+function bootLog(message: string, meta: Record<string, unknown> = {}): void {
+  console.log(`[BOOT] ${message} ${JSON.stringify(meta)}`);
+}
+
+async function waitForEmailWorkerHeartbeat(timeoutMs: number): Promise<{ ok: boolean; detectedAfterMs: number }> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const heartbeat = await redis.get(emailRedisKeys.workerHeartbeat);
+      if (heartbeat) {
+        return { ok: true, detectedAfterMs: Date.now() - startedAt };
+      }
+    } catch {
+      // retry until timeout
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return { ok: false, detectedAfterMs: Date.now() - startedAt };
+}
+
 process.on('unhandledRejection', (reason) => {
   failBootPhase('unhandled_rejection', reason, { reason: sanitizeFatal(reason) });
 });
@@ -71,14 +93,31 @@ process.on('uncaughtException', (err) => {
 
 const startServer = async (): Promise<void> => {
   startBootPhase('boot_start', { nodeEnv: config.nodeEnv, pid: process.pid });
+  const bootStartedAt = Date.now();
+  bootLog('Starting backend', { nodeEnv: config.nodeEnv, pid: process.pid });
   try {
+    bootLog('Loading environment variables');
     await withBootPhase('env_validation', async () => {
       assertEmailRuntimeConfigOrThrow();
     });
+    bootLog('Environment validation passed');
 
+    bootLog('Connecting MongoDB');
+    const mongoStartedAt = Date.now();
     await withBootPhase('mongo_connect', async () => {
       await connectDatabase();
     });
+    bootLog('MongoDB connected', { durationMs: Date.now() - mongoStartedAt });
+
+    bootLog('Connecting Redis');
+    const redisStartedAt = Date.now();
+    await withBootPhase('redis_connectivity_check', async () => {
+      const pong = await redis.ping();
+      if (pong !== 'PONG') {
+        throw new Error(`Unexpected Redis ping response: ${pong}`);
+      }
+    });
+    bootLog('Redis connected', { durationMs: Date.now() - redisStartedAt });
 
     await withBootPhase('runtime_config_init', async () => {
       await refreshRuntimeConfigSnapshot();
@@ -109,6 +148,7 @@ const startServer = async (): Promise<void> => {
     });
 
     await withBootPhase('feature_bootstrap', async () => {
+      bootLog('Registering routes and features');
       await bootstrapFeatures();
       await bootstrapAuthVerificationFeatures();
       const grandfathered = await authRepository.grandfatherExistingUsers();
@@ -125,6 +165,7 @@ const startServer = async (): Promise<void> => {
 
     // Start event queue worker (non-blocking)
     startBootPhase('worker_init');
+    bootLog('Initializing workers');
     setImmediate(() => runEventWorker().catch((err) => {
       failBootPhase('worker_event', err);
       console.error('[EventWorker] Fatal:', err);
@@ -161,6 +202,15 @@ const startServer = async (): Promise<void> => {
         })
       );
     }
+    const heartbeatCheck = await waitForEmailWorkerHeartbeat(30_000);
+    if (heartbeatCheck.ok) {
+      bootLog('Email worker initialized', { heartbeatDetectedAfterMs: heartbeatCheck.detectedAfterMs });
+    } else {
+      markBootWarn('worker_email_heartbeat', 'email worker heartbeat not detected during startup window', {
+        heartbeatDetectedAfterMs: heartbeatCheck.detectedAfterMs,
+      });
+      bootLog('Email worker heartbeat pending', { heartbeatDetectedAfterMs: heartbeatCheck.detectedAfterMs });
+    }
     completeBootPhase('worker_init');
     cron.schedule('0 4 * * *', () => {
       runCategoryCatalogSync().catch((err) => console.error('[PI CategorySync]', err));
@@ -184,6 +234,7 @@ const startServer = async (): Promise<void> => {
       attachWebSocketServer(server);
       return server;
     });
+    bootLog('Starting HTTP server');
     if (process.env.DISABLE_INLINE_TICKER_INGESTION === 'true') {
       stopInlineTickerRef = null;
       console.log(
@@ -224,10 +275,16 @@ const startServer = async (): Promise<void> => {
       console.log(`🔗 API: http://${host}:${port}/api`);
       console.log(`🔌 WebSocket: ws://${host}:${port}/ws`);
       console.log(`📈 Charts: http://${host}:${port}/api/charts/klines`);
+      bootLog('Backend ready', { startupDurationMs: Date.now() - bootStartedAt, host, port });
       completeBootPhase('boot_start', { host, port, nodeEnv: config.nodeEnv });
     });
   } catch (error) {
     failBootPhase('boot_start', error, { reason: sanitizeFatal(error) });
+    console.error('[BOOT][FAILED]', JSON.stringify({
+      phase: 'boot_start',
+      reason: sanitizeFatal(error),
+      startupDurationMs: Date.now() - bootStartedAt,
+    }));
     console.error('Failed to start server:', error);
     process.exit(1);
   }
