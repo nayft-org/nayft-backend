@@ -238,6 +238,16 @@ jobs:
           cd "${GITHUB_WORKSPACE}"
           # Full stack down — partial down can leave a stale project network.
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
+
+          # Containers started manually outside this compose project (e.g. for
+          # ad-hoc debugging) keep the same fixed names and aren't removed by
+          # `down` above, which makes `up --force-recreate` fail with
+          # "Conflict. The container name ... is already in use". Force-remove
+          # any leftovers by name before recreating the stack.
+          for name in crypto-redis crypto-mongo crypto-backend crypto-stream-worker; do
+            ${DOCKER_WRAP}docker rm -f "${name}" >/dev/null 2>&1 || true
+          done
+
           deploy_exit_code=0
           ${DOCKER_WRAP}docker compose -f "${COMPOSE_FILE}" up -d --force-recreate || deploy_exit_code=$?
           echo "deploy_exit_code=${deploy_exit_code}" >> "${GITHUB_OUTPUT}"
