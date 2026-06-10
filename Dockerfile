@@ -21,6 +21,7 @@ COPY packages ./packages
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/packages/nayft-password-policy/dist ./packages/nayft-password-policy/dist
 RUN mkdir -p /app/scripts
 COPY scripts/healthcheck-ready.mjs ./scripts/healthcheck-ready.mjs
 
