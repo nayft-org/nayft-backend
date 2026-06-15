@@ -45,10 +45,11 @@ jobs:
 
   deploy:
     name: Deploy to NAYFT (self-hosted)
-    # Labels must match /home/ubuntu/nayft-backend-runner/.runner — NOT nayft-news-runner.
+    # Labels must match runner prod-in-nayft (self-hosted, Linux, X64).
     runs-on:
       - self-hosted
-      - nayft-backend-runner
+      - Linux
+      - X64
     needs: build
 
     steps:
