@@ -2,6 +2,8 @@
 
 Production-ready crypto backend supporting news feed, market watch, coin profiles, wishlist, and rewards.
 
+<!-- CI pipeline trigger -->
+
 ## Tech Stack
 
 - Node.js + TypeScript
