@@ -9,6 +9,7 @@ import { Comment } from '../comment/model';
 import { NewsBoard } from '../newsboard/model';
 import { followService } from '../follow/service';
 import { resolveFollowSymbolsForTargets } from '../follow/resolveFollowSymbols';
+import { buildShareMeta } from './shareMeta';
 
 const LIST_PROJECTION =
   'externalId title subtitle imageUrl sourceUrl publishedAt source categories coins metrics sentiment sentimentStatus sentimentAnalysis';
@@ -52,6 +53,11 @@ const mapNewsArticleToDto = (
   const sourceDomain = article.source?.domain || deriveDomainFromUrl(article.sourceUrl);
   const sourceLogoUrl = article.source?.logoUrl ?? null;
   const trustCategory = article.source?.trustCategory ?? 'unknown';
+  const shareMeta = buildShareMeta({
+    externalId: article.externalId,
+    sourceUrl: article.sourceUrl,
+    imageUrl: article.imageUrl,
+  });
 
   return {
     id: article.externalId,
@@ -73,7 +79,7 @@ const mapNewsArticleToDto = (
       // Reserved extension blocks for future share cards / Socialyx (not populated in Phase 1)
       branding: undefined as undefined,
     },
-    shareMeta: undefined as undefined,
+    shareMeta,
     relatedCoins,
     categories,
     publishedAt: article.publishedAt,
@@ -356,6 +362,14 @@ const mapCoindeskToDto = (articleRaw: any) => {
   const relatedCoins = extractTickers(article).map((t) => t.toUpperCase());
   const sourceName = article.source || 'CoinDesk';
   const sourceDomain = article.url ? deriveDomainFromUrl(article.url) : 'coindesk.com';
+  const publisherUrl = article.url || '';
+  const shareMeta = publisherUrl
+    ? buildShareMeta({
+        externalId: article.id,
+        sourceUrl: publisherUrl,
+        imageUrl: article.imageUrl,
+      })
+    : undefined;
 
   return {
     id: article.id,
@@ -370,7 +384,7 @@ const mapCoindeskToDto = (articleRaw: any) => {
       trustCategory: 'unknown' as const,
       branding: undefined as undefined,
     },
-    shareMeta: undefined as undefined,
+    shareMeta,
     url: article.url,
     image: article.imageUrl,
     relatedCoins,

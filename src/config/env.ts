@@ -161,6 +161,8 @@ export const config = {
   exchangePollBatchSize: Math.max(1, parseInt(process.env.EXCHANGE_POLL_BATCH_SIZE || '8', 10)),
   /** API key for POST /api/news/store-news ingestion */
   newsIngestApiKey: (process.env.NEWS_INGEST_API_KEY || '').trim(),
+  /** Public origin for shared news links (no trailing slash). */
+  nayftShareBaseUrl: (process.env.NAYFT_SHARE_BASE_URL || 'https://nayft.com').trim(),
 };
 
 const DEFAULT_JWT = 'super_secret_key_change_later';
