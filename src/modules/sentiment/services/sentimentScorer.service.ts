@@ -6,7 +6,7 @@ const vaderSentiment = require('vader-sentiment') as {
 };
 
 import { sentimentConfig } from '../config/sentimentConfig';
-import { getSourceTrust } from './sourceTrust.service';
+import { getSourceTrustSync as getSourceTrust } from '../../news/services/sourceTrustRegistry.service';
 
 export type SentimentLabel = 'bullish' | 'bearish' | 'neutral' | 'risk';
 

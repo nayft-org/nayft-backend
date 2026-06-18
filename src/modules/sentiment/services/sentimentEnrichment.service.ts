@@ -5,7 +5,7 @@ import {
   scoreToLegacySentiment,
   getModelMetadata,
 } from './sentimentScorer.service';
-import { getSourceTrust } from './sourceTrust.service';
+import { getSourceTrustSync } from '../../news/services/sourceTrustRegistry.service';
 import { sentimentConfig } from '../config/sentimentConfig';
 
 export type EnrichResult = 'ready' | 'skipped' | 'not_found' | 'hash_mismatch' | 'failed';
@@ -76,7 +76,7 @@ export async function enrichArticleByExternalId(
     });
 
     const { model, modelVersion } = getModelMetadata();
-    const sourceTrust = getSourceTrust(article.source?.key, article.source?.name);
+    const sourceTrust = getSourceTrustSync(article.source?.key, article.source?.name);
     const analyzedAt = new Date();
 
     const writeResult = await NewsArticle.updateOne(

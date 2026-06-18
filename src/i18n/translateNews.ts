@@ -34,7 +34,9 @@ export async function translateNewsArticleDtos<T extends TranslatableNewsArticle
     [];
 
   clones.forEach((article, articleIdx) => {
-    for (const field of ['title', 'summary', 'subtitle', 'source'] as const) {
+    // Note: 'source' (flat string) is intentionally excluded — publisher names are proper nouns
+    // and should not be translated. sourceInfo.name is also excluded for the same reason.
+    for (const field of ['title', 'summary', 'subtitle'] as const) {
       const v = article[field];
       if (typeof v === 'string' && v.length > 0) {
         strings.push(v);

@@ -253,6 +253,42 @@ const startServer = async (): Promise<void> => {
     startCoinSentimentScheduler();
     startRiskBuildScheduler();
 
+    // Source branding repair jobs
+    cron.schedule('0 */6 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingLogoRepairs(50);
+          await m.runRepairBatch('logo', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:logos]', err));
+    });
+    cron.schedule('30 */6 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingDomainRepairs();
+          await m.runRepairBatch('domain', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:domains]', err));
+    });
+    cron.schedule('0 2 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingTrustRepairs();
+          await m.runRepairBatch('trust', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:trust]', err));
+    });
+    cron.schedule('0 3 * * *', () => {
+      import('./modules/news/services/sourceConsistencyValidator.service')
+        .then((m) => m.runConsistencyValidator())
+        .catch((err) => console.error('[SourceConsistency]', err));
+    });
+    cron.schedule('0 1 * * *', () => {
+      import('./modules/news/services/sourceRegistry.service')
+        .then((m) => m.refreshArticleCounts())
+        .catch((err) => console.error('[SourceRegistry:articleCounts]', err));
+    });
+
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {
       runKlineDownsampler().catch((err) => console.error('[KlineDownsampler]', err));
