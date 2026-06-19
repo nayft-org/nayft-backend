@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { chartRepository } from './repository';
-import type { KlineRecord, MarketTrendPoint } from './repository';
+import type { KlineRecord, MarketTrendPoint, MarketTrendOHLCPoint } from './repository';
 import type { KlineInterval } from './model';
 import { streamConfig } from '../../config/streamConfig';
 import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
@@ -8,6 +8,7 @@ import {
   withResponseCache,
   buildChartMarketTrendKey,
   buildChartMarketTrendV2Key,
+  buildChartMarketTrendOHLCKey,
   buildChartKlinesKey,
 } from '../../utils/responseCache';
 import { config } from '../../config/env';
@@ -67,6 +68,24 @@ function buildLinearSyntheticPoints(opts: {
     out.push({ openTime: new Date(ms), value });
   }
   return out;
+}
+
+/**
+ * TEMPORARY FALLBACK — synthetic OHLC when weighted index and BTC proxy both fail.
+ * open = previous close; high/low = max/min(open, close). No intra-bar wicks.
+ */
+function deriveSyntheticOHLCFromScalars(points: MarketTrendPoint[]): MarketTrendOHLCPoint[] {
+  return points.map((point, i) => {
+    const close = point.value;
+    const open = i > 0 ? points[i - 1].value : close;
+    return {
+      openTime: point.openTime,
+      open,
+      high: Math.max(open, close),
+      low: Math.min(open, close),
+      close,
+    };
+  });
 }
 
 async function getCmcTotalMarketCap(maxCoins: number): Promise<{
@@ -230,6 +249,68 @@ async function tryBtcProxyMarketTrend(params: {
   return klines.map((k) => ({
     openTime: k.openTime,
     value: latestTotalUsd * (k.close / lastClose),
+  }));
+}
+
+/** BTC OHLC scaled to total USD market cap — candle-view fallback when multi-coin OHLC is missing. */
+async function tryBtcProxyMarketTrendOHLC(params: {
+  exchange: string;
+  interval: KlineInterval;
+  from: Date;
+  to: Date;
+  limit: number;
+  latestTotalUsd: number;
+}): Promise<MarketTrendOHLCPoint[] | null> {
+  const { exchange, interval, from, to, limit, latestTotalUsd } = params;
+  if (latestTotalUsd <= 0) return null;
+
+  let klines: KlineRecord[] =
+    (await fetchBinanceBtcKlinesRest({
+      interval,
+      from,
+      to,
+      limit: Math.min(limit, 1000),
+    })) ?? [];
+
+  if (klines.length < 2) {
+    try {
+      klines = await chartRepository.findKlines({
+        exchange,
+        symbol: 'BTC',
+        interval,
+        from,
+        to,
+        limit,
+      });
+    } catch {
+      klines = [];
+    }
+  }
+  if (klines.length < 2) {
+    try {
+      klines = await chartRepository.aggregateKlinesFromTrades({
+        exchange,
+        symbol: 'BTC',
+        interval,
+        from,
+        to,
+        limit,
+      });
+    } catch {
+      klines = [];
+    }
+  }
+
+  if (klines.length < 2) return null;
+  const lastClose = klines[klines.length - 1].close;
+  if (!Number.isFinite(lastClose) || lastClose <= 0) return null;
+  const scale = latestTotalUsd / lastClose;
+  return klines.map((k) => ({
+    openTime: k.openTime,
+    open: k.open * scale,
+    high: k.high * scale,
+    low: k.low * scale,
+    close: k.close * scale,
   }));
 }
 
@@ -520,6 +601,179 @@ async function buildMarketTrendPayload(params: {
   };
 }
 
+async function buildMarketTrendOHLCPayload(params: {
+  interval?: KlineInterval;
+  from?: string;
+  to?: string;
+  exchange?: string;
+  limit?: number;
+  maxCoins?: number;
+  useBatchedKlines: boolean;
+}) {
+  const exchange = params.exchange || streamConfig.exchanges[0] || 'binance';
+  const interval = params.interval || '1m';
+  const limit = Math.min(Math.max(params.limit ?? 240, 30), 720);
+  const maxCoins = Math.min(Math.max(params.maxCoins ?? 25, 5), 100);
+
+  const now = new Date();
+  const bucketMs = INTERVAL_MS[interval];
+  const to = params.to ? new Date(params.to) : now;
+  const from = params.from
+    ? new Date(params.from)
+    : new Date(to.getTime() - bucketMs * (limit + Math.ceil(limit * 0.5)));
+
+  let activeCoins: Array<{
+    symbol?: string;
+    market_cap?: number;
+    market_cap_change_percentage_24h?: number;
+    market_cap_rank?: number;
+  }> = [];
+  const labeledQuery = LabeledActiveCoin.find({
+    provider: config.coinDataPrimarySnapshotProvider,
+    symbol: { $exists: true, $ne: '' },
+  })
+    .select('symbol market_cap market_cap_change_percentage_24h market_cap_rank')
+    .sort({ market_cap_rank: 1 })
+    .limit(maxCoins)
+    .maxTimeMS(8000)
+    .lean();
+  try {
+    activeCoins = await Promise.race([
+      labeledQuery,
+      new Promise<typeof activeCoins>((resolve) => setTimeout(() => resolve([]), 5000)),
+    ]);
+  } catch {
+    activeCoins = [];
+  }
+
+  const fromDb = activeCoins
+    .map((coin) => {
+      const rawCap = Number(coin.market_cap);
+      const marketCap = Number.isFinite(rawCap) && rawCap > 0 ? rawCap : 1;
+      return {
+        symbol: String(coin.symbol || '').trim().toUpperCase(),
+        marketCap,
+        marketCapChange24h: Number(coin.market_cap_change_percentage_24h || 0),
+      };
+    })
+    .filter((coin) => Boolean(coin.symbol));
+
+  const uniqueStreamSymbols = [
+    ...new Set(
+      streamConfig.kline.symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean)
+    ),
+  ].slice(0, maxCoins);
+
+  const useFallbackConstituents = fromDb.length === 0;
+  const constituents = useFallbackConstituents
+    ? uniqueStreamSymbols.map((symbol) => ({ symbol, marketCap: 1 }))
+    : fromDb;
+
+  let latestValue = constituents.reduce((sum, coin) => sum + coin.marketCap, 0);
+  let absoluteChange24h = 0;
+  let relativeChange24h = 0;
+
+  if (!useFallbackConstituents) {
+    const previousValueForSynth = fromDb.reduce((sum, coin) => {
+      const divisor = 1 + coin.marketCapChange24h / 100;
+      if (!Number.isFinite(divisor) || divisor <= 0) return sum;
+      return sum + coin.marketCap / divisor;
+    }, 0);
+    absoluteChange24h = latestValue - previousValueForSynth;
+    relativeChange24h = previousValueForSynth > 0 ? (absoluteChange24h / previousValueForSynth) * 100 : 0;
+  }
+
+  const findParams = {
+    exchange,
+    interval,
+    from,
+    to,
+    limit,
+    constituents: constituents.map(({ symbol, marketCap }) => ({ symbol, marketCap })),
+  };
+
+  const findTrendPromise = params.useBatchedKlines
+    ? chartRepository.findMarketTrendOHLCBatched(findParams)
+    : chartRepository.findMarketTrendOHLC(findParams);
+
+  let points: MarketTrendOHLCPoint[] = [];
+  try {
+    points = await Promise.race([
+      findTrendPromise,
+      new Promise<MarketTrendOHLCPoint[]>((resolve) => setTimeout(() => resolve([]), 8000)),
+    ]);
+  } catch {
+    points = [];
+  }
+
+  if (points.length >= 2 && useFallbackConstituents) {
+    const lastClose = points[points.length - 1].close;
+    const firstClose = points[0].close;
+    latestValue = lastClose;
+    absoluteChange24h = lastClose - firstClose;
+    relativeChange24h = firstClose > 0 ? (absoluteChange24h / firstClose) * 100 : 0;
+  }
+
+  if (points.length === 0) {
+    let scaleUsd: number | null = null;
+    if (useFallbackConstituents) {
+      const cmcSnap = await getCmcTotalMarketCap(maxCoins);
+      scaleUsd = cmcSnap?.latestValue ?? null;
+      if (cmcSnap) {
+        latestValue = cmcSnap.latestValue;
+        absoluteChange24h = cmcSnap.absoluteChange24h;
+        relativeChange24h = cmcSnap.relativeChange24h;
+      }
+    } else if (Number.isFinite(latestValue) && latestValue > 0) {
+      scaleUsd = latestValue;
+    }
+
+    if (scaleUsd != null && scaleUsd > 0) {
+      const btcProxy = await tryBtcProxyMarketTrendOHLC({
+        exchange,
+        interval,
+        from,
+        to,
+        limit,
+        latestTotalUsd: scaleUsd,
+      });
+      if (btcProxy && btcProxy.length >= 2) {
+        points = btcProxy;
+        if (!useFallbackConstituents) {
+          const firstClose = btcProxy[0].close;
+          const lastClose = btcProxy[btcProxy.length - 1].close;
+          absoluteChange24h = lastClose - firstClose;
+          relativeChange24h = firstClose > 0 ? (absoluteChange24h / firstClose) * 100 : 0;
+        }
+      }
+    }
+  }
+
+  if (points.length === 0) {
+    const scalarPayload = await buildMarketTrendPayload(params);
+    if (scalarPayload.points.length >= 2) {
+      points = deriveSyntheticOHLCFromScalars(scalarPayload.points);
+    }
+    latestValue = scalarPayload.latestValue;
+    absoluteChange24h = scalarPayload.absoluteChange24h;
+    relativeChange24h = scalarPayload.relativeChange24h;
+  }
+
+  return {
+    points,
+    latestValue,
+    absoluteChange24h,
+    relativeChange24h,
+    range: {
+      interval,
+      from,
+      to,
+      limit,
+    },
+    constituents: constituents.length,
+  };
+}
+
 async function aggregateKlinesFromTradesImpl(params: {
   exchange: string;
   symbol: string;
@@ -751,6 +1005,51 @@ export const chartService = {
         buildMarketTrendPayload({
           ...params,
           useBatchedKlines: true,
+        }),
+    });
+    return data;
+  },
+
+  /** Dedicated OHLC market-cap index for candle view — does not affect /market-trend. */
+  async getMarketTrendOHLC(params: {
+    interval?: KlineInterval;
+    from?: string;
+    to?: string;
+    exchange?: string;
+    limit?: number;
+    maxCoins?: number;
+  }) {
+    const exchange = params.exchange || streamConfig.exchanges[0] || 'binance';
+    const interval = params.interval || '1m';
+    const limit = Math.min(Math.max(params.limit ?? 240, 30), 720);
+    const maxCoins = Math.min(Math.max(params.maxCoins ?? 25, 5), 100);
+
+    const now = new Date();
+    const bucketMs = INTERVAL_MS[interval];
+    const to = params.to ? new Date(params.to) : now;
+    const from = params.from
+      ? new Date(params.from)
+      : new Date(to.getTime() - bucketMs * (limit + Math.ceil(limit * 0.5)));
+
+    const cacheKey = buildChartMarketTrendOHLCKey({
+      exchange,
+      interval,
+      limit,
+      maxCoins,
+      fromIso: from.toISOString(),
+      toIso: to.toISOString(),
+    });
+
+    const useBatched = config.marketTrendV2Enabled && config.marketTrendDefaultToV2Enabled;
+
+    const { data } = await withResponseCache({
+      cacheKey,
+      ttlSeconds: MARKET_TREND_CACHE_TTL,
+      metricsKind: 'chart:mt-ohlc',
+      fetcher: () =>
+        buildMarketTrendOHLCPayload({
+          ...params,
+          useBatchedKlines: useBatched,
         }),
     });
     return data;

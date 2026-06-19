@@ -93,6 +93,18 @@ export function buildChartMarketTrendV2Key(params: {
   return `chart:mtv2:${RESPONSE_CACHE_VERSION}:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
 }
 
+/** Candle-view OHLC index; separate from scalar market-trend. */
+export function buildChartMarketTrendOHLCKey(params: {
+  exchange: string;
+  interval: string;
+  limit: number;
+  maxCoins: number;
+  fromIso: string;
+  toIso: string;
+}): string {
+  return `chart:mt-ohlc:${RESPONSE_CACHE_VERSION}:${params.exchange}:${params.interval}:${params.limit}:${params.maxCoins}:${params.fromIso}:${params.toIso}`;
+}
+
 export function buildNewsListKey(params: {
   userScope: string;
   page: number;
