@@ -128,6 +128,92 @@ export function evaluateRules(ev: NotificationDomainEvent): NotificationDraft[] 
           throttleWindowSec: 3600,
         },
       ];
+    case 'market.spike.v1': {
+      const symbol = String(body.symbol ?? '').toUpperCase();
+      const coinId = String(body.coinId ?? '');
+      const pct = typeof body.percentChange24h === 'number' ? body.percentChange24h : 0;
+      const sign = pct >= 0 ? '+' : '';
+      const hour = new Date().toISOString().slice(0, 13);
+      return [
+        {
+          userId,
+          category: 'market',
+          type: 'price_spike',
+          priority: 'STANDARD',
+          title: `${symbol} price alert`,
+          body: `${symbol} moved ${sign}${pct.toFixed(1)}% in 24h`,
+          data: {
+            route: `/coin/${coinId}`,
+            coinId,
+            intelligence: {
+              status: 'preview',
+              reason: `${symbol} moved ${sign}${pct.toFixed(1)}% in 24h`,
+            },
+          },
+          dedupeHash: `market:${coinId}:${userId}:${hour}`,
+          throttlePolicy: 'market_spike',
+          throttleLimit: 10,
+          throttleWindowSec: 3600,
+        },
+      ];
+    }
+    case 'news.digest.v1': {
+      const articleCount = typeof body.articleCount === 'number' ? body.articleCount : 0;
+      const articleIds = Array.isArray(body.articleIds)
+        ? body.articleIds.filter((id): id is string => typeof id === 'string')
+        : [];
+      const hour = new Date().toISOString().slice(0, 13);
+      const title =
+        articleCount === 1 ? '1 new update for assets you follow' : `${articleCount} new updates for assets you follow`;
+      const route = articleCount === 1 && articleIds[0] ? '/(tabs)' : '/(tabs)';
+      return [
+        {
+          userId,
+          category: 'news',
+          type: 'digest',
+          priority: 'STANDARD',
+          title: 'News update',
+          body: title,
+          data: {
+            route,
+            articleIds,
+            intelligence: {
+              status: 'preview',
+              reason: title,
+            },
+          },
+          dedupeHash: `news:digest:${userId}:${hour}`,
+          throttlePolicy: 'news_digest',
+          throttleLimit: 4,
+          throttleWindowSec: 3600,
+          groupKey: `news:digest:${userId}`,
+        },
+      ];
+    }
+    case 'portfolio.threshold.v1': {
+      const pct = typeof body.relativeChange24h === 'number' ? body.relativeChange24h : 0;
+      const direction = body.direction === 'down' ? 'down' : 'up';
+      const sign = pct >= 0 ? '+' : '';
+      const day = new Date().toISOString().slice(0, 10);
+      return [
+        {
+          userId,
+          category: 'portfolio',
+          type: 'threshold',
+          priority: 'STANDARD',
+          title: 'Portfolio alert',
+          body: `Your portfolio moved ${sign}${pct.toFixed(1)}% in 24h`,
+          data: {
+            route: '/(tabs)/portfolio',
+            intelligence: {
+              status: 'preview',
+              reason: `Your portfolio moved ${sign}${pct.toFixed(1)}% in 24h`,
+            },
+          },
+          dedupeHash: `portfolio:${userId}:${direction}:${day}`,
+        },
+      ];
+    }
     default:
       return [];
   }

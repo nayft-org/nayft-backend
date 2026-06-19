@@ -29,6 +29,14 @@ export const CLIENT_EVENT_DEFINITIONS = {
     strengthLevel: z.enum(['poor', 'low']),
     violationCount: z.number().int().nonnegative(),
   }),
+  'notifications:notification_opened': z
+    .object({
+      notificationId: z.string().max(64),
+      category: z.string().max(32),
+      type: z.string().max(32),
+      source: z.enum(['push', 'inbox']),
+    })
+    .strict(),
 } as const;
 
 export const SERVER_EVENT_DEFINITIONS = {

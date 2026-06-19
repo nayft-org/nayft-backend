@@ -22,6 +22,7 @@ import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWork
 import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
 import { startRiskBuildScheduler } from './modules/risk/jobs/riskBuildScheduler';
 import { bootstrapPiFeatures } from './modules/portfolio-intelligence/bootstrapPiFeatures';
+import { bootstrapNotificationFeatures } from './modules/notifications/bootstrapNotificationFeatures';
 import { runPiRecomputeWorker } from './modules/portfolio-intelligence/jobs/piRecomputeWorker';
 import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/categoryCatalogSync';
 import { piConfig } from './modules/portfolio-intelligence/config/piConfig';
@@ -157,6 +158,7 @@ const startServer = async (): Promise<void> => {
       }
       await bootstrapComplianceFeatures();
       await bootstrapPiFeatures();
+      await bootstrapNotificationFeatures();
     });
 
     await withBootPhase('plan_bootstrap', async () => {
@@ -224,6 +226,20 @@ const startServer = async (): Promise<void> => {
       import('./modules/portfolio-intelligence/jobs/piReconciliation.job')
         .then((m) => m.runPiReconciliation(200))
         .catch((err) => console.error('[PI Reconciliation]', err));
+    });
+
+    cron.schedule('*/15 * * * *', () => {
+      import('./modules/notifications/jobs/marketSpikeCron')
+        .then((m) => m.runMarketSpikeCron())
+        .catch((err) => console.error('[MarketSpikeCron]', err));
+      import('./modules/notifications/jobs/portfolioThresholdCron')
+        .then((m) => m.runPortfolioThresholdCron())
+        .catch((err) => console.error('[PortfolioThresholdCron]', err));
+    });
+    cron.schedule('0 * * * *', () => {
+      import('./modules/notifications/jobs/newsDigestCron')
+        .then((m) => m.runNewsDigestCron())
+        .catch((err) => console.error('[NewsDigestCron]', err));
     });
 
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).

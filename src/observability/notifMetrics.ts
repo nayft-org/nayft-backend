@@ -10,4 +10,7 @@ export const notifMetrics = {
   materializeErrorTotal: 0,
   streamProcessedTotal: 0,
   streamAckTotal: 0,
+  pushAttemptedTotal: 0,
+  pushSucceededTotal: 0,
+  pushFailedTotal: 0,
 };

@@ -30,6 +30,7 @@ import metricsRoutes from './modules/metrics/routes';
 import notificationsRoutes, {
   notificationPreferencesRouter,
 } from './modules/notifications/routes';
+import deviceSessionsRoutes from './modules/notifications/deviceSessions.routes';
 import { notificationsController } from './modules/notifications/controller';
 import adminRoutes from './core/admin/routes';
 import sentimentAdminRoutes from './modules/sentiment/adminRoutes';
@@ -233,6 +234,7 @@ app.use('/api/follow', followRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/device-sessions', deviceSessionsRoutes);
 app.use('/api/notification-preferences', notificationPreferencesRouter);
 app.get('/api/notification-unread-count', authenticate, notificationsController.unreadCount);
 app.use('/api/admin', adminRoutes);
