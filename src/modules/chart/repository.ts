@@ -40,7 +40,26 @@ export interface MarketTrendPoint {
   value: number;
 }
 
+export interface MarketTrendOHLCPoint {
+  openTime: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 type KlineDoc = { openTime: Date; close: number };
+type KlineOhlcDoc = { openTime: Date; open: number; high: number; low: number; close: number };
+
+function toKlineOhlcDoc(k: KlineRecord): KlineOhlcDoc {
+  return {
+    openTime: k.openTime,
+    open: k.open,
+    high: k.high,
+    low: k.low,
+    close: k.close,
+  };
+}
 
 function computeMarketTrendPoints(
   constituents: Array<{ symbol: string; marketCap: number }>,
@@ -87,6 +106,84 @@ function computeMarketTrendPoints(
     openTime: point.openTime,
     value: point.indexValue * scale,
   }));
+}
+
+function computeMarketTrendOHLCPoints(
+  constituents: Array<{ symbol: string; marketCap: number }>,
+  klineSets: Array<{ symbol: string; marketCap: number; docs: KlineOhlcDoc[] }>
+): MarketTrendOHLCPoint[] {
+  const indexByTimestamp = new Map<
+    number,
+    { weightedOpen: number; weightedHigh: number; weightedLow: number; weightedClose: number; weight: number }
+  >();
+
+  for (const set of klineSets) {
+    if (set.docs.length < 2) continue;
+    const baseClose = Number(set.docs[0].close);
+    if (!Number.isFinite(baseClose) || baseClose <= 0) continue;
+    if (!Number.isFinite(set.marketCap) || set.marketCap <= 0) continue;
+
+    for (const kline of set.docs) {
+      const open = Number(kline.open);
+      const high = Number(kline.high);
+      const low = Number(kline.low);
+      const close = Number(kline.close);
+      if (![open, high, low, close].every((v) => Number.isFinite(v) && v > 0)) continue;
+
+      const ts = new Date(kline.openTime).getTime();
+      const existing = indexByTimestamp.get(ts) ?? {
+        weightedOpen: 0,
+        weightedHigh: 0,
+        weightedLow: 0,
+        weightedClose: 0,
+        weight: 0,
+      };
+      existing.weightedOpen += (open / baseClose) * set.marketCap;
+      existing.weightedHigh += (high / baseClose) * set.marketCap;
+      existing.weightedLow += (low / baseClose) * set.marketCap;
+      existing.weightedClose += (close / baseClose) * set.marketCap;
+      existing.weight += set.marketCap;
+      indexByTimestamp.set(ts, existing);
+    }
+  }
+
+  const rawPoints = Array.from(indexByTimestamp.entries())
+    .map(([ts, v]) => {
+      if (v.weight <= 0) return null;
+      return {
+        openTime: new Date(ts),
+        open: v.weightedOpen / v.weight,
+        high: v.weightedHigh / v.weight,
+        low: v.weightedLow / v.weight,
+        close: v.weightedClose / v.weight,
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .filter((p) => [p.open, p.high, p.low, p.close].every((v) => Number.isFinite(v) && v > 0))
+    .sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
+
+  if (rawPoints.length < 2) return [];
+
+  const latestCloseIndex = rawPoints[rawPoints.length - 1].close;
+  if (!Number.isFinite(latestCloseIndex) || latestCloseIndex <= 0) return [];
+
+  const totalMarketCap = constituents.reduce((sum, c) => sum + c.marketCap, 0);
+  if (!Number.isFinite(totalMarketCap) || totalMarketCap <= 0) return [];
+  const scale = totalMarketCap / latestCloseIndex;
+
+  return rawPoints.map((point) => {
+    const open = point.open * scale;
+    const high = point.high * scale;
+    const low = point.low * scale;
+    const close = point.close * scale;
+    return {
+      openTime: point.openTime,
+      open,
+      high: Math.max(high, open, close),
+      low: Math.min(low, open, close),
+      close,
+    };
+  });
 }
 
 export const chartRepository = {
@@ -343,5 +440,138 @@ export const chartRepository = {
     );
 
     return computeMarketTrendPoints(constituents, klineSets);
+  },
+
+  async findMarketTrendOHLC(params: {
+    exchange: string;
+    interval: KlineInterval;
+    from: Date;
+    to: Date;
+    limit: number;
+    constituents: Array<{ symbol: string; marketCap: number }>;
+  }): Promise<MarketTrendOHLCPoint[]> {
+    const { exchange, interval, from, to, limit, constituents } = params;
+    if (constituents.length === 0) return [];
+
+    const limit8 = pLimit(8);
+    const klineSets = await Promise.all(
+      constituents.map((coin) => limit8(async () => {
+        const query = {
+          'meta.exchange': exchange,
+          'meta.symbol': coin.symbol.toUpperCase(),
+          'meta.interval': interval,
+          openTime: { $gte: from, $lte: to },
+        };
+        const raw = await OhlcvKline.find(query)
+          .maxTimeMS(chartQueryMaxMs())
+          .sort({ openTime: -1 })
+          .limit(limit)
+          .lean();
+
+        let docs: KlineOhlcDoc[] = raw.reverse().map((d) => ({
+          openTime: d.openTime,
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+        }));
+        if (docs.length < 2) {
+          const fromTrades = await this.aggregateKlinesFromTrades({
+            exchange,
+            symbol: coin.symbol,
+            interval,
+            from,
+            to,
+            limit,
+          });
+          docs = fromTrades.map(toKlineOhlcDoc);
+        }
+
+        return {
+          symbol: coin.symbol,
+          marketCap: coin.marketCap,
+          docs,
+        };
+      }))
+    );
+
+    return computeMarketTrendOHLCPoints(constituents, klineSets);
+  },
+
+  /**
+   * Batched Mongo reads for market-cap OHLC index (candle view only).
+   */
+  async findMarketTrendOHLCBatched(params: {
+    exchange: string;
+    interval: KlineInterval;
+    from: Date;
+    to: Date;
+    limit: number;
+    constituents: Array<{ symbol: string; marketCap: number }>;
+  }): Promise<MarketTrendOHLCPoint[]> {
+    const { exchange, interval, from, to, limit, constituents } = params;
+    if (constituents.length === 0) return [];
+
+    const symbols = constituents.map((c) => c.symbol.toUpperCase());
+    const capBySymbol = new Map(
+      constituents.map((c) => [c.symbol.toUpperCase(), c.marketCap] as const)
+    );
+
+    const grouped = (await OhlcvKline.aggregate([
+      {
+        $match: {
+          'meta.exchange': exchange,
+          'meta.interval': interval,
+          'meta.symbol': { $in: symbols },
+          openTime: { $gte: from, $lte: to },
+        },
+      },
+      { $sort: { openTime: -1 } },
+      {
+        $group: {
+          _id: '$meta.symbol',
+          docs: { $push: '$$ROOT' },
+        },
+      },
+      {
+        $project: {
+          symbol: '$_id',
+          docs: { $slice: ['$docs', limit] },
+        },
+      },
+    ]).option({ maxTimeMS: chartQueryMaxMs() })) as Array<{ symbol: string; docs: KlineOhlcDoc[] }>;
+
+    const groupedBySym = new Map(
+      grouped.map((g) => [String(g.symbol).toUpperCase(), g] as const)
+    );
+
+    const limit8 = pLimit(8);
+    const klineSets = await Promise.all(
+      constituents.map((c) => limit8(async () => {
+        const sym = c.symbol.toUpperCase();
+        const g = groupedBySym.get(sym);
+        let docs: KlineOhlcDoc[] = g
+          ? (g.docs as KlineOhlcDoc[]).slice().reverse()
+          : [];
+        if (docs.length < 2) {
+          const fromTrades = await this.aggregateKlinesFromTrades({
+            exchange,
+            symbol: c.symbol,
+            interval,
+            from,
+            to,
+            limit,
+          });
+          docs = fromTrades.map(toKlineOhlcDoc);
+        }
+        return {
+          symbol: sym,
+          marketCap: capBySymbol.get(sym) ?? 0,
+          docs,
+        };
+      }))
+    );
+
+    return computeMarketTrendOHLCPoints(constituents, klineSets);
   },
 };

@@ -22,6 +22,7 @@ import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWork
 import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
 import { startRiskBuildScheduler } from './modules/risk/jobs/riskBuildScheduler';
 import { bootstrapPiFeatures } from './modules/portfolio-intelligence/bootstrapPiFeatures';
+import { bootstrapNotificationFeatures } from './modules/notifications/bootstrapNotificationFeatures';
 import { runPiRecomputeWorker } from './modules/portfolio-intelligence/jobs/piRecomputeWorker';
 import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/categoryCatalogSync';
 import { piConfig } from './modules/portfolio-intelligence/config/piConfig';
@@ -157,6 +158,7 @@ const startServer = async (): Promise<void> => {
       }
       await bootstrapComplianceFeatures();
       await bootstrapPiFeatures();
+      await bootstrapNotificationFeatures();
     });
 
     await withBootPhase('plan_bootstrap', async () => {
@@ -226,6 +228,20 @@ const startServer = async (): Promise<void> => {
         .catch((err) => console.error('[PI Reconciliation]', err));
     });
 
+    cron.schedule('*/15 * * * *', () => {
+      import('./modules/notifications/jobs/marketSpikeCron')
+        .then((m) => m.runMarketSpikeCron())
+        .catch((err) => console.error('[MarketSpikeCron]', err));
+      import('./modules/notifications/jobs/portfolioThresholdCron')
+        .then((m) => m.runPortfolioThresholdCron())
+        .catch((err) => console.error('[PortfolioThresholdCron]', err));
+    });
+    cron.schedule('0 * * * *', () => {
+      import('./modules/notifications/jobs/newsDigestCron')
+        .then((m) => m.runNewsDigestCron())
+        .catch((err) => console.error('[NewsDigestCron]', err));
+    });
+
     // Create HTTP server. Price batches come from Redis (`stream:prices:batch`).
     // Inline ticker publishes to Redis so `npm run dev` alone delivers live quotes.
     // When running `dev:worker:streams` separately, set DISABLE_INLINE_TICKER_INGESTION=true to avoid duplicate Binance connections.
@@ -252,6 +268,42 @@ const startServer = async (): Promise<void> => {
 
     startCoinSentimentScheduler();
     startRiskBuildScheduler();
+
+    // Source branding repair jobs
+    cron.schedule('0 */6 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingLogoRepairs(50);
+          await m.runRepairBatch('logo', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:logos]', err));
+    });
+    cron.schedule('30 */6 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingDomainRepairs();
+          await m.runRepairBatch('domain', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:domains]', err));
+    });
+    cron.schedule('0 2 * * *', () => {
+      import('./modules/news/services/sourceRepair.service')
+        .then(async (m) => {
+          await m.enqueueMissingTrustRepairs();
+          await m.runRepairBatch('trust', 50);
+        })
+        .catch((err) => console.error('[SourceRepair:trust]', err));
+    });
+    cron.schedule('0 3 * * *', () => {
+      import('./modules/news/services/sourceConsistencyValidator.service')
+        .then((m) => m.runConsistencyValidator())
+        .catch((err) => console.error('[SourceConsistency]', err));
+    });
+    cron.schedule('0 1 * * *', () => {
+      import('./modules/news/services/sourceRegistry.service')
+        .then((m) => m.refreshArticleCounts())
+        .catch((err) => console.error('[SourceRegistry:articleCounts]', err));
+    });
 
     // Schedule KlineDownsampler (cascading aggregation)
     cron.schedule(streamConfig.kline.downsamplerCron, () => {

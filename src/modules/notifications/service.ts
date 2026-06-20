@@ -209,7 +209,14 @@ export const notificationsService = {
         userId: new mongoose.Types.ObjectId(userId),
         timezone: 'UTC',
         global: { enabled: true },
-        categoryPrefs: {},
+        categoryPrefs: {
+          news: { enabled: true },
+          market: { enabled: true },
+          portfolio: { enabled: true },
+          social: { enabled: true },
+          security: { enabled: true },
+        },
+        channelPrefs: { push: { enabled: true } },
       });
       doc = await NotificationPreferenceModel.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean();
     }

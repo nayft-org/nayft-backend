@@ -161,6 +161,17 @@ export const config = {
   exchangePollBatchSize: Math.max(1, parseInt(process.env.EXCHANGE_POLL_BATCH_SIZE || '8', 10)),
   /** API key for POST /api/news/store-news ingestion */
   newsIngestApiKey: (process.env.NEWS_INGEST_API_KEY || '').trim(),
+  /** Public origin for shared news links (no trailing slash). */
+  nayftShareBaseUrl: (process.env.NAYFT_SHARE_BASE_URL || 'https://nayft.com').trim(),
+
+  // ── Notifications (Phase 1 push + alert crons) ───────────────────────────
+  /** Expo Push API bearer token — required to send device push in production. */
+  expoAccessToken: (process.env.EXPO_ACCESS_TOKEN || '').trim(),
+  notifMarketSpikePct: Math.max(1, parseFloat(process.env.NOTIF_MARKET_SPIKE_PCT || '7')),
+  notifPortfolioUpPct: parseFloat(process.env.NOTIF_PORTFOLIO_UP_PCT || '5'),
+  notifPortfolioDownPct: parseFloat(process.env.NOTIF_PORTFOLIO_DOWN_PCT || '-10'),
+  notifHoldingsStaleMs: Math.max(60_000, parseInt(process.env.NOTIF_HOLDINGS_STALE_MS || '7200000', 10)),
+  notifNewsDigestWindowMs: Math.max(60_000, parseInt(process.env.NOTIF_NEWS_DIGEST_WINDOW_MS || '3600000', 10)),
 };
 
 const DEFAULT_JWT = 'super_secret_key_change_later';

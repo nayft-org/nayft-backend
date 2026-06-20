@@ -6,6 +6,7 @@ import { adminAuth } from '../../middlewares/adminAuth';
 import { notificationsAdminController } from '../../modules/notifications/admin.controller';
 import { runtimeConfigController } from '../runtime-config/runtimeConfig.controller';
 import { emailAdminController } from '../../modules/email/email.admin.controller';
+import { sourceAdminController } from '../../modules/news/source.admin.controller';
 
 const router = Router();
 
@@ -32,5 +33,15 @@ router.get('/email/health', emailAdminController.health);
 router.get('/email/dlq', emailAdminController.peekDlq);
 router.get('/email/jobs/:jobId', emailAdminController.inspectJob);
 router.post('/email/replay/:jobId', emailAdminController.replayDlqJob);
+
+// Source branding admin
+router.get('/sources/health', sourceAdminController.health);
+router.get('/sources', sourceAdminController.list);
+router.post('/sources/:sourceKey/approve', sourceAdminController.approve);
+router.post('/sources/:sourceKey/block', sourceAdminController.block);
+router.get('/sources/repair/status', sourceAdminController.repairStatus);
+router.post('/sources/repair/replay', sourceAdminController.replayRepair);
+router.post('/sources/consistency/run', sourceAdminController.runConsistency);
+router.post('/sources/article-counts/refresh', sourceAdminController.refreshArticleCounts);
 
 export default router;

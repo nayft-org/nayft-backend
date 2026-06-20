@@ -4,8 +4,24 @@ const objectIdRegex = /^[a-f0-9]{24}$/i;
 
 export const CLIENT_EVENT_DEFINITIONS = {
   'news_feed:article_opened': z.object({
-    newsId: z.string().regex(objectIdRegex),
+    newsId: z.string().max(128),
   }),
+  'news_feed:source_viewed': z.object({
+    newsId: z.string().max(128),
+    sourceKey: z.string().max(64),
+    surface: z.enum(['card', 'featured', 'detail', 'search']),
+  }).strict(),
+  'news_feed:source_clicked': z.object({
+    newsId: z.string().max(128),
+    sourceKey: z.string().max(64),
+    surface: z.enum(['card', 'detail']),
+    destination: z.enum(['source_url', 'in_app_browser']),
+  }).strict(),
+  'news_feed:source_shared': z.object({
+    newsId: z.string().max(128),
+    sourceKey: z.string().max(64),
+    shareChannel: z.enum(['native_sheet', 'clipboard', 'web_share']).optional(),
+  }).strict(),
   'auth:login_attempt': z.object({}).strict(),
   'auth:google_login_attempt': z.object({}).strict(),
   'auth:navigate_to_register': z.object({}).strict(),
@@ -13,6 +29,14 @@ export const CLIENT_EVENT_DEFINITIONS = {
     strengthLevel: z.enum(['poor', 'low']),
     violationCount: z.number().int().nonnegative(),
   }),
+  'notifications:notification_opened': z
+    .object({
+      notificationId: z.string().max(64),
+      category: z.string().max(32),
+      type: z.string().max(32),
+      source: z.enum(['push', 'inbox']),
+    })
+    .strict(),
 } as const;
 
 export const SERVER_EVENT_DEFINITIONS = {

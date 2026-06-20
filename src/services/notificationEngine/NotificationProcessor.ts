@@ -17,11 +17,23 @@ import { SmsChannel } from './channels/SmsChannel';
 const DEDUPE_TTL_SEC = 86400;
 
 function categoryAllowed(prefs: Record<string, unknown> | null | undefined, category: string): boolean {
+  if (prefs?.global && typeof prefs.global === 'object') {
+    const g = prefs.global as { enabled?: boolean };
+    if (typeof g.enabled === 'boolean' && !g.enabled) return false;
+  }
   if (!prefs?.categoryPrefs || typeof prefs.categoryPrefs !== 'object') return true;
   const cat = (prefs.categoryPrefs as Record<string, { enabled?: boolean }>)[category];
   if (cat && typeof cat.enabled === 'boolean' && !cat.enabled) return false;
   return true;
 }
+
+const PHASE1_CATEGORY_DEFAULTS = {
+  news: { enabled: true },
+  market: { enabled: true },
+  portfolio: { enabled: true },
+  social: { enabled: true },
+  security: { enabled: true },
+};
 
 async function ensurePrefs(userId: string): Promise<Record<string, unknown>> {
   const existing = await NotificationPreferenceModel.findOne({ userId }).lean();
@@ -30,6 +42,8 @@ async function ensurePrefs(userId: string): Promise<Record<string, unknown>> {
     userId: new mongoose.Types.ObjectId(userId),
     timezone: 'UTC',
     global: { enabled: true },
+    categoryPrefs: PHASE1_CATEGORY_DEFAULTS,
+    channelPrefs: { push: { enabled: true } },
   });
   return created.toObject() as Record<string, unknown>;
 }

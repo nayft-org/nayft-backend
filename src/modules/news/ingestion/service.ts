@@ -13,6 +13,9 @@ import { notifyNewsFeedChanged } from '../realtime';
 import { computeArticleContentHash } from '../../sentiment/utils/contentHash';
 import { enqueueSentimentJobs } from '../../sentiment/services/sentimentQueue.service';
 import { sentimentConfig } from '../../sentiment/config/sentimentConfig';
+import { canonicalizeSource, extractDomain } from '../services/sourceCanonicalizer.service';
+import { SourceRegistry } from '../models/SourceRegistry';
+import { enqueueLogo } from '../services/sourceLogoResolver.service';
 
 const SUBTITLE_MAX_LENGTH = 300;
 
@@ -55,6 +58,9 @@ function coindeskToNewsArticle(
               'coindesk'
           )
         : 'coindesk';
+
+  // Canonicalize source — resolved synchronously from in-memory alias cache
+  // The async registry upsert happens in the post-ingest hook below.
   const sourceKey = sourceStr.toLowerCase().replace(/\s+/g, '-');
 
   const rawTickers = extractTickers(article);
@@ -75,6 +81,8 @@ function coindeskToNewsArticle(
   const title = article.title || article.headline || 'Untitled';
   const contentHash = computeArticleContentHash(title, truncatedSubtitle);
 
+  const domain = article.url ? extractDomain(article.url) : '';
+
   return {
     externalId,
     guid: externalId,
@@ -84,10 +92,11 @@ function coindeskToNewsArticle(
     sourceUrl: article.url,
     publishedAt: new Date(article.publishedAt),
     source: {
-      sourceId: externalId,
+      // sourceId is intentionally left unset (the old code set it to externalId by mistake)
       key: sourceKey,
       name: sourceStr || 'CoinDesk',
       lang: 'en',
+      domain,
     },
     author: undefined,
     categories: mapCategories(article.categories),
@@ -157,6 +166,30 @@ export const ingestionService = {
     const skipped = fetched - stored;
 
     const result = await ingestionRepository.upsertMany(toUpsert);
+
+    // Async post-ingest: canonicalize sources + ensure registry entries exist.
+    // Fire-and-forget; never blocks the ingest response.
+    setImmediate(() => {
+      const uniqueSources = [
+        ...new Map(
+          toUpsert.map((d) => [d.source.key, { name: d.source.name, url: d.sourceUrl }])
+        ).entries(),
+      ];
+      for (const [rawKey, { name, url }] of uniqueSources) {
+        canonicalizeSource(name, url)
+          .then(({ sourceKey }) => {
+            return SourceRegistry.findOne({ sourceKey }, { sourceLogo: 1, sourceDomain: 1 })
+              .lean()
+              .then((reg) => {
+                if (!reg?.sourceLogo && reg?.sourceDomain) {
+                  return enqueueLogo(sourceKey);
+                }
+                return undefined;
+              });
+          })
+          .catch((err) => console.error('[store-news] post-ingest source hook failed', { rawKey, err }));
+      }
+    });
 
     if (sentimentConfig.enrichmentEnabled && result.enqueueJobs.length > 0) {
       await enqueueSentimentJobs(result.enqueueJobs).catch((err) => {

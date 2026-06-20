@@ -9,6 +9,7 @@ import { Comment } from '../comment/model';
 import { NewsBoard } from '../newsboard/model';
 import { followService } from '../follow/service';
 import { resolveFollowSymbolsForTargets } from '../follow/resolveFollowSymbols';
+import { buildShareMeta } from './shareMeta';
 
 const LIST_PROJECTION =
   'externalId title subtitle imageUrl sourceUrl publishedAt source categories coins metrics sentiment sentimentStatus sentimentAnalysis';
@@ -20,6 +21,15 @@ const ALLOWED_NEWS_CATEGORIES = new Set([
   'MARKET',
   'CRYPTOCURRENCY',
 ]);
+
+function deriveDomainFromUrl(url?: string): string {
+  if (!url) return '';
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
 
 const mapNewsArticleToDto = (
   article: INewsArticle,
@@ -37,15 +47,39 @@ const mapNewsArticleToDto = (
     debatable: r?.debatable ?? 0,
     total: r?.total ?? 0,
   };
+
+  const sourceName = article.source?.name || 'Unknown';
+  const sourceKey = article.source?.key || '';
+  const sourceDomain = article.source?.domain || deriveDomainFromUrl(article.sourceUrl);
+  const sourceLogoUrl = article.source?.logoUrl ?? null;
+  const trustCategory = article.source?.trustCategory ?? 'unknown';
+  const shareMeta = buildShareMeta({
+    externalId: article.externalId,
+    sourceUrl: article.sourceUrl,
+    imageUrl: article.imageUrl,
+  });
+
   return {
     id: article.externalId,
     title: article.title || 'Untitled',
     summary: article.subtitle || '',
     subtitle: article.subtitle || '',
-    source: article.source?.name || 'Unknown',
+    // Deprecated flat field — kept for backward compatibility with older clients
+    source: sourceName,
     sourceUrl: article.sourceUrl,
     url: article.sourceUrl,
     image: article.imageUrl,
+    // Structured source branding (forward-compatible)
+    sourceInfo: {
+      sourceKey,
+      name: sourceName,
+      domain: sourceDomain,
+      logoUrl: sourceLogoUrl,
+      trustCategory,
+      // Reserved extension blocks for future share cards / Socialyx (not populated in Phase 1)
+      branding: undefined as undefined,
+    },
+    shareMeta,
     relatedCoins,
     categories,
     publishedAt: article.publishedAt,
@@ -326,12 +360,31 @@ export const newsService = {
 const mapCoindeskToDto = (articleRaw: any) => {
   const article = normalizeArticle(articleRaw);
   const relatedCoins = extractTickers(article).map((t) => t.toUpperCase());
+  const sourceName = article.source || 'CoinDesk';
+  const sourceDomain = article.url ? deriveDomainFromUrl(article.url) : 'coindesk.com';
+  const publisherUrl = article.url || '';
+  const shareMeta = publisherUrl
+    ? buildShareMeta({
+        externalId: article.id,
+        sourceUrl: publisherUrl,
+        imageUrl: article.imageUrl,
+      })
+    : undefined;
 
   return {
     id: article.id,
     title: article.title || article.headline || 'Untitled',
     summary: article.summary || article.description || '',
-    source: article.source || 'CoinDesk',
+    source: sourceName,
+    sourceInfo: {
+      sourceKey: sourceDomain.split('.')[0] || 'coindesk',
+      name: sourceName,
+      domain: sourceDomain,
+      logoUrl: null as null,
+      trustCategory: 'unknown' as const,
+      branding: undefined as undefined,
+    },
+    shareMeta,
     url: article.url,
     image: article.imageUrl,
     relatedCoins,

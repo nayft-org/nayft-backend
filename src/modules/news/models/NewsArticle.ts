@@ -6,6 +6,10 @@ export interface INewsArticleSource {
   name: string;
   imageUrl?: string;
   lang?: string;
+  // Source branding fields (denormalized from source_registry)
+  domain?: string;
+  logoUrl?: string;
+  trustCategory?: 'verified' | 'trusted' | 'community' | 'unknown';
 }
 
 export interface INewsArticleAuthor {
@@ -85,6 +89,12 @@ const sourceSchema = new Schema<INewsArticleSource>(
     name: { type: String, required: true },
     imageUrl: { type: String },
     lang: { type: String },
+    domain: { type: String },
+    logoUrl: { type: String },
+    trustCategory: {
+      type: String,
+      enum: ['verified', 'trusted', 'community', 'unknown'],
+    },
   },
   { _id: false }
 );
