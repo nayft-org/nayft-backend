@@ -16,6 +16,10 @@ import { sentimentConfig } from '../../sentiment/config/sentimentConfig';
 import { canonicalizeSource, extractDomain } from '../services/sourceCanonicalizer.service';
 import { SourceRegistry } from '../models/SourceRegistry';
 import { enqueueLogo } from '../services/sourceLogoResolver.service';
+import {
+  deriveNayftCategoriesFromCoins,
+  deriveNayftCategoryBps,
+} from './nayftCategoryEnrichment';
 
 const SUBTITLE_MAX_LENGTH = 300;
 
@@ -82,6 +86,7 @@ function coindeskToNewsArticle(
   const contentHash = computeArticleContentHash(title, truncatedSubtitle);
 
   const domain = article.url ? extractDomain(article.url) : '';
+  const nayftCategories = deriveNayftCategoriesFromCoins(coins);
 
   return {
     externalId,
@@ -101,6 +106,9 @@ function coindeskToNewsArticle(
     author: undefined,
     categories: mapCategories(article.categories),
     coins,
+    nayftCategories,
+    nayftCategoryBps: deriveNayftCategoryBps(nayftCategories),
+    categoryEnrichedAt: nayftCategories.length > 0 ? new Date() : undefined,
     contentHash,
     status: 'active',
     metrics: {

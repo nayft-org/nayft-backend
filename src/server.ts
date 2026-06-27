@@ -22,6 +22,8 @@ import { runSentimentStreamWorker } from './modules/sentiment/jobs/sentimentWork
 import { startCoinSentimentScheduler } from './modules/sentiment/jobs/coinSentimentScheduler';
 import { startRiskBuildScheduler } from './modules/risk/jobs/riskBuildScheduler';
 import { bootstrapPiFeatures } from './modules/portfolio-intelligence/bootstrapPiFeatures';
+import { bootstrapInterestProfileFeatures } from './modules/interest-profile/bootstrapInterestProfileFeatures';
+import { bootstrapFeedRankingFeatures } from './modules/feed-ranking/bootstrapFeedRankingFeatures';
 import { bootstrapNotificationFeatures } from './modules/notifications/bootstrapNotificationFeatures';
 import { runPiRecomputeWorker } from './modules/portfolio-intelligence/jobs/piRecomputeWorker';
 import { runCategoryCatalogSync } from './modules/portfolio-intelligence/jobs/categoryCatalogSync';
@@ -158,6 +160,8 @@ const startServer = async (): Promise<void> => {
       }
       await bootstrapComplianceFeatures();
       await bootstrapPiFeatures();
+      await bootstrapInterestProfileFeatures();
+      await bootstrapFeedRankingFeatures();
       await bootstrapNotificationFeatures();
     });
 
@@ -226,6 +230,24 @@ const startServer = async (): Promise<void> => {
       import('./modules/portfolio-intelligence/jobs/piReconciliation.job')
         .then((m) => m.runPiReconciliation(200))
         .catch((err) => console.error('[PI Reconciliation]', err));
+    });
+    cron.schedule('0 3 * * *', () => {
+      import('./modules/portfolio-intelligence/jobs/heldSymbolCategorySync')
+        .then((m) => m.runHeldSymbolCategorySync())
+        .catch((err) => console.error('[PI HeldSymbolSync]', err));
+    });
+    cron.schedule('*/30 * * * *', () => {
+      import('./modules/portfolio-intelligence/jobs/identityResolutionWorker')
+        .then((m) => m.runIdentityResolutionWorker())
+        .catch((err) => console.error('[PI IdentityResolution]', err));
+      import('./modules/portfolio-intelligence/jobs/holdingsReconciliation.job')
+        .then((m) => m.runHoldingsReconciliation(100))
+        .catch((err) => console.error('[PI HoldingsReconciliation]', err));
+    });
+    cron.schedule('* * * * *', () => {
+      import('./modules/interest-profile/jobs/interestProfileWorker')
+        .then((m) => m.runInterestProfileWorker(25))
+        .catch((err) => console.error('[InterestProfileWorker]', err));
     });
 
     cron.schedule('*/15 * * * *', () => {

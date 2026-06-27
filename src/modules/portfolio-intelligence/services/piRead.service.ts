@@ -8,6 +8,8 @@ import { PortfolioAnalyticsSnapshot } from '../models/PortfolioAnalyticsSnapshot
 import { piConfig } from '../config/piConfig';
 import { getRuntimeSwitches } from '../../../core/runtime-config/runtimeConfig.service';
 import { userRepository } from '../../user/repository';
+import { piRecomputeService } from './piRecompute.service';
+import { createCorrelationId } from '../utils/correlationId';
 
 const EMPTY_METRICS: AnalyticsShellPayload = { metrics: {}, insights: [] };
 
@@ -180,6 +182,48 @@ export const piReadService = {
       analyticsRevision: parseInt((await redis.get(piRedisKeys.userRevision(userId))) || '0', 10),
       formulaBundle: payload.formulaBundle,
     };
+  },
+
+  async buildPendingSummary(userId: string) {
+    const revisionRaw = await redis.get(piRedisKeys.userRevision(userId));
+    return {
+      healthScore: null,
+      healthLabel: 'Analyzing',
+      riskScore: 0,
+      riskLabel: 'Unknown',
+      identity: { id: 'pending', name: 'Analyzing', confidence: 0 },
+      topCategory: { id: 'unknown', name: 'Unknown', pct: 0 },
+      partial: true,
+      pending: true as const,
+      analyticsRevision: parseInt(revisionRaw || '0', 10) || 0,
+      formulaBundle: undefined,
+    };
+  },
+
+  async ensureSummary(userId: string) {
+    const existing = await this.getSummary(userId);
+    if (existing) return existing;
+
+    const syncKey = `pi:summary:sync:${userId}`;
+    const maySync = await redis.set(syncKey, '1', 'EX', 60, 'NX');
+    if (maySync === 'OK') {
+      try {
+        await piRecomputeService.processJob({
+          jobSchemaVersion: piConfig.jobSchemaVersion,
+          userId,
+          trigger: 'manual',
+          correlationId: createCorrelationId('summary'),
+          enqueuedAt: new Date().toISOString(),
+          attempt: 0,
+        });
+        const computed = await this.getSummary(userId);
+        if (computed) return computed;
+      } catch (err) {
+        console.warn('[PI] ensureSummary sync compute failed:', userId, err);
+      }
+    }
+
+    return this.buildPendingSummary(userId);
   },
 
   async getInsights(userId: string) {

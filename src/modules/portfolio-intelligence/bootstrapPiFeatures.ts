@@ -9,6 +9,24 @@ import {
   piHealthFeatureConfig,
   piInsightsFeatureConfig,
   piFeedIntelFeatureConfig,
+  piCategoryGovernanceFeatureConfig,
+  piConfidenceFeatureConfig,
+  piExplainabilityFeatureConfig,
+  piBenchmarkFeatureConfig,
+  piOpportunityFeatureConfig,
+  piGoalProfilesFeatureConfig,
+  piNarrativeIntelFeatureConfig,
+  piHistoricalFeatureConfig,
+  piDomainEventsFeatureConfig,
+  piFacadeFeatureConfig,
+  piFormulaExperimentsFeatureConfig,
+  piQualityMonitorFeatureConfig,
+  piAiAnalystFeatureConfig,
+  piMultiOwnerFeatureConfig,
+  piArchetypesFeatureConfig,
+  piCostGovernanceFeatureConfig,
+  piRuleEngineFeatureConfig,
+  piSimulationFeatureConfig,
 } from './featureConfig';
 
 export async function bootstrapPiFeatures(): Promise<void> {
@@ -21,4 +39,22 @@ export async function bootstrapPiFeatures(): Promise<void> {
   await registerFeature(piHealthFeatureConfig);
   await registerFeature(piInsightsFeatureConfig);
   await registerFeature(piFeedIntelFeatureConfig);
+  await registerFeature(piCategoryGovernanceFeatureConfig);
+  await registerFeature(piConfidenceFeatureConfig);
+  await registerFeature(piExplainabilityFeatureConfig);
+  await registerFeature(piBenchmarkFeatureConfig);
+  await registerFeature(piOpportunityFeatureConfig);
+  await registerFeature(piGoalProfilesFeatureConfig);
+  await registerFeature(piNarrativeIntelFeatureConfig);
+  await registerFeature(piHistoricalFeatureConfig);
+  await registerFeature(piDomainEventsFeatureConfig);
+  await registerFeature(piFacadeFeatureConfig);
+  await registerFeature(piFormulaExperimentsFeatureConfig);
+  await registerFeature(piQualityMonitorFeatureConfig);
+  await registerFeature(piAiAnalystFeatureConfig);
+  await registerFeature(piMultiOwnerFeatureConfig);
+  await registerFeature(piArchetypesFeatureConfig);
+  await registerFeature(piCostGovernanceFeatureConfig);
+  await registerFeature(piRuleEngineFeatureConfig);
+  await registerFeature(piSimulationFeatureConfig);
 }

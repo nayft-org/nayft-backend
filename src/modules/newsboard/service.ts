@@ -48,6 +48,17 @@ export const newsBoardService = {
 
     await newsBoardRepository.addNewsItem(boardId, newsId);
 
+    void import('../interest-profile/services/interestProfile.service')
+      .then(({ interestProfileService }) =>
+        interestProfileService.syncSignals(userId, { savedArticleIds: [newsId] })
+      )
+      .then(() =>
+        import('../interest-profile/jobs/interestProfileWorker').then((m) =>
+          m.enqueueInterestProfileRecompute(userId)
+        )
+      )
+      .catch(() => {});
+
     const updated = await NewsArticle.findOne({ externalId: newsId }).select('metrics.saves');
     const saveCount = updated?.metrics?.saves ?? 0;
 

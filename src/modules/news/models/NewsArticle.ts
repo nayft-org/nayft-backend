@@ -78,6 +78,9 @@ export interface INewsArticle {
   sentimentAnalysis?: INewsArticleSentimentAnalysis;
   status: string;
   metrics: INewsArticleMetrics;
+  nayftCategories?: string[];
+  nayftCategoryBps?: Record<string, number>;
+  categoryEnrichedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -214,9 +217,14 @@ const newsArticleSchema = new Schema<INewsArticle>(
         },
       }),
     },
+    nayftCategories: { type: [String], default: [] },
+    nayftCategoryBps: { type: Schema.Types.Mixed, default: {} },
+    categoryEnrichedAt: { type: Date },
   },
   { timestamps: true }
 );
+
+newsArticleSchema.index({ nayftCategories: 1, publishedAt: -1 });
 
 newsArticleSchema.index({ publishedAt: -1 });
 newsArticleSchema.index({ status: 1, publishedAt: -1 });

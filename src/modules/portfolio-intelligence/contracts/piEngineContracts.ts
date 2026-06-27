@@ -140,6 +140,46 @@ export type PortfolioAnalyticsPayloadV2 = {
     excludedLowConfidenceCount: number;
     mappingCoveragePct: number;
   };
+
+  /** v3 optional extensions — ignored by v2 clients */
+  confidence?: {
+    portfolio: number;
+    analytics: number;
+    identity: number;
+    risk: number;
+    propagated: {
+      insightSeverityCap?: string;
+      healthSuppressed?: boolean;
+      riskLabelSuffix?: string;
+    };
+  };
+  explainability?: Record<string, unknown>;
+  benchmarks?: {
+    cohortId: string;
+    cohortSize: number;
+    healthPercentile: number;
+    riskPercentile: number;
+    diversificationPercentile: number;
+    categoryPercentiles: Record<string, number>;
+  };
+  opportunities?: Array<{
+    id: string;
+    type: string;
+    priority: number;
+    title: string;
+    summary: string;
+    evidence: Record<string, unknown>;
+    confidence: number;
+    goalAdapted: boolean;
+    disclaimer?: boolean;
+  }>;
+  goalProfile?: { id: string; adapted: boolean };
+  narrativeIntel?: {
+    exposure: Record<string, number>;
+    conviction: Record<string, number>;
+    momentum: Record<string, number>;
+    topConvictionGaps: Array<{ narrativeId: string; gap: number }>;
+  };
 };
 
 export type PipelineState = {

@@ -17,11 +17,14 @@ export async function buildMergedHoldingsForUser(userId: string): Promise<{
   positions: HoldingPositionFields[];
 }> {
   const wallets = await portfolioRepository.findWalletsByUser(userId);
-  const addresses = wallets.map((w) => w.address);
+  const walletInputs = wallets.map((w) => ({
+    id: String(w._id),
+    address: w.address,
+  }));
 
   const walletPart =
-    addresses.length > 0
-      ? await fetchAndAggregateHoldings(addresses)
+    walletInputs.length > 0
+      ? await fetchAndAggregateHoldings(walletInputs)
       : {
           totalValue: 0,
           absoluteChange24h: 0,
@@ -32,6 +35,8 @@ export async function buildMergedHoldingsForUser(userId: string): Promise<{
             quantity: number;
             value: number;
             chain: string;
+            source: 'wallet';
+            sourceConnectionId?: string;
           }>,
         };
 

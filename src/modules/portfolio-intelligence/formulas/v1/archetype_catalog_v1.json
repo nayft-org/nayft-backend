@@ -1,0 +1,13 @@
+{
+  "version": "archetype_catalog_v1",
+  "archetypes": [
+    { "id": "bitcoin_maxi", "name": "Bitcoin Maxi", "description": "Heavy BTC allocation", "identityRuleId": "bitcoin_maxi" },
+    { "id": "balanced_investor", "name": "Balanced Investor", "description": "Diversified across categories", "identityRuleId": "balanced_investor" },
+    { "id": "ai_hunter", "name": "AI Hunter", "description": "AI narrative focused", "identityRuleId": "ai_hunter" },
+    { "id": "yield_farmer", "name": "Yield Farmer", "description": "DeFi yield focused", "identityRuleId": "yield_farmer" },
+    { "id": "meme_degen", "name": "Meme Degen", "description": "Meme-heavy portfolio", "identityRuleId": "meme_degen" },
+    { "id": "capital_preserver", "name": "Capital Preserver", "description": "Stablecoin and BTC buffer", "identityRuleId": "capital_preserver" },
+    { "id": "narrative_chaser", "name": "Narrative Chaser", "description": "Trend-following narratives", "identityRuleId": "narrative_chaser" },
+    { "id": "risk_taker", "name": "Risk Taker", "description": "High risk tolerance", "identityRuleId": "risk_taker" }
+  ]
+}

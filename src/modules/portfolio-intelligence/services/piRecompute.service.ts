@@ -20,6 +20,11 @@ import type { PortfolioAnalyticsPayloadV2 } from '../contracts/piEngineContracts
 import { redis } from '../../../config/redis';
 import { piRedisKeys } from '../cache/piRedisKeys';
 import { getActiveFormulaBundle } from '../config/piFormulaRegistry';
+import { goalProfileService } from './goalProfile.service';
+import { piDomainEventEmitter } from './piDomainEventEmitter.service';
+import { intelligenceQualityMonitor } from '../observability/intelligenceQualityMonitor.service';
+import { computeCostTracker } from '../cost/computeCostTracker.service';
+import { PortfolioAnalyticsSnapshot } from '../models/PortfolioAnalyticsSnapshot';
 
 export const piRecomputeService = {
   async processJob(job: PiRecomputeJob): Promise<void> {
@@ -45,7 +50,7 @@ export const piRecomputeService = {
     await PiRecomputeJobModel.findOneAndUpdate(
       { jobId },
       {
-        $setOnInsert: { jobId, userId, trigger, correlationId, status: 'processing' },
+        $setOnInsert: { jobId, userId, trigger, correlationId },
         $set: { startedAt: new Date(), status: 'processing' },
         $inc: { attempts: 1 },
       },
@@ -87,10 +92,22 @@ export const piRecomputeService = {
         totalValueUsd: normalized.totalValueUsd,
       });
 
+      const goal = await goalProfileService.getGoalProfile(userId);
+
       const engineStart = Date.now();
-      const payload: PortfolioAnalyticsPayloadV2 = runAnalyticsPipeline(ctx);
+      const payload: PortfolioAnalyticsPayloadV2 = runAnalyticsPipeline(ctx, {
+        goalProfileId: goal.goalProfileId,
+        multiWallet: false,
+      });
       piMetrics.engineLatencyMs('pipeline', Date.now() - engineStart);
+      computeCostTracker.record(jobId, { pipeline: Date.now() - engineStart });
+      intelligenceQualityMonitor.record(payload);
       piMetrics.insightsGenerated(payload.insights.length);
+
+      const previousDoc = await PortfolioAnalyticsSnapshot.findOne({ userId, schemaVersion: 2 })
+        .sort({ revision: -1 })
+        .lean();
+      const previousPayload = previousDoc?.payload as PortfolioAnalyticsPayloadV2 | undefined;
 
       const previous = await piRepository.findPositionsByUser(userId);
       const prevTotal = previous.reduce((s, p) => s + p.valueUsd, 0);
@@ -133,6 +150,16 @@ export const piRecomputeService = {
       if (complete && !partial) {
         await piReadService.invalidateFeedContext(userId);
         await piReadService.buildFeedContextV2(userId, payload, analyticsRevision);
+      }
+
+      const domainEvents = piDomainEventEmitter.detectEvents(previousPayload ?? null, payload);
+      if (domainEvents.length > 0) {
+        await piDomainEventEmitter.emitDomainEvents({
+          userId,
+          correlationId,
+          analyticsRevision,
+          events: domainEvents,
+        });
       }
 
       await shadowDriftService.compareUser(userId);

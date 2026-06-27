@@ -77,6 +77,9 @@ export const followService = {
     const alreadyFollowing = await followRepository.exists(followerId, 'coin', canonicalId);
     if (!alreadyFollowing) {
       await followRepository.upsert(followerId, 'coin', canonicalId);
+      void import('../interest-profile/jobs/interestProfileWorker')
+        .then((m) => m.enqueueInterestProfileRecompute(followerId))
+        .catch(() => {});
     }
 
     const followersCount = await followRepository.countByTarget('coin', canonicalId);

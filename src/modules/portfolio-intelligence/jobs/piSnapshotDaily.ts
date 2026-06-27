@@ -6,6 +6,7 @@ import { redis } from '../../../config/redis';
 import { piRedisKeys } from '../cache/piRedisKeys';
 import { recomputeEnqueueService } from '../services/recomputeEnqueue.service';
 import { piConfig } from '../config/piConfig';
+import { piSnapshotArchiveService } from '../services/piSnapshotArchive.service';
 
 export async function runPiSnapshotDaily(batchLimit = 500): Promise<void> {
   await connectDatabase();
@@ -29,7 +30,8 @@ export async function runPiSnapshotDaily(batchLimit = 500): Promise<void> {
     await recomputeEnqueueService.enqueue(userId, 'daily');
     enqueued += 1;
   }
-  console.log('[PI DailySnapshot] processed', enqueued);
+  const archived = await piSnapshotArchiveService.archiveStaleSnapshots(200);
+  console.log('[PI DailySnapshot] processed', enqueued, 'archived', archived);
 }
 
 if (require.main === module) {

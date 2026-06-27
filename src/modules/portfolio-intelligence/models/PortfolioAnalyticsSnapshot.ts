@@ -10,6 +10,7 @@ export interface IPortfolioAnalyticsSnapshot extends Document {
   catalogVersion: number;
   buildFingerprint: string;
   payload: AnalyticsShellPayload;
+  archivedAt?: Date;
 }
 
 const portfolioAnalyticsSnapshotSchema = new Schema<IPortfolioAnalyticsSnapshot>(
@@ -22,6 +23,7 @@ const portfolioAnalyticsSnapshotSchema = new Schema<IPortfolioAnalyticsSnapshot>
     catalogVersion: { type: Number, required: true },
     buildFingerprint: { type: String, required: true },
     payload: { type: Schema.Types.Mixed, required: true },
+    archivedAt: { type: Date },
   },
   { timestamps: true, collection: 'portfolio_analytics_snapshots' }
 );

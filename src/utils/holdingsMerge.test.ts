@@ -8,7 +8,7 @@ describe('mergeZerionAndExchangeHoldings', () => {
         absoluteChange24h: 50,
         relativeChange24h: 0.05,
         positions: [
-          { name: 'ETH', symbol: 'ETH', quantity: 1, value: 1000, chain: 'eth' },
+          { name: 'ETH', symbol: 'ETH', quantity: 1, value: 1000, chain: 'eth', source: 'wallet' },
         ],
       },
       [

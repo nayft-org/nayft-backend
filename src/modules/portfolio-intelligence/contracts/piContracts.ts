@@ -7,6 +7,7 @@ export const PI_CONTEXT_SCHEMA_VERSION = 1;
 export type PiTrigger =
   | 'webhook'
   | 'holdings_refresh'
+  | 'holdings_reconcile'
   | 'wallet_change'
   | 'exchange_sync'
   | 'manual'
