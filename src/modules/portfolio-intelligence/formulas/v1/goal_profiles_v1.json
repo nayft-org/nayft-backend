@@ -1,0 +1,48 @@
+{
+  "version": "goal_profiles_v1",
+  "profiles": {
+    "capital_preservation": {
+      "name": "Capital Preservation",
+      "targetBands": {
+        "Stablecoins": { "min": 30, "max": 60 },
+        "Bitcoin": { "min": 10, "max": 40 },
+        "Memes": { "min": 0, "max": 5 }
+      },
+      "healthWeights": { "risk": 0.35, "diversification": 0.25, "concentration": 0.25, "stablecoin": 0.15 }
+    },
+    "balanced_growth": {
+      "name": "Balanced Growth",
+      "targetBands": {
+        "Layer1": { "min": 25, "max": 45 },
+        "Stablecoins": { "min": 10, "max": 25 }
+      },
+      "healthWeights": { "risk": 0.4, "diversification": 0.3, "concentration": 0.2, "stablecoin": 0.1 }
+    },
+    "aggressive_growth": {
+      "name": "Aggressive Growth",
+      "targetBands": {
+        "Layer1": { "min": 30, "max": 70 },
+        "AI": { "min": 10, "max": 40 },
+        "DeFi": { "min": 10, "max": 40 }
+      },
+      "healthWeights": { "risk": 0.35, "diversification": 0.25, "concentration": 0.15, "stablecoin": 0.05 }
+    },
+    "yield_generation": {
+      "name": "Yield Generation",
+      "targetBands": {
+        "DeFi": { "min": 25, "max": 50 },
+        "Stablecoins": { "min": 15, "max": 35 }
+      },
+      "healthWeights": { "risk": 0.35, "diversification": 0.25, "concentration": 0.2, "stablecoin": 0.2 }
+    },
+    "narrative_investing": {
+      "name": "Narrative Investing",
+      "targetBands": {
+        "AI": { "min": 15, "max": 50 },
+        "DeFi": { "min": 10, "max": 40 }
+      },
+      "healthWeights": { "risk": 0.3, "diversification": 0.2, "concentration": 0.15, "stablecoin": 0.05 }
+    }
+  },
+  "defaultProfileId": "balanced_growth"
+}

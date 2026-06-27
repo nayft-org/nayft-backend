@@ -15,12 +15,13 @@ export function mergeZerionAndExchangeHoldings(
   positions: HoldingPositionFields[];
 } {
   const wPositions: HoldingPositionFields[] = wallet.positions.map((p) => ({
-    name:     p.name,
-    symbol:   p.symbol,
+    name: p.name,
+    symbol: p.symbol,
     quantity: p.quantity,
-    value:    p.value,
-    chain:    p.chain,
-    source:   'wallet' as const,
+    value: p.value,
+    chain: p.chain,
+    source: 'wallet' as const,
+    ...(p.sourceConnectionId != null ? { sourceConnectionId: p.sourceConnectionId } : {}),
   }));
 
   const wTotal   = wallet.totalValue;

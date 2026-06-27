@@ -58,9 +58,19 @@ export function ctxFromGoldenFixture(f: GoldenFixtureFile): PiEngineContext {
   };
 }
 
-/** Strip volatile fields before canonical replay compare. */
+/** Strip volatile and v3 extension fields before canonical replay compare. */
 export function stabilizeGoldenPayload(payload: PortfolioAnalyticsPayloadV2): unknown {
-  const { computedAt: _c, correlationId: _r, ...rest } = payload;
+  const {
+    computedAt: _c,
+    correlationId: _r,
+    confidence: _conf,
+    explainability: _exp,
+    benchmarks: _bench,
+    opportunities: _opp,
+    goalProfile: _goal,
+    narrativeIntel: _ni,
+    ...rest
+  } = payload;
   return rest;
 }
 

@@ -1,19 +1,33 @@
 import { zerionApi, ZerionPosition } from './zerion';
 import { piConfig } from '../modules/portfolio-intelligence/config/piConfig';
 
+export type TaggedWalletPosition = {
+  name: string;
+  symbol: string;
+  quantity: number;
+  value: number;
+  chain: string;
+  source: 'wallet';
+  sourceConnectionId?: string;
+};
+
 export interface AggregatedHoldings {
-  totalValue:        number;
+  totalValue: number;
   absoluteChange24h: number;
   relativeChange24h: number;
-  positions:         Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }>;
+  positions: TaggedWalletPosition[];
 }
 
-function mergePositions(
-  positions: ZerionPosition[]
-): Array<{ name: string; symbol: string; quantity: number; value: number; chain: string }> {
-  const byKey = new Map<string, { name: string; symbol: string; quantity: number; value: number; chain: string }>();
+export type WalletHoldingsInput = {
+  id: string;
+  address: string;
+};
+
+function mergePositionsWithinWallet(positions: TaggedWalletPosition[]): TaggedWalletPosition[] {
+  const byKey = new Map<string, TaggedWalletPosition>();
   for (const p of positions) {
-    const key = `${p.symbol}:${p.chain}`.toLowerCase();
+    const walletKey = p.sourceConnectionId ?? 'unknown';
+    const key = `${walletKey}:${p.symbol}:${p.chain}`.toLowerCase();
     const existing = byKey.get(key);
     if (existing) {
       existing.quantity += p.quantity;
@@ -25,21 +39,28 @@ function mergePositions(
   return Array.from(byKey.values()).sort((a, b) => b.value - a.value);
 }
 
+function normalizeWalletInputs(wallets: WalletHoldingsInput[] | string[]): WalletHoldingsInput[] {
+  if (wallets.length === 0) return [];
+  if (typeof wallets[0] === 'string') {
+    return (wallets as string[]).map((address) => ({ id: address, address }));
+  }
+  return wallets as WalletHoldingsInput[];
+}
+
 /**
- * Fetches portfolio and positions from Zerion for each address, then aggregates.
- * Catches Zerion errors per-address and continues with others; returns partial data.
+ * Fetches portfolio and positions from Zerion for each wallet, then aggregates totals.
+ * Positions are merged only within the same wallet (preserves per-wallet rows for client filtering).
  */
 export async function fetchAndAggregateHoldings(
-  addresses: string[]
+  wallets: WalletHoldingsInput[] | string[]
 ): Promise<AggregatedHoldings> {
+  const walletInputs = normalizeWalletInputs(wallets);
   let totalValue = 0;
   let absoluteChange24h = 0;
-  let relativeChange24h = 0;
-  const allPositions: ZerionPosition[] = [];
-
   let weightedRelativeSum = 0;
+  const allPositions: TaggedWalletPosition[] = [];
 
-  for (const address of addresses) {
+  for (const { id: walletId, address } of walletInputs) {
     try {
       let portfolioTotal = 0;
       let port: Awaited<ReturnType<typeof zerionApi.getWalletPortfolio>>;
@@ -53,7 +74,6 @@ export async function fetchAndAggregateHoldings(
         continue;
       }
 
-      // Delay to reduce 429 on positions (demo tier rate limit). Skipped when PI_API_ZERION_SLEEP_DISABLED=true.
       if (!piConfig.apiZerionSleepDisabled) {
         await new Promise((r) => setTimeout(r, 2000));
       }
@@ -61,7 +81,10 @@ export async function fetchAndAggregateHoldings(
       try {
         positions = await zerionApi.getWalletPositions(address);
       } catch (err) {
-        console.warn('[Holdings] fetchAndAggregateHoldings: positions failed (rate limit?), using portfolio total', address.slice(0, 10) + '...');
+        console.warn(
+          '[Holdings] fetchAndAggregateHoldings: positions failed (rate limit?), using portfolio total',
+          address.slice(0, 10) + '...'
+        );
         positions = [];
       }
 
@@ -73,19 +96,29 @@ export async function fetchAndAggregateHoldings(
       totalValue += effectiveTotal;
       absoluteChange24h += port.absoluteChange24h;
       weightedRelativeSum += effectiveTotal * (port.relativeChange24h ?? 0);
-      allPositions.push(...positions);
+
+      const tagged: TaggedWalletPosition[] = positions.map((p) => ({
+        name: p.name,
+        symbol: p.symbol,
+        quantity: p.quantity,
+        value: p.value,
+        chain: p.chain,
+        source: 'wallet',
+        sourceConnectionId: walletId,
+      }));
+
+      allPositions.push(...mergePositionsWithinWallet(tagged));
     } catch (err) {
       console.error('[Holdings] fetchAndAggregateHoldings: Zerion fetch failed for', address.slice(0, 10) + '...', err);
     }
   }
 
-  relativeChange24h = totalValue > 0 ? weightedRelativeSum / totalValue : 0;
-  const positions = mergePositions(allPositions);
+  const relativeChange24h = totalValue > 0 ? weightedRelativeSum / totalValue : 0;
 
   return {
     totalValue,
     absoluteChange24h,
     relativeChange24h,
-    positions,
+    positions: allPositions.sort((a, b) => b.value - a.value),
   };
 }

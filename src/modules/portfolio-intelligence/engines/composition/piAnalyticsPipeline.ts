@@ -18,6 +18,15 @@ import { runInsightGeneration } from '../insights/insightGeneration.engine';
 import { mapCategoryToNayftBucket } from '../taxonomy/mapToNayftBucket';
 import type { NormalizedPosition } from '../../contracts/piContracts';
 import { categoryMappingService } from '../../services/categoryMapping.service';
+import { runPortfolioConfidence } from '../confidence/portfolioConfidence.engine';
+import { runPortfolioBenchmark } from '../benchmark/portfolioBenchmark.engine';
+import { runOpportunityDetection } from '../opportunity/opportunityDetection.engine';
+import {
+  runNarrativeIntelligence,
+  DEFAULT_NARRATIVE_MOMENTUM,
+} from '../narrative/narrativeIntelligence.engine';
+import { explainabilityComposer } from '../../explainability/explainabilityComposer.service';
+import type { GoalProfileId } from '../../services/goalProfile.service';
 
 export function buildEngineContext(params: {
   userId: string;
@@ -63,7 +72,10 @@ export function buildEngineContext(params: {
   }));
 }
 
-export function runAnalyticsPipeline(ctx: PiEngineContext): PortfolioAnalyticsPayloadV2 {
+export function runAnalyticsPipeline(
+  ctx: PiEngineContext,
+  options?: { goalProfileId?: GoalProfileId; multiWallet?: boolean }
+): PortfolioAnalyticsPayloadV2 {
   const engineErrors: Array<{ engineId: string; code: string }> = [];
   let partial = false;
   let alloc;
@@ -239,6 +251,45 @@ export function runAnalyticsPipeline(ctx: PiEngineContext): PortfolioAnalyticsPa
     pipelineState.allocationBps,
     risk.riskTenths
   );
+
+  const mappingCoveragePct =
+    ctx.positions.length > 0
+      ? (ctx.positions.length - (allocSection.unmappedCount ?? 0)) / ctx.positions.length
+      : 1;
+
+  const confidence = runPortfolioConfidence({
+    payload: draft,
+    mappingCoveragePct,
+  });
+
+  const goalProfileId = options?.goalProfileId ?? 'balanced_growth';
+  const benchmarks = runPortfolioBenchmark({
+    payload: draft,
+    totalValueUsd: ctx.totalValueUsd,
+    goalProfileId,
+    multiWallet: options?.multiWallet ?? false,
+  });
+
+  const narrativeIntel = runNarrativeIntelligence({
+    payload: draft,
+    marketSnapshot: DEFAULT_NARRATIVE_MOMENTUM,
+  });
+
+  const opportunities = runOpportunityDetection({
+    payload: draft,
+    goalProfileId,
+    portfolioConfidence: confidence.portfolio,
+    narrativeMomentum: narrativeIntel.momentum,
+  });
+
+  const explainability = explainabilityComposer.compose(draft, ctx);
+
+  draft.confidence = confidence;
+  draft.benchmarks = benchmarks;
+  draft.opportunities = opportunities;
+  draft.goalProfile = { id: goalProfileId, adapted: goalProfileId !== 'balanced_growth' };
+  draft.narrativeIntel = narrativeIntel;
+  draft.explainability = explainability;
 
   return draft;
 }

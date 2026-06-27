@@ -109,6 +109,7 @@ async function processOne(
   try {
     await persistWithRetry(toPersist, invalidFeature);
     incrementComplianceMetric('eventsIngestAcceptedTotal');
+    void maybeEnqueueInterestProfile(payload);
   } catch {
     console.error(`[EventSystem] Failed to persist event after ${MAX_RETRIES} retries:`, payload);
     await redisEventQueue.pushToDlq(payload);
@@ -116,6 +117,24 @@ async function processOne(
     console.error('[EventSystem] Moved to DLQ after retries');
   }
   return true;
+}
+
+const INTEREST_PROFILE_EVENTS = new Set([
+  'news_feed:article_opened',
+  'news_feed:source_clicked',
+  'news_feed:source_viewed',
+]);
+
+async function maybeEnqueueInterestProfile(payload: EmitEventPayload): Promise<void> {
+  if (!payload.userId || !INTEREST_PROFILE_EVENTS.has(payload.eventType)) return;
+  try {
+    const { enqueueInterestProfileRecompute } = await import(
+      '../../modules/interest-profile/jobs/interestProfileWorker'
+    );
+    await enqueueInterestProfileRecompute(payload.userId);
+  } catch {
+    /* interest profile optional */
+  }
 }
 
 export async function runEventWorker(): Promise<void> {

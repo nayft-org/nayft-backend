@@ -243,56 +243,49 @@ async function flushBuffer(key: string): Promise<void> {
         positions: positions.length,
       });
 
-      // Opportunistic holdings cache update: only when user has exactly 1 wallet (complete data)
-      // Disabled when PI_AGGREGATOR_UPSERT_DISABLED=true (G7 cutover).
+      // Opportunistic holdings cache update when aggregator upsert enabled (G7 cutover).
       if (!piConfig.aggregatorUpsertDisabled) {
       try {
-        const wallets = await portfolioRepository.findWalletsByUser(userId);
         const normalizedAddr = address.toLowerCase();
-        if (
-          wallets.length === 1 &&
-          wallets[0].address?.toLowerCase() === normalizedAddr
-        ) {
-          if (config.exchangePortfolioEnabled) {
-            const merged = await buildMergedHoldingsForUser(userId);
-            await portfolioRepository.upsertHoldings(userId, merged);
-            const addrs = await getHoldingsBroadcastAddressesForUser(userId);
-            holdingsDelta = {
-              userId,
-              addresses: addrs,
-              source: 'zerion_live',
-              updatedAt: new Date().toISOString(),
-              holdings: {
-                totalValue: merged.totalValue,
-                absoluteChange24h: merged.absoluteChange24h,
-                relativeChange24h: merged.relativeChange24h,
-                positions: merged.positions,
-              },
-            };
-          } else {
-            const totalValue =
-              positions.length > 0
-                ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
-                : portfolio.totalValue;
-            await portfolioRepository.upsertHoldings(userId, {
+        if (config.exchangePortfolioEnabled) {
+          const merged = await buildMergedHoldingsForUser(userId);
+          await portfolioRepository.upsertHoldings(userId, merged);
+          const addrs = await getHoldingsBroadcastAddressesForUser(userId);
+          holdingsDelta = {
+            userId,
+            addresses: addrs,
+            source: 'zerion_live',
+            updatedAt: new Date().toISOString(),
+            holdings: {
+              totalValue: merged.totalValue,
+              absoluteChange24h: merged.absoluteChange24h,
+              relativeChange24h: merged.relativeChange24h,
+              positions: merged.positions,
+            },
+          };
+        } else {
+          const totalValue =
+            positions.length > 0
+              ? positions.reduce((s, p) => s + (p.value ?? 0), 0)
+              : portfolio.totalValue;
+          await portfolioRepository.upsertHoldings(userId, {
+            totalValue,
+            absoluteChange24h: portfolio.absoluteChange24h,
+            relativeChange24h: portfolio.relativeChange24h,
+            positions,
+          });
+          holdingsDelta = {
+            userId,
+            addresses: [normalizedAddr],
+            source: 'zerion_live',
+            updatedAt: new Date().toISOString(),
+            holdings: {
               totalValue,
               absoluteChange24h: portfolio.absoluteChange24h,
               relativeChange24h: portfolio.relativeChange24h,
               positions,
-            });
-            holdingsDelta = {
-              userId,
-              addresses: [normalizedAddr],
-              source: 'zerion_live',
-              updatedAt: new Date().toISOString(),
-              holdings: {
-                totalValue,
-                absoluteChange24h: portfolio.absoluteChange24h,
-                relativeChange24h: portfolio.relativeChange24h,
-                positions,
-              },
-            };
-          }
+            },
+          };
         }
       } catch (holdErr) {
         console.error(`[WalletAggregator] Opportunistic holdings upsert failed:`, holdErr);

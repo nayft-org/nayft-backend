@@ -46,11 +46,7 @@ export const piContextController = {
         sendError(res, 'Portfolio health score is not enabled', 403);
         return;
       }
-      const summary = await piReadService.getSummary(req.userId!);
-      if (!summary) {
-        sendError(res, 'No analytics available', 404);
-        return;
-      }
+      const summary = await piReadService.ensureSummary(req.userId!);
       sendSuccess(res, summary);
     } catch (e) {
       sendError(res, e instanceof Error ? e.message : 'Failed to load summary', 500);

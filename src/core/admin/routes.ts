@@ -7,6 +7,7 @@ import { notificationsAdminController } from '../../modules/notifications/admin.
 import { runtimeConfigController } from '../runtime-config/runtimeConfig.controller';
 import { emailAdminController } from '../../modules/email/email.admin.controller';
 import { sourceAdminController } from '../../modules/news/source.admin.controller';
+import { piGovernanceAdminController } from '../../modules/portfolio-intelligence/controllers/piGovernance.admin.controller';
 
 const router = Router();
 
@@ -43,5 +44,15 @@ router.get('/sources/repair/status', sourceAdminController.repairStatus);
 router.post('/sources/repair/replay', sourceAdminController.replayRepair);
 router.post('/sources/consistency/run', sourceAdminController.runConsistency);
 router.post('/sources/article-counts/refresh', sourceAdminController.refreshArticleCounts);
+
+// Portfolio Intelligence category governance
+router.get('/pi/categories/catalog', piGovernanceAdminController.listCatalogVersions);
+router.get('/pi/categories/catalog/:version', piGovernanceAdminController.getCatalogVersion);
+router.get('/pi/categories/reviews', piGovernanceAdminController.listReviews);
+router.patch('/pi/categories/reviews/:id', piGovernanceAdminController.patchReview);
+router.post('/pi/categories/overrides', piGovernanceAdminController.createOverride);
+router.delete('/pi/categories/overrides/:internalCoinId', piGovernanceAdminController.deleteOverride);
+router.get('/pi/categories/audit', piGovernanceAdminController.listAudit);
+router.post('/pi/categories/recompute-affected', piGovernanceAdminController.recomputeAffected);
 
 export default router;

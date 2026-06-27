@@ -8,6 +8,8 @@ import { normalizeCoindcxTradeRow } from '../modules/portfolio/coindcxTradeNorma
 import { PORTFOLIO_SCHEMA_VERSION } from '../modules/portfolio/schemaVersion';
 import { normalizeEnrichedData } from '../modules/portfolio/normalizers/walletEventNormalizer';
 import { publishWalletEventToSubscribers } from '../services/walletEventAggregator';
+import { buildMergedHoldingsForUser } from '../modules/portfolio/holdingsSync';
+import { recomputeEnqueueService } from '../modules/portfolio-intelligence/services/recomputeEnqueue.service';
 
 const CHAIN = 'coindcx';
 const VENUE = 'coindcx';
@@ -133,6 +135,18 @@ export async function runCoindcxSyncForConnection(conn: IExchangeConnection): Pr
       balancesLastError: undefined,
       balancesStaleReason: undefined,
     });
+    if (config.exchangePortfolioEnabled) {
+      try {
+        const merged = await buildMergedHoldingsForUser(conn.userId);
+        await portfolioRepository.upsertHoldings(conn.userId, merged);
+        void recomputeEnqueueService.enqueue(conn.userId, 'exchange_sync');
+      } catch (mergeErr) {
+        console.error('[ExchangeSync] holdings merge failed', {
+          connectionId: id,
+          err: (mergeErr as Error).message,
+        });
+      }
+    }
   } catch (e) {
     if (e instanceof CoindcxApiError) {
       if (e.code === 'invalid_credentials') {
