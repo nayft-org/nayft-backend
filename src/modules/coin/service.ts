@@ -11,6 +11,7 @@ import { newsService } from '../news/service';
 import { coindeskApi, normalizeArticle } from '../../utils/coindesk';
 import { identityResolver } from './identityResolver';
 import { resolveBatchFromSnapshots } from './coinSnapshotResolve';
+import { mapLocalCoinToDto, type LocalCoinDbRow } from './mapLocalCoinToDto';
 
 function looksLikeCoinGeckoId(id: string): boolean {
   if (!id || id.length < 2) return false;
@@ -181,47 +182,19 @@ function mapCoinGeckoToDto(
   };
 }
 
-function mapLocalCoinToDto(params: {
-  dbCoin?: {
-    internalCoinId?: string;
-    coinId: string;
-    symbol: string;
-    name: string;
-    rank?: number;
-    price?: number;
-    percentChange24h?: number;
-  } | null;
-  snapshot?: {
-    id: string;
-    image?: string;
-    current_price?: number;
-    market_cap?: number;
-    market_cap_rank?: number;
-    total_volume?: number;
-  } | null;
-  internalCoinId: string | null;
-}) {
-  const { dbCoin, snapshot, internalCoinId } = params;
-  const resolvedCoinId = dbCoin?.coinId ?? snapshot?.id ?? '';
-  const resolvedSymbol = dbCoin?.symbol ?? '';
-  const resolvedName = dbCoin?.name ?? resolvedSymbol;
-
-  if (!resolvedCoinId || !resolvedSymbol || !resolvedName) {
-    return null;
-  }
-
-  return {
-    internalCoinId: dbCoin?.internalCoinId ?? internalCoinId,
-    coinId: resolvedCoinId,
-    symbol: resolvedSymbol,
-    name: resolvedName,
-    rank: dbCoin?.rank ?? snapshot?.market_cap_rank ?? 0,
-    price: dbCoin?.price ?? snapshot?.current_price ?? 0,
-    percentChange24h: dbCoin?.percentChange24h ?? 0,
-    marketCap: snapshot?.market_cap,
-    volume24h: snapshot?.total_volume,
-    image: snapshot?.image,
-  };
+/** Same source as Explore `/market/active-coins` — usable when CoinGecko is down/rate-limited. */
+async function profileFromLabeledActiveSnapshot(
+  coinKey: string,
+  internalCoinId: string | null,
+  dbCoin?: LocalCoinDbRow | null
+) {
+  const snapshot = await labeledActiveCoinRepository.findByCoinId(coinKey);
+  if (!snapshot) return null;
+  return mapLocalCoinToDto({
+    dbCoin,
+    snapshot,
+    internalCoinId,
+  });
 }
 
 export const coinService = {
@@ -243,12 +216,11 @@ export const coinService = {
     // Check if we found it in local DB
     const dbCoin = dbCoinById || dbCoinBySymbol;
     if (config.coinProfileLocalFirstEnabled) {
-      const snapshot = await labeledActiveCoinRepository.findByCoinId(actualCoinId);
-      const localDto = mapLocalCoinToDto({
-        dbCoin,
-        snapshot,
-        internalCoinId: resolution.internalCoinId,
-      });
+      const localDto = await profileFromLabeledActiveSnapshot(
+        actualCoinId,
+        resolution.internalCoinId,
+        dbCoin
+      );
       if (localDto) {
         return localDto;
       }
@@ -285,6 +257,13 @@ export const coinService = {
         });
         return coinDto;
       } catch {
+        // CoinGecko often 404s/rate-limits for coins that still exist in our Explore snapshot.
+        const snapshotDto = await profileFromLabeledActiveSnapshot(
+          actualCoinId,
+          resolution.internalCoinId,
+          dbCoin
+        );
+        if (snapshotDto) return snapshotDto;
         coinGeckoId = null;
       }
     }
@@ -294,8 +273,52 @@ export const coinService = {
       coinGeckoId = await resolveToCoinGeckoId(coinId);
     }
 
-    // If still no CoinGecko ID, return DB data if we have it
+    // If still no CoinGecko ID, return DB / Explore snapshot data if we have it
     if (!coinGeckoId) {
+      if (dbCoin) {
+        return {
+          internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
+          coinId: dbCoin.coinId,
+          symbol: dbCoin.symbol,
+          name: dbCoin.name,
+          rank: dbCoin.rank,
+          price: dbCoin.price,
+          percentChange24h: dbCoin.percentChange24h,
+          image: undefined,
+        };
+      }
+      const snapshotDto = await profileFromLabeledActiveSnapshot(
+        actualCoinId,
+        resolution.internalCoinId,
+        dbCoin
+      );
+      if (snapshotDto) return snapshotDto;
+      throw new Error('Coin not found');
+    }
+
+    // Final API call with resolved CoinGecko ID
+    try {
+      const coin = await coingeckoApi.getCoinById(coinGeckoId);
+      const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
+
+      await marketRepository.upsertCoin({
+        internalCoinId: coinDto.internalCoinId ?? undefined,
+        coinId: coinDto.coinId,
+        symbol: coinDto.symbol,
+        name: coinDto.name,
+        rank: coinDto.rank,
+        price: coinDto.price,
+        percentChange24h: coinDto.percentChange24h,
+      });
+
+      return coinDto;
+    } catch {
+      const snapshotDto = await profileFromLabeledActiveSnapshot(
+        actualCoinId,
+        resolution.internalCoinId,
+        dbCoin
+      );
+      if (snapshotDto) return snapshotDto;
       if (dbCoin) {
         return {
           internalCoinId: dbCoin.internalCoinId ?? resolution.internalCoinId,
@@ -310,22 +333,6 @@ export const coinService = {
       }
       throw new Error('Coin not found');
     }
-
-    // Final API call with resolved CoinGecko ID
-    const coin = await coingeckoApi.getCoinById(coinGeckoId);
-    const coinDto = mapCoinGeckoToDto(coin, resolution.internalCoinId);
-
-    await marketRepository.upsertCoin({
-      internalCoinId: coinDto.internalCoinId ?? undefined,
-      coinId: coinDto.coinId,
-      symbol: coinDto.symbol,
-      name: coinDto.name,
-      rank: coinDto.rank,
-      price: coinDto.price,
-      percentChange24h: coinDto.percentChange24h,
-    });
-
-    return coinDto;
   },
 
   /** Batch resolve coin refs (symbols, CoinGecko ids) from `coin_market_snapshots` for news/UI hydration. */
