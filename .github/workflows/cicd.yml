@@ -46,10 +46,7 @@ jobs:
   deploy:
     name: Deploy to NAYFT (self-hosted)
     # Labels must match runner prod-in-nayft (self-hosted, Linux, X64).
-    runs-on:
-      - self-hosted
-      - Linux
-      - X64
+    runs-on: self-hosted
     needs: build
 
     steps:
