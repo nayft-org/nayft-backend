@@ -82,10 +82,13 @@ export const labeledActiveCoinRepository = {
     nextCursor: number | null;
   }> {
     const { limit, cursor } = params;
-    const filter: Record<string, unknown> = { provider: config.coinDataPrimarySnapshotProvider };
-    if (cursor != null) {
-      filter.market_cap_rank = { $gt: cursor };
-    }
+    // CoinGecko returns market_cap_rank: null for unranked/low-cap coins. Mongo's
+    // ascending sort places null before every number, so without this exclusion
+    // those coins permanently crowd out BTC/ETH/etc. at the front of every page.
+    const filter: Record<string, unknown> = {
+      provider: config.coinDataPrimarySnapshotProvider,
+      market_cap_rank: { $ne: null, $gt: cursor ?? 0 },
+    };
     const results = await LabeledActiveCoin.find(filter)
       .select(LIST_PAGE_FIELDS)
       .sort({ market_cap_rank: 1 })
