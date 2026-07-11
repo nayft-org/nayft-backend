@@ -1,0 +1,19 @@
+site_name: crypto-backend
+site_description: NAYFT crypto backend API — Node.js, TypeScript, Express, and MongoDB
+
+nav:
+  - Home: index.md
+  - Portfolio Intelligence:
+      - Governance: pi-engine/GOVERNANCE.md
+  - Runbooks:
+      - PI Engine Rollout: runbooks/pi-engine/PI-ENGINE-ROLLOUT.md
+      - PI Foundation README: runbooks/pi-foundation/README.md
+      - PI-001 Queue Backlog: runbooks/pi-foundation/PI-001-queue-backlog.md
+      - PI-004 Multi-Replica WS: runbooks/pi-foundation/PI-004-multi-replica-ws.md
+      - Portfolio Webhook Ingress (Azure): runbooks/portfolio-webhook-ingress-azure.md
+      - Source Branding DR: source-branding-dr-runbook.md
+      - Legacy Cleanup: legacy-cleanup-final.md
+      - Prod Cleanup Steps: prod-cleanup-steps.md
+
+plugins:
+  - techdocs-core
