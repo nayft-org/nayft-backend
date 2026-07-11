@@ -22,6 +22,7 @@
     "script:coindcx-ping": "ts-node --transpile-only scripts/dev-coindcx-ping.ts",
     "script:prod-legacy-cleanup": "bash scripts/prod-legacy-cleanup.sh",
     "script:backfill-news-sentiment": "ts-node --transpile-only scripts/backfill-news-sentiment.ts",
+    "script:send-test-notifications": "ts-node --transpile-only scripts/send-test-notifications.ts",
     "dev:worker:sentiment": "ts-node-dev --respawn --transpile-only src/modules/sentiment/jobs/sentimentWorker.ts",
     "dev:worker:risk": "ts-node-dev --respawn --transpile-only src/modules/risk/jobs/riskBuildScheduler.ts",
     "dev:worker:risk-factors": "ts-node-dev --transpile-only src/modules/risk/jobs/riskFactorWorker.ts",

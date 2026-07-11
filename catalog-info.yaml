@@ -10,13 +10,16 @@ spec:
   lifecycle: experimental
   owner: user:guest
   providesApis:
-    - portfolio-intelligence-foundation
+    - crypto-backend-api
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
-  name: portfolio-intelligence-foundation
-  description: NAYFT Portfolio Intelligence Foundation API
+  name: crypto-backend-api
+  description: >
+    Full NAYFT crypto-backend API surface — auth, social graph, news/content, market data,
+    charts, portfolio tracking, Portfolio Intelligence, risk scoring, notifications, and
+    admin/ops endpoints.
   annotations:
     github.com/project-slug: nayft-org/nayft-backend
 spec:
@@ -24,4 +27,4 @@ spec:
   lifecycle: experimental
   owner: user:guest
   definition:
-    $text: ./openapi/pi-foundation-v1.yaml
+    $text: ./openapi/crypto-backend-v1.yaml

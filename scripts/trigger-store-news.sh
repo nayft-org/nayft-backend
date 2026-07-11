@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HOST_SECRETS_FILE="${HOST_SECRETS_FILE:-/nayft_storage/secrets/nayft_backend.env}"
 
-STORE_NEWS_URL="${STORE_NEWS_URL:-http://localhost:4001/api/news/store-news}"
+STORE_NEWS_URL="${STORE_NEWS_URL:-http://192.168.1.5:4001/api/news/store-news}"
 
 read_news_ingest_key_from_file() {
   local env_file="$1"

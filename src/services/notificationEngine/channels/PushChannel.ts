@@ -5,6 +5,7 @@ import type { INotification } from '../../../modules/notifications/models/Notifi
 import { deviceSessionsService } from '../../../modules/notifications/deviceSessions.service';
 import { NotificationPreferenceModel } from '../../../modules/notifications/models/NotificationPreference';
 import { notifMetrics } from '../../../observability/notifMetrics';
+import { notificationsService } from '../../../modules/notifications/service';
 import mongoose from 'mongoose';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -16,6 +17,8 @@ type ExpoPushMessage = {
   data?: Record<string, string>;
   sound?: 'default' | null;
   priority?: 'default' | 'normal' | 'high';
+  channelId?: string;
+  badge?: number;
 };
 
 type ExpoPushTicket = {
@@ -127,6 +130,7 @@ export const PushChannel = {
     const priority =
       doc.priority === 'CRITICAL' || doc.priority === 'IMPORTANT' ? 'high' : 'default';
     const data = pushDataFromDoc(doc);
+    const badge = await notificationsService.reconcileUnreadCount(userId);
     const messages: ExpoPushMessage[] = tokens.map((to) => ({
       to,
       title: doc.title,
@@ -134,6 +138,8 @@ export const PushChannel = {
       data,
       sound: 'default',
       priority,
+      channelId: 'default',
+      badge,
     }));
 
     await sendExpoPush(messages);
