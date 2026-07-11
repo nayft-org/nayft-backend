@@ -1,0 +1,27 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: crypto-backend
+  description: Crypto backend API with Node.js, TypeScript, Express, and MongoDB
+  annotations:
+    github.com/project-slug: nayft-org/nayft-backend
+spec:
+  type: service
+  lifecycle: experimental
+  owner: user:guest
+  providesApis:
+    - portfolio-intelligence-foundation
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: portfolio-intelligence-foundation
+  description: NAYFT Portfolio Intelligence Foundation API
+  annotations:
+    github.com/project-slug: nayft-org/nayft-backend
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: user:guest
+  definition:
+    $text: ./openapi/pi-foundation-v1.yaml
