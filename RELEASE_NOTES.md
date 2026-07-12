@@ -2,6 +2,24 @@
 
 ---
 
+## v1.2.0
+
+**Release Date:** July 12, 2026
+
+### What's New
+
+#### Unified Search
+- **Multi-word matching** – Coins, users, news boards, and portfolio assets now match every query word (word-boundary, any order) instead of requiring the whole query to be a literal anchored prefix or exact substring
+- **Article full-text search** – New MongoDB text index (`news_fulltext`) over title/subtitle/coin symbol+name/category, weighted and relevance-ranked; regex prefix/contains matching is now only a fallback for in-progress partial-word queries
+- **Query length cap raised** – `MAX_QUERY_LEN` 64 → 100 characters, with normalization (NFKC + whitespace collapse) applied once before validation
+- **Segment query timeouts hardened** – coin/user searches now carry a `maxTimeMS` bound consistent with the segment timeout budget
+
+### Breaking Changes
+
+- Removed the unused `cursor` request param and `nextCursor` response field from `GET /api/search` (dead plumbing — no caller ever consumed it)
+
+---
+
 ## v1.1.0
 
 **Release Date:** February 21, 2026

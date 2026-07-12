@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 type IndexSpec = {
   collection: string;
-  key: Record<string, 1 | -1>;
+  key: Record<string, 1 | -1 | 'text'>;
   options?: Record<string, unknown>;
 };
 
@@ -38,6 +38,21 @@ const INDEX_SPECS: IndexSpec[] = [
     options: { name: 'status_coin_published_desc' },
   },
   { collection: 'newsarticles', key: { externalId: 1 }, options: { unique: true, name: 'external_id_unique' } },
+  {
+    collection: 'newsarticles',
+    key: {
+      title: 'text',
+      subtitle: 'text',
+      'coins.symbol': 'text',
+      'coins.name': 'text',
+      'categories.name': 'text',
+    },
+    options: {
+      name: 'news_fulltext',
+      weights: { title: 10, 'coins.symbol': 6, subtitle: 5, 'coins.name': 4, 'categories.name': 2 },
+      default_language: 'english',
+    },
+  },
 
   // User search
   { collection: 'users', key: { username: 1 }, options: { name: 'username_search' } },

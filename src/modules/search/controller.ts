@@ -5,7 +5,7 @@ import { searchService, SearchSegment } from './service';
 import { translateUnifiedSearchResponse } from '../../i18n/translateSearch';
 
 const MIN_QUERY_LEN = 2;
-const MAX_QUERY_LEN = 64;
+const MAX_QUERY_LEN = 100;
 
 const parseLimit = (value: unknown): number => {
   const parsed = parseInt(String(value || '8'), 10);
@@ -34,31 +34,28 @@ const parseSegments = (value: unknown): SearchSegment[] => {
 export const searchController = {
   search: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const raw = String(req.query.q || '').trim();
-      if (!raw) {
+      const query = String(req.query.q || '').trim().normalize('NFKC').replace(/\s+/g, ' ');
+      if (!query) {
         sendError(res, 'Search query is required', 400);
         return;
       }
-      if (raw.length > MAX_QUERY_LEN) {
-        sendError(res, `Search query must be at most ${MAX_QUERY_LEN} characters`, 400);
-        return;
-      }
-      const query = raw.normalize('NFKC');
       if (query.length < MIN_QUERY_LEN) {
         sendError(res, `Search query must be at least ${MIN_QUERY_LEN} characters`, 400);
+        return;
+      }
+      if (query.length > MAX_QUERY_LEN) {
+        sendError(res, `Search query must be at most ${MAX_QUERY_LEN} characters`, 400);
         return;
       }
 
       const limit = parseLimit(req.query.limit);
       const segments = parseSegments(req.query.segments);
-      const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
       const userId = req.userId;
 
       const result = await searchService.search({
         query,
         segments,
         limit,
-        cursor,
         userId,
       });
 

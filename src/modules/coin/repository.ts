@@ -1,8 +1,7 @@
 import { Coin } from '../coin/model';
 import { News } from '../news/model';
 import { ICoin, INews } from '../../types';
-
-const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+import { tokenize, buildTokenAndMatch, scoreMatch } from '../search/queryTokens';
 
 export const coinRepository = {
   findByInternalId: async (internalCoinId: string): Promise<ICoin | null> => {
@@ -29,19 +28,22 @@ export const coinRepository = {
   },
 
   searchByQuery: async (query: string, limit: number = 24): Promise<ICoin[]> => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
+    const tokens = tokenize(query);
+    if (tokens.length === 0) return [];
 
-    // Use prefix match on indexed lowercase fields for better performance
-    return Coin.find({
-      $or: [
-        { symbolLower: { $regex: `^${escapeRegex(q)}` } },
-        { nameLower: { $regex: `^${escapeRegex(q)}` } },
-      ],
-    })
+    // Every query word must appear (word-boundary) in the symbol or name, in any order,
+    // so multi-word/out-of-order queries still match instead of requiring one anchored prefix.
+    const candidates = await Coin.find(buildTokenAndMatch(['symbolLower', 'nameLower'], tokens))
       .sort({ rank: 1 })
-      .limit(limit)
+      .limit(limit * 5)
+      .maxTimeMS(200)
       .lean<ICoin[]>();
+
+    return candidates
+      .map((coin) => ({ coin, score: scoreMatch(tokens, [coin.symbolLower, coin.nameLower]) }))
+      .sort((a, b) => b.score - a.score || (a.coin.rank ?? 0) - (b.coin.rank ?? 0))
+      .slice(0, limit)
+      .map(({ coin }) => coin);
   },
 
   findNewsByCoinId: async (coinId: string, limit: number = 10): Promise<INews[]> => {

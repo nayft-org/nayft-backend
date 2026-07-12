@@ -10,6 +10,7 @@ import { NewsBoard } from '../newsboard/model';
 import { followService } from '../follow/service';
 import { resolveFollowSymbolsForTargets } from '../follow/resolveFollowSymbols';
 import { buildShareMeta } from './shareMeta';
+import { escapeRegex } from '../search/queryTokens';
 
 const LIST_PROJECTION =
   'externalId title subtitle imageUrl sourceUrl publishedAt source categories coins metrics sentiment sentimentStatus sentimentAnalysis';
@@ -97,16 +98,15 @@ const mapNewsArticleToDto = (
 };
 
 /** Escape user input for safe use inside MongoDB `$regex` (ReDoS mitigation). */
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export type NewsArticleSearchDto = ReturnType<typeof mapNewsArticleToDto>;
 
 export const newsService = {
   /**
    * Indexed NewsArticle search for unified `/api/search` (not getAllNews + filter).
-   * Stage A: prefix match on title, subtitle, coins.symbol. Stage B (optional): contains on title/subtitle.
+   * Primary: MongoDB text index (`news_fulltext`) over title/subtitle/coins/categories — ranked by
+   * relevance, handles multi-word/out-of-order queries naturally. Falls back to the old
+   * prefix→contains regex scan only when text search comes up empty (e.g. the user is still
+   * mid-word, like "bitc", which a whole-word text index can't match yet).
    */
   searchArticlesForUnifiedSearch: async (
     query: string,
@@ -126,42 +126,55 @@ export const newsService = {
     }
 
     const base: Record<string, unknown> = { status: 'active' };
-    const prefixOr: Record<string, unknown>[] = [
-      { title: { $regex: `^${escaped}`, $options: 'i' } },
-      { subtitle: { $regex: `^${escaped}`, $options: 'i' } },
-      { 'coins.symbol': { $regex: `^${escaped}`, $options: 'i' } },
-    ];
 
-    let articles = await NewsArticle.find({ ...base, $or: prefixOr })
-      .sort({ publishedAt: -1 })
+    let articles = await NewsArticle.find(
+      { ...base, $text: { $search: trimmed } },
+      { score: { $meta: 'textScore' } }
+    )
+      .sort({ score: { $meta: 'textScore' }, publishedAt: -1 })
       .limit(cap)
       .maxTimeMS(maxTimeMS)
       .lean<INewsArticle[]>();
 
     let usedStageB = false;
-    if (articles.length < cap && trimmed.length >= 3) {
-      const seen = new Set(articles.map((a) => a.externalId));
-      const containsOr: Record<string, unknown>[] = [
-        { title: { $regex: escaped, $options: 'i' } },
-        { subtitle: { $regex: escaped, $options: 'i' } },
+    if (articles.length === 0) {
+      const prefixOr: Record<string, unknown>[] = [
+        { title: { $regex: `^${escaped}`, $options: 'i' } },
+        { subtitle: { $regex: `^${escaped}`, $options: 'i' } },
+        { 'coins.symbol': { $regex: `^${escaped}`, $options: 'i' } },
       ];
-      const more = await NewsArticle.find({
-        ...base,
-        externalId: { $nin: [...seen] },
-        $or: containsOr,
-      })
+
+      articles = await NewsArticle.find({ ...base, $or: prefixOr })
         .sort({ publishedAt: -1 })
-        .limit(cap - articles.length)
+        .limit(cap)
         .maxTimeMS(maxTimeMS)
         .lean<INewsArticle[]>();
 
-      if (more.length > 0) {
-        usedStageB = true;
+      if (articles.length < cap && trimmed.length >= 3) {
+        const seen = new Set(articles.map((a) => a.externalId));
+        const containsOr: Record<string, unknown>[] = [
+          { title: { $regex: escaped, $options: 'i' } },
+          { subtitle: { $regex: escaped, $options: 'i' } },
+          { 'categories.name': { $regex: escaped, $options: 'i' } },
+        ];
+        const more = await NewsArticle.find({
+          ...base,
+          externalId: { $nin: [...seen] },
+          $or: containsOr,
+        })
+          .sort({ publishedAt: -1 })
+          .limit(cap - articles.length)
+          .maxTimeMS(maxTimeMS)
+          .lean<INewsArticle[]>();
+
+        if (more.length > 0) {
+          usedStageB = true;
+        }
+        const merged = [...articles, ...more].sort(
+          (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+        );
+        articles = merged.slice(0, cap);
       }
-      const merged = [...articles, ...more].sort(
-        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      );
-      articles = merged.slice(0, cap);
     }
 
     let userReactionsMap: Record<string, ReactionType> = {};

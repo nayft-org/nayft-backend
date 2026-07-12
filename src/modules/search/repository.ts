@@ -2,6 +2,7 @@ import { LabeledActiveCoin } from '../coin/models/LabeledActiveCoin';
 import { newsService } from '../news/service';
 import { userService } from '../user/service';
 import { config } from '../../config/env';
+import { tokenize, allTokensMatchText } from './queryTokens';
 
 export interface SearchCoinResult {
   internalCoinId?: string;
@@ -50,10 +51,6 @@ export interface SearchPortfolioAssetResult {
   valueUsd?: number;
   chain?: string;
 }
-
-const normalizeText = (value: unknown): string => String(value || '').trim().toLowerCase();
-
-const includesQuery = (value: unknown, query: string): boolean => normalizeText(value).includes(query);
 
 const toCoinResult = (coin: any): SearchCoinResult | null => {
   const coinId = String(coin?.coinId || coin?.id || '');
@@ -129,7 +126,7 @@ export const searchRepository = {
       const candidates: any[] = [];
 
       if (typeof coinRepository.searchByQuery === 'function') {
-        const byQuery = await coinRepository.searchByQuery(query, limit * 3);
+        const byQuery = await coinRepository.searchByQuery(query, limit);
         if (Array.isArray(byQuery)) candidates.push(...byQuery);
       } else if (typeof coinRepository.search === 'function') {
         const bySearch = await coinRepository.search(query, limit * 3);
@@ -139,17 +136,13 @@ export const searchRepository = {
         if (Array.isArray(trending)) candidates.push(...trending);
       }
 
-      const normalizedQuery = normalizeText(query);
+      const tokens = tokenize(query);
       const unique = new Map<string, SearchCoinResult>();
 
       for (const candidate of candidates) {
         const mapped = toCoinResult(candidate);
         if (!mapped) continue;
-        if (
-          includesQuery(mapped.symbol, normalizedQuery) ||
-          includesQuery(mapped.name, normalizedQuery) ||
-          includesQuery(mapped.coinId, normalizedQuery)
-        ) {
+        if (allTokensMatchText(tokens, [mapped.symbol, mapped.name, mapped.coinId])) {
           unique.set(mapped.coinId, mapped);
         }
       }
@@ -199,9 +192,9 @@ export const searchRepository = {
           ? await boardService.getAllBoards(userId)
           : [];
 
-      const normalizedQuery = normalizeText(query);
+      const tokens = tokenize(query);
       return (Array.isArray(boards) ? boards : [])
-        .filter((board: any) => includesQuery(board?.name, normalizedQuery))
+        .filter((board: any) => allTokensMatchText(tokens, [board?.name]))
         .slice(0, limit)
         .map((board: any) => ({
           id: String(board?.id || board?._id || ''),
@@ -230,16 +223,12 @@ export const searchRepository = {
 
       const holdings = await portfolioRepository.findHoldingsByUser(userId);
       const positions = Array.isArray(holdings?.positions) ? holdings.positions : [];
-      const normalizedQuery = normalizeText(query);
+      const tokens = tokenize(query);
 
       return positions
-        .filter((position: any) => {
-          return (
-            includesQuery(position?.symbol, normalizedQuery) ||
-            includesQuery(position?.name, normalizedQuery) ||
-            includesQuery(position?.chain, normalizedQuery)
-          );
-        })
+        .filter((position: any) =>
+          allTokensMatchText(tokens, [position?.symbol, position?.name, position?.chain])
+        )
         .slice(0, limit)
         .map((position: any, index: number) => ({
           id: String(position?.id || position?.assetId || `${position?.symbol || 'asset'}-${index}`),

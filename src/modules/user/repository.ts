@@ -1,21 +1,20 @@
 import { User } from './model';
 import { IUser } from '../../types';
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { tokenize, buildTokenAndMatch } from '../search/queryTokens';
 
 export const userRepository = {
   findById: async (id: string): Promise<IUser | null> => {
     return User.findById(id);
   },
 
-  searchByUsername: async (prefix: string, limit: number = 5) => {
-    return User.find({
-      username: { $regex: `^${escapeRegex(prefix)}`, $options: 'i' },
-    })
+  searchByUsername: async (query: string, limit: number = 5) => {
+    const tokens = tokenize(query);
+    if (tokens.length === 0) return [];
+
+    return User.find(buildTokenAndMatch(['username'], tokens))
       .select('_id username')
       .limit(limit)
+      .maxTimeMS(200)
       .lean();
   },
 

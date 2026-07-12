@@ -31,7 +31,6 @@ export interface UnifiedSearchResponse {
     query: string;
     segments: SearchSegment[];
     partialFailures?: string[];
-    nextCursor?: string;
     segmentStatus?: Partial<Record<ActiveSearchSegment, SegmentRunStatus>>;
     segmentTookMs?: Partial<Record<ActiveSearchSegment, number>>;
     cacheHit?: boolean;
@@ -49,7 +48,7 @@ const DEFAULT_SEGMENTS: Exclude<SearchSegment, 'all'>[] = [
 
 /** Unified response cache is English-only; per-language strings are applied in searchController via translateUnifiedSearchResponse. */
 const CACHE_TTL_SECONDS = 30;
-const MAX_QUERY_LEN = 64;
+const MAX_QUERY_LEN = 100;
 const MIN_QUERY_LEN = 2;
 const SEARCH_CACHE_VERSION = 'v1';
 
@@ -124,7 +123,6 @@ export const searchService = {
     query: string;
     segments?: SearchSegment[];
     limit?: number;
-    cursor?: string;
     userId?: string;
   }): Promise<UnifiedSearchResponse> {
     const startedAt = Date.now();
@@ -146,7 +144,6 @@ export const searchService = {
           tookMs: Date.now() - startedAt,
           query: query || '',
           segments,
-          nextCursor: params.cursor,
         },
       };
     }
@@ -248,7 +245,6 @@ export const searchService = {
         query,
         segments,
         partialFailures: partialFailures.length > 0 ? partialFailures : undefined,
-        nextCursor: params.cursor,
         segmentStatus: Object.keys(segmentStatus).length > 0 ? segmentStatus : undefined,
         segmentTookMs: Object.keys(segmentTookMs).length > 0 ? segmentTookMs : undefined,
         cacheHit: false,
